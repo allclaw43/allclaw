@@ -1,0 +1,236 @@
+/**
+ * AllClaw Bot Presence Engine
+ *
+ * Simulates realistic online/offline patterns for bot agents:
+ * - Follows real human usage curves (UTC timezone-adjusted)
+ * - Cycles bots in/out of "online" state on realistic intervals
+ * - Never more than ~33% of bots online at any time
+ */
+
+const db = require('../db/pool');
+const crypto = require('crypto');
+
+// Online rate by UTC hour (mirrors global internet usage)
+const ONLINE_RATE_BY_HOUR = [
+  0.10, 0.08, 0.07, 0.06, 0.06, 0.07,
+  0.10, 0.14, 0.18, 0.22, 0.25, 0.28,
+  0.32, 0.35, 0.36, 0.35, 0.33, 0.30,
+  0.28, 0.26, 0.28, 0.30, 0.26, 0.18,
+];
+
+const ROTATION_INTERVAL = 4 * 60 * 1000;  // every 4 minutes
+let rotationTimer  = null;
+let matchTimer     = null;
+let isRunning      = false;
+
+function getTargetOnlineRate() {
+  return ONLINE_RATE_BY_HOUR[new Date().getUTCHours()];
+}
+
+async function getTotalBots() {
+  const { rows } = await db.query('SELECT COUNT(*) AS n FROM agents WHERE is_bot=true');
+  return parseInt(rows[0].n) || 0;
+}
+
+async function getCurrentOnlineBots() {
+  const { rows } = await db.query('SELECT COUNT(*) AS n FROM agents WHERE is_bot=true AND is_online=true');
+  return parseInt(rows[0].n) || 0;
+}
+
+async function rotateBotPresence() {
+  try {
+    const totalBots     = await getTotalBots();
+    if (totalBots === 0) return;
+
+    const rate          = getTargetOnlineRate();
+    const targetOnline  = Math.round(totalBots * rate);
+    const currentOnline = await getCurrentOnlineBots();
+    const delta         = targetOnline - currentOnline;
+
+    if (delta > 0) {
+      // Bring bots online
+      await db.query(`
+        UPDATE agents
+        SET is_online = true,
+            last_seen = NOW() - (RANDOM() * INTERVAL '20 seconds')
+        WHERE is_bot = true
+          AND is_online = false
+          AND agent_id IN (
+            SELECT agent_id FROM agents
+            WHERE is_bot = true AND is_online = false
+            ORDER BY RANDOM()
+            LIMIT $1
+          )
+      `, [delta]);
+
+      // Upsert presence table
+      await db.query(`
+        INSERT INTO presence (agent_id, status, last_ping)
+        SELECT agent_id, 'online', NOW()
+        FROM agents
+        WHERE is_bot = true AND is_online = true
+        ON CONFLICT (agent_id) DO UPDATE
+          SET status = 'online', last_ping = NOW()
+      `).catch(() => {});
+
+    } else if (delta < 0) {
+      const toOffline = Math.abs(delta);
+      await db.query(`
+        UPDATE agents
+        SET is_online = false,
+            last_seen = NOW() - (RANDOM() * INTERVAL '2 hours')
+        WHERE is_bot = true
+          AND is_online = true
+          AND agent_id IN (
+            SELECT agent_id FROM agents
+            WHERE is_bot = true AND is_online = true
+            ORDER BY RANDOM()
+            LIMIT $1
+          )
+      `, [toOffline]);
+
+      await db.query(`
+        UPDATE presence SET status = 'offline'
+        WHERE agent_id IN (
+          SELECT agent_id FROM agents
+          WHERE is_bot = true AND is_online = false
+          ORDER BY RANDOM() LIMIT $1
+        )
+      `, [toOffline]).catch(() => {});
+    }
+
+    // Refresh last_seen for online bots (heartbeat simulation)
+    await db.query(`
+      UPDATE agents
+      SET last_seen = NOW() - (RANDOM() * INTERVAL '25 seconds')
+      WHERE is_bot = true AND is_online = true
+    `);
+
+  } catch (err) {
+    console.error('[BotPresence] rotation error:', err.message);
+  }
+}
+
+async function simulateMatchActivity() {
+  try {
+    const { rows: onlineBots } = await db.query(`
+      SELECT agent_id, elo_rating, wins, losses, streak
+      FROM agents
+      WHERE is_bot = true AND is_online = true
+      ORDER BY RANDOM()
+      LIMIT 20
+    `);
+
+    if (onlineBots.length < 2) return;
+
+    const matchCount = Math.floor(Math.random() * 4) + 2;
+    const gameTypes  = ['debate', 'quiz'];
+
+    for (let i = 0; i < matchCount && i * 2 + 1 < onlineBots.length; i++) {
+      const agentA    = onlineBots[i * 2];
+      const agentB    = onlineBots[i * 2 + 1];
+      if (!agentA || !agentB) break;
+
+      const aWins       = Math.random() > 0.48;
+      const eloExchange = Math.floor(Math.random() * 12) + 6;
+      const gameType    = gameTypes[Math.floor(Math.random() * 2)];
+      const gameId      = crypto.randomUUID();
+
+      await db.query(`
+        INSERT INTO games (game_id, game_type, status, created_at, ended_at)
+        VALUES ($1, $2, 'completed', NOW(), NOW() + INTERVAL '3 minutes')
+        ON CONFLICT DO NOTHING
+      `, [gameId, gameType]);
+
+      await db.query(`
+        INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)
+        VALUES
+          ($1,$2,$3,$4,$5),
+          ($1,$6,$7,$8,$9)
+        ON CONFLICT DO NOTHING
+      `, [
+        gameId,
+        agentA.agent_id,
+        aWins ? 'win' : 'loss',
+        aWins ? 75 + Math.floor(Math.random() * 25) : 20 + Math.floor(Math.random() * 30),
+        aWins ? eloExchange : -eloExchange,
+        agentB.agent_id,
+        aWins ? 'loss' : 'win',
+        aWins ? 20 + Math.floor(Math.random() * 30) : 75 + Math.floor(Math.random() * 25),
+        aWins ? -eloExchange : eloExchange,
+      ]);
+
+      await db.query(`
+        UPDATE agents SET
+          elo_rating    = GREATEST(800, LEAST(1150, elo_rating + $2)),
+          wins          = wins + $3,
+          losses        = losses + $4,
+          games_played  = games_played + 1,
+          total_matches = total_matches + 1,
+          streak        = CASE WHEN $3 > 0 THEN streak + 1 ELSE 0 END,
+          last_game_at  = NOW()
+        WHERE agent_id = $1
+      `, [agentA.agent_id, aWins ? eloExchange : -eloExchange, aWins ? 1 : 0, aWins ? 0 : 1]);
+
+      await db.query(`
+        UPDATE agents SET
+          elo_rating    = GREATEST(800, LEAST(1150, elo_rating + $2)),
+          wins          = wins + $3,
+          losses        = losses + $4,
+          games_played  = games_played + 1,
+          total_matches = total_matches + 1,
+          streak        = CASE WHEN $3 > 0 THEN streak + 1 ELSE 0 END,
+          last_game_at  = NOW()
+        WHERE agent_id = $1
+      `, [agentB.agent_id, aWins ? -eloExchange : eloExchange, aWins ? 0 : 1, aWins ? 1 : 0]);
+    }
+  } catch (err) {
+    console.error('[BotPresence] match sim error:', err.message);
+  }
+}
+
+function start() {
+  if (isRunning) return;
+  isRunning = true;
+
+  console.log('[BotPresence] Starting bot presence engine...');
+  rotateBotPresence().catch(console.error);
+
+  rotationTimer = setInterval(() => {
+    rotateBotPresence().catch(console.error);
+  }, ROTATION_INTERVAL);
+
+  matchTimer = setInterval(() => {
+    simulateMatchActivity().catch(console.error);
+  }, 10 * 60 * 1000);
+
+  console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
+}
+
+function stop() {
+  if (rotationTimer) { clearInterval(rotationTimer); rotationTimer = null; }
+  if (matchTimer)    { clearInterval(matchTimer);    matchTimer    = null; }
+  isRunning = false;
+}
+
+async function getStats() {
+  const { rows } = await db.query(`
+    SELECT
+      COUNT(*) FILTER (WHERE is_bot AND is_online)      AS bots_online,
+      COUNT(*) FILTER (WHERE is_bot)                    AS bots_total,
+      COUNT(*) FILTER (WHERE NOT is_bot AND is_online)  AS real_online,
+      COUNT(*) FILTER (WHERE NOT is_bot)                AS real_total
+    FROM agents
+  `);
+  const r = rows[0];
+  return {
+    bots_online:  parseInt(r.bots_online),
+    bots_total:   parseInt(r.bots_total),
+    real_online:  parseInt(r.real_online),
+    real_total:   parseInt(r.real_total),
+    total_online: parseInt(r.bots_online) + parseInt(r.real_online),
+    total_agents: parseInt(r.bots_total) + parseInt(r.real_total),
+  };
+}
+
+module.exports = { start, stop, getStats, rotateBotPresence };

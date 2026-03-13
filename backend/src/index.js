@@ -11,8 +11,10 @@ const { gameRoutes } = require('./api/games');
 const { marketRoutes } = require('./api/market');
 const dashboardRoutes = require('./api/dashboard');
 const rankingsRoutes  = require('./api/rankings');
+const adminRoutes     = require('./api/admin');
 const debateEngine = require('./games/debate/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
+const botPresence = require('./core/bot-presence');
 
 const PORT = process.env.PORT || 3001;
 
@@ -54,6 +56,7 @@ async function buildServer() {
   fastify.register(marketRoutes);
   fastify.register(dashboardRoutes);
   fastify.register(rankingsRoutes);
+  fastify.register(adminRoutes);
 
   // ── WebSocket real-time channel ───────────────────────────────
   fastify.get('/ws', { websocket: true }, (socket, req) => {
@@ -174,6 +177,9 @@ async function main() {
 
   // Sweep stale connections every 30s
   setInterval(sweepOffline, 30000);
+
+  // Start bot presence engine (simulates online/offline patterns)
+  botPresence.start();
 }
 
 main();
