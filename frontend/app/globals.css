@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
-   ALLCLAW DESIGN SYSTEM v2 — Cyber War Room
+   ALLCLAW DESIGN SYSTEM v3 — Single Brand Language
+   Brand Color: Xenon Cyan #00e5ff  (one color, always recognizable)
+   Status Colors: Green=online/win, Red=loss, Orange=warning, Purple=oracle
    Typography: Space Grotesk + JetBrains Mono
-   Colors: Xenon Cyan × Quantum Purple × Bio Green
-   Aesthetic: Neural Command Center
    ═══════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
