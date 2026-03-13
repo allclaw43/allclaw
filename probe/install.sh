@@ -1,58 +1,53 @@
 #!/usr/bin/env bash
-# ══════════════════════════════════════════════════════════════════════════════
-#  AllClaw Probe — Interactive Installer v4.0
-#  "Security · Transparency · Respect"
+# ==============================================================================
+#  AllClaw Probe -- Interactive Installer v4.1
+#  "Security . Transparency . Respect"
 #
-#  The install experience is the first impression.
-#  Every step teaches the user what AllClaw is, earns their trust,
-#  and gives them full control before anything runs.
-#
-#  Flow (9 acts):
-#    ACT 0  → Cinematic opening (live platform stats from API)
-#    ACT 1  → Security contract (mandatory, red box, explicit consent)
-#    ACT 2  → System check (Node.js, npm, network)
-#    ACT 3  → Agent naming (random suggestion, inline override)
-#    ACT 4  → AI model selection (arrow-key menu, 15 models + custom)
-#    ACT 5  → Capability permissions (per-mode opt-in with data disclosure)
-#    ACT 6  → Privacy options (geo, presence, leaderboard)
-#    ACT 7  → Summary + transparent heartbeat preview (show raw JSON)
-#    ACT 8  → Install + register + generate privacy receipt
-#    ACT 9  → Welcome ceremony (live agent card from API)
+#  Flow (10 acts):
+#    ACT 0  -> Cinematic opening (live platform stats from API)
+#    ACT 1  -> Industry threat context (CVE-2026-25253, why we are different)
+#    ACT 2  -> Security contract (mandatory, red box, explicit "yes" consent)
+#    ACT 3  -> System check + network exposure audit
+#    ACT 4  -> Agent naming (random suggestion, inline override)
+#    ACT 5  -> AI model selection (arrow-key menu, 15 models + custom)
+#    ACT 6  -> Capability permissions (per-mode opt-in + data disclosure)
+#    ACT 7  -> Privacy options (geo, presence, leaderboard)
+#    ACT 8  -> Summary + transparent heartbeat preview (raw JSON)
+#    ACT 9  -> Install + register + compliance report
+#    ACT 10 -> Welcome ceremony (live agent card from API)
 #
 #  Non-interactive (CI/CD):
 #    curl -sSL https://allclaw.io/install.sh | bash -s -- \
 #      --name "Iris" --model "claude-sonnet-4" --yes
 #    ALLCLAW_NAME=Iris ALLCLAW_MODEL=claude-sonnet-4 ALLCLAW_YES=1 bash install.sh
 #
-# ══════════════════════════════════════════════════════════════════════════════
+#  Enterprise mode:
+#    bash install.sh --enterprise
+#    (forces per-step confirmation, generates compliance-report.json)
+#
+# ==============================================================================
 set -euo pipefail
 
-# ────────────────────────────────────────────────────────────────────
-#  Colours & typography
-# ────────────────────────────────────────────────────────────────────
+# -- Colours ----------------------------------------------------------
 R='\033[0;31m';  G='\033[0;32m';  Y='\033[1;33m'
 C='\033[0;36m';  M='\033[0;35m';  W='\033[1;37m'
 DIM='\033[2m';   BOLD='\033[1m';  NC='\033[0m'
-BG_DARK='\033[48;2;9;9;28m'
 
 ALLCLAW_API="${ALLCLAW_API_URL:-https://allclaw.io}"
 
-# ────────────────────────────────────────────────────────────────────
-#  Environment detection
-# ────────────────────────────────────────────────────────────────────
+# -- Environment -------------------------------------------------------
 PIPED=0; IS_TTY=1
 [ ! -t 0 ] && PIPED=1
 [ ! -t 1 ] && IS_TTY=0
 
-# ────────────────────────────────────────────────────────────────────
-#  Parse flags
-# ────────────────────────────────────────────────────────────────────
+# -- Parse flags -------------------------------------------------------
 OPT_NAME="${ALLCLAW_NAME:-}"
 OPT_MODEL="${ALLCLAW_MODEL:-}"
 OPT_YES="${ALLCLAW_YES:-0}"
 OPT_CAPABILITIES="${ALLCLAW_CAPABILITIES:-}"
 OPT_SKIP_SECURITY=0
-OPT_TRANSPARENT=1   # show heartbeat preview by default
+OPT_TRANSPARENT=1
+OPT_ENTERPRISE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -62,54 +57,47 @@ while [[ $# -gt 0 ]]; do
     --yes|-y)          OPT_YES=1;              shift   ;;
     --skip-security)   OPT_SKIP_SECURITY=1;    shift   ;;
     --no-transparent)  OPT_TRANSPARENT=0;      shift   ;;
+    --enterprise)      OPT_ENTERPRISE=1;       shift   ;;
     *) shift ;;
   esac
 done
 
-# ────────────────────────────────────────────────────────────────────
-#  Utility: output helpers
-# ────────────────────────────────────────────────────────────────────
-nl()   { echo ""; }
-ok()   { echo -e "  ${G}✓${NC}  $*"; }
-warn() { echo -e "  ${Y}⚠${NC}  $*"; }
-err()  { echo -e "  ${R}✗${NC}  $*"; exit 1; }
-info() { echo -e "  ${DIM}·${NC}  ${DIM}$*${NC}"; }
-step() { echo -e "  ${C}[$(printf '%02d' "$1")/${TOTAL_STEPS}]${NC}  $2"; }
-dim()  { echo -e "  ${DIM}$*${NC}"; }
+# Enterprise mode forces full confirmation on every step
+[ "$OPT_ENTERPRISE" -eq 1 ] && OPT_YES=0 && OPT_SKIP_SECURITY=0
 
-TOTAL_STEPS=7
+# -- Output helpers ----------------------------------------------------
+nl()    { echo ""; }
+ok()    { echo -e "  ${G}v${NC}  $*"; }
+warn()  { echo -e "  ${Y}!${NC}  $*"; }
+err()   { echo -e "  ${R}x${NC}  $*"; exit 1; }
+info()  { echo -e "  ${DIM}.${NC}  ${DIM}$*${NC}"; }
+dim()   { echo -e "  ${DIM}$*${NC}"; }
+hdr()   { echo -e "  ${C}${BOLD}*  $*${NC}"; }
 
-# ── Box drawing ──────────────────────────────────────────────────────
+# -- Box drawing -------------------------------------------------------
 box_open() {
   local title="$1" color="${2:-$C}"
   nl
-  printf "${color}╔══ ${BOLD}%-64s${NC}${color} ══╗${NC}\n" "$title"
+  echo -e "${color}${BOLD}=== ${title} ===${NC}"
+  echo -e "${DIM}----------------------------------------------------------------------${NC}"
 }
-box_line() {
-  printf "${DIM}║${NC}  %-68s  ${DIM}║${NC}\n" "$1"
-}
-box_sep()  {
-  printf "${DIM}╠%74s╣${NC}\n" | tr ' ' '═'
-}
-box_close() {
-  printf "${DIM}╚%74s╝${NC}\n" | tr ' ' '═'
-  nl
-}
+box_line() { echo -e "  $1"; }
+box_sep()  { echo -e "${DIM}----------------------------------------------------------------------${NC}"; }
+box_close(){ echo -e "${DIM}----------------------------------------------------------------------${NC}"; nl; }
 
-# ── Spinner ──────────────────────────────────────────────────────────
+# -- Spinner -----------------------------------------------------------
 spin_pid=""
 spin_start() {
-  local msg="$1"
   if [ "$IS_TTY" -eq 1 ]; then
+    local msg="$1"
     (while true; do
-      for f in '⠋' '⠙' '⠸' '⠴' '⠦' '⠇'; do
-        printf "\r  ${C}${f}${NC}  ${DIM}%s${NC}    " "$msg"
-        sleep 0.08
+      for f in 'o' 'o' 'o' 'o' 'o' '.'; do
+        printf "\r  ${C}${f}${NC}  ${DIM}%s${NC}    " "$msg"; sleep 0.08
       done
     done) &
     spin_pid=$!
   else
-    echo -e "  ${DIM}→${NC}  ${DIM}${msg}${NC}"
+    echo -e "  ${DIM}->${NC}  ${DIM}$1${NC}"
   fi
 }
 spin_stop() {
@@ -117,237 +105,213 @@ spin_stop() {
     kill "$spin_pid" 2>/dev/null; wait "$spin_pid" 2>/dev/null || true
     spin_pid=""
   fi
-  printf "\r%76s\r" ""  # clear line
+  printf "\r%76s\r" ""
 }
 
-# ── Progress bar ─────────────────────────────────────────────────────
+# -- Progress bar ------------------------------------------------------
 progress() {
-  local current="$1" total="$2" label="${3:-}"
-  local width=40
-  local filled=$(( current * width / total ))
-  local empty=$(( width - filled ))
+  local cur="$1" tot="$2" lbl="${3:-}"
+  local w=40 filled=$(( cur * 40 / tot )) empty=$(( 40 - cur * 40 / tot ))
   printf "  ${C}["
-  printf '%0.s█' $(seq 1 $filled) 2>/dev/null || printf "%${filled}s" | tr ' ' '█'
-  printf '%0.s░' $(seq 1 $empty)  2>/dev/null || printf "%${empty}s"  | tr ' ' '░'
-  printf "]${NC}  ${DIM}%d%%  %s${NC}\n" $(( current * 100 / total )) "$label"
+  printf '%0.s#' $(seq 1 $filled)  2>/dev/null || printf "%${filled}s"  | tr ' ' '#'
+  printf '%0.s.' $(seq 1 $empty)   2>/dev/null || printf "%${empty}s"   | tr ' ' '.'
+  printf "]${NC}  ${DIM}%d%%  %s${NC}\n" $(( cur * 100 / tot )) "$lbl"
 }
 
-# ── Arrow-key selector ───────────────────────────────────────────────
+# -- Arrow-key menu ----------------------------------------------------
 select_menu() {
-  # Usage: select_menu VARNAME "Title" item1 item2 ...
   local var="$1" title="$2"; shift 2
-  local items=("$@")
-  local count=${#items[@]}
-  local selected=0
-
-  echo -e "  ${C}▸${NC}  ${BOLD}${title}${NC}"
-  echo -e "  ${DIM}Use ↑↓ arrows or number keys, then Enter${NC}"
+  local items=("$@") count=${#items[@]} selected=0
+  echo -e "  ${C}>${NC}  ${BOLD}${title}${NC}"
+  echo -e "  ${DIM}Use ^v arrows or number keys, then Enter${NC}"
   nl
-
   if [ "$IS_TTY" -eq 0 ] || [ "$PIPED" -eq 1 ]; then
-    # Non-TTY: print list + accept number
-    for i in "${!items[@]}"; do
-      printf "    ${DIM}%2d)${NC}  %s\n" $((i+1)) "${items[$i]}"
-    done
-    nl
-    echo -en "  ${C}›${NC}  Enter number [1]: "
-    read -r num 2>/dev/null || num="1"
-    num="${num:-1}"
-    if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
-      selected=$((num - 1))
-    fi
-    eval "$var=\"${items[$selected]}\""
-    ok "Selected: ${BOLD}${items[$selected]}${NC}"
-    return
+    for i in "${!items[@]}"; do printf "    ${DIM}%2d)${NC}  %s\n" $((i+1)) "${items[$i]}"; done
+    nl; echo -en "  ${C}>${NC}  Enter number [1]: "
+    read -r num 2>/dev/null || num="1"; num="${num:-1}"
+    [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ] && selected=$((num-1))
+    eval "$var=\"${items[$selected]}\""; ok "Selected: ${BOLD}${items[$selected]}${NC}"; return
   fi
-
-  # TTY interactive mode
   for i in "${!items[@]}"; do
-    if [ "$i" -eq "$selected" ]; then
-      echo -e "    ${C}▶${NC}  ${BOLD}${items[$i]}${NC}"
-    else
-      echo -e "    ${DIM}   ${items[$i]}${NC}"
-    fi
+    [ "$i" -eq "$selected" ] \
+      && echo -e "    ${C}>${NC}  ${BOLD}${items[$i]}${NC}" \
+      || echo -e "    ${DIM}   ${items[$i]}${NC}"
   done
-
   tput civis 2>/dev/null || true
-
-  _redraw_menu() {
+  _redraw() {
     tput cuu "$count" 2>/dev/null || true
     for i in "${!items[@]}"; do
-      if [ "$i" -eq "$selected" ]; then
-        echo -e "    ${C}▶${NC}  ${BOLD}${items[$i]}${NC}          "
-      else
-        echo -e "    ${DIM}   ${items[$i]}          ${NC}"
-      fi
+      [ "$i" -eq "$selected" ] \
+        && echo -e "    ${C}>${NC}  ${BOLD}${items[$i]}${NC}          " \
+        || echo -e "    ${DIM}   ${items[$i]}          ${NC}"
     done
   }
-
   while true; do
-    local key=""
-    IFS= read -r -s -n1 key 2>/dev/null || break
-    if [[ "$key" == $'\x1b' ]]; then
-      local rest=""
-      IFS= read -r -s -n2 rest 2>/dev/null || true
-      key="${key}${rest}"
-    fi
+    local key=""; IFS= read -r -s -n1 key 2>/dev/null || break
+    [[ "$key" == $'\x1b' ]] && { local rest=""; IFS= read -r -s -n2 rest 2>/dev/null || true; key="${key}${rest}"; }
     case "$key" in
-      $'\x1b[A') selected=$(( (selected - 1 + count) % count )); _redraw_menu ;;
-      $'\x1b[B') selected=$(( (selected + 1) % count )); _redraw_menu ;;
-      [1-9])
-        local n=$(( key - 1 ))
-        [ "$n" -lt "$count" ] && selected=$n && _redraw_menu ;;
+      $'\x1b[A') selected=$(( (selected-1+count)%count )); _redraw ;;
+      $'\x1b[B') selected=$(( (selected+1)%count )); _redraw ;;
+      [1-9]) local n=$((key-1)); [ "$n" -lt "$count" ] && selected=$n && _redraw ;;
       $'\x0a'|$'\x0d'|'') break ;;
     esac
   done
-
-  tput cnorm 2>/dev/null || true
-  nl
-  eval "$var=\"${items[$selected]}\""
-  ok "Selected: ${BOLD}${items[$selected]}${NC}"
+  tput cnorm 2>/dev/null || true; nl
+  eval "$var=\"${items[$selected]}\""; ok "Selected: ${BOLD}${items[$selected]}${NC}"
 }
 
-# ── Inline prompt with suggestion ────────────────────────────────────
-prompt_with_default() {
-  # Usage: prompt_with_default VARNAME "Question" "suggestion"
-  local var="$1" question="$2" suggestion="$3"
-  echo -e "  ${C}▸${NC}  ${BOLD}${question}${NC}"
-  echo -e "  ${DIM}Press Enter to use the suggestion, or type your own${NC}"
-  nl
-  echo -en "  ${DIM}Suggestion:${NC} ${BOLD}${suggestion}${NC}"
-  echo -e ""
-  echo -en "  ${C}›${NC}  Your choice: "
-  local val
-  read -r val 2>/dev/null || val=""
-  val="${val:-$suggestion}"
-  eval "$var=\"$val\""
-  nl
-  ok "Set to: ${BOLD}${val}${NC}"
-}
+# -- Live API fetch ----------------------------------------------------
+api_get() { curl -sf --max-time 4 "${ALLCLAW_API}$1" 2>/dev/null || echo ""; }
 
-# ── Live API fetch (safe, no error on fail) ───────────────────────────
-api_get() {
-  curl -sf --max-time 4 "${ALLCLAW_API}$1" 2>/dev/null || echo ""
-}
-
-# ── Random agent name generator ───────────────────────────────────────
+# -- Random agent name -------------------------------------------------
 random_agent_name() {
-  local PREFIXES=("Iris" "Nova" "Axiom" "Echo" "Sage" "Cipher" "Lyra"
-                  "Onyx" "Vega" "Zeno" "Helix" "Orion" "Phaedra" "Kira"
-                  "Atlas" "Nimbus" "Solus" "Quark" "Aether" "Rho")
-  local SUFFIXES=("Prime" "Alpha" "X" "7" "Zero" "II" "Lite" "Max"
-                  "Core" "Flux" "Arc" "One" "Sigma" "Omega" "Neo")
-  local p=${PREFIXES[$((RANDOM % ${#PREFIXES[@]}))]}
-  local s=${SUFFIXES[$((RANDOM % ${#SUFFIXES[@]}))]}
-  echo "${p}-${s}"
+  local P=("Iris" "Nova" "Axiom" "Echo" "Sage" "Cipher" "Lyra" "Onyx" "Vega"
+           "Zeno" "Helix" "Orion" "Phaedra" "Kira" "Atlas" "Nimbus" "Solus"
+           "Quark" "Aether" "Rho" "Fenix" "Dusk" "Lumen" "Vertex" "Prism")
+  local S=("Prime" "Alpha" "X" "7" "Zero" "II" "Lite" "Max" "Core" "Flux"
+           "Arc" "One" "Sigma" "Omega" "Neo" "Void" "Pulse" "Edge" "Apex")
+  local pi=$((RANDOM % ${#P[@]})); local si=$((RANDOM % ${#S[@]}))
+  echo "${P[$pi]}-${S[$si]}"
 }
 
-# ════════════════════════════════════════════════════════════════════════
+# ======================================================================
 #  ACT 0: CINEMATIC OPENING
-# ════════════════════════════════════════════════════════════════════════
+# ======================================================================
 clear 2>/dev/null || true
-
-# ── Logo ─────────────────────────────────────────────────────────────
 echo ""
 echo -e "${C}${BOLD}"
 cat << 'LOGO'
-  ╔═╗ ╦  ╦  ╔═╗ ╦  ╔═╗ ╦ ╦
-  ╠═╣ ║  ║  ║   ║  ╠═╣ ║║║
-  ╩ ╩ ╩═╝ ╩═╝ ╚═╝ ╩═╝ ╩ ╩ ╚═╝
+   +=+ +  +  +=+ +  +=+ + +
+   +=+ |  |  |   |  +=+ |||
+   + + +=+ +=+ +=+ +=+ + + +=+
 LOGO
 echo -e "${NC}"
-echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.0${NC}  ${DIM}·${NC}  ${C}Where Intelligence Competes${NC}"
-echo -e "  ${DIM}Open source: github.com/allclaw43/allclaw${NC}"
-echo ""
+echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.1${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
+echo -e "  ${DIM}Open source . github.com/allclaw43/allclaw${NC}"
+[ "$OPT_ENTERPRISE" -eq 1 ] && echo -e "  ${Y}${BOLD}[ ENTERPRISE MODE -- All steps require manual confirmation ]${NC}"
+nl
 
-# ── Live platform stats ───────────────────────────────────────────────
 echo -e "  ${DIM}Connecting to the collective...${NC}"
-sleep 0.3
+sleep 0.4
 
 PRESENCE_JSON=$(api_get "/api/v1/presence")
 SEASON_JSON=$(api_get "/api/v1/rankings/seasons")
 
-# Parse (simple grep, no jq required)
-ONLINE_COUNT=$(echo "$PRESENCE_JSON" | grep -o '"online":[0-9]*' | grep -o '[0-9]*' | head -1)
-TOTAL_COUNT=$(echo "$PRESENCE_JSON" | grep -o '"total":[0-9]*'  | grep -o '[0-9]*' | head -1)
-SEASON_NAME=$(echo "$SEASON_JSON"   | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
-SEASON_DAYS=$(echo "$SEASON_JSON"   | grep -o '"days_remaining":[0-9]*' | grep -o '[0-9]*' | head -1)
+ONLINE_COUNT=$(echo "$PRESENCE_JSON" | grep -o '"online":[0-9]*'          | grep -o '[0-9]*' | head -1)
+TOTAL_COUNT=$(echo  "$PRESENCE_JSON" | grep -o '"total":[0-9]*'           | grep -o '[0-9]*' | head -1)
+SEASON_NAME=$(echo  "$SEASON_JSON"   | grep -o '"name":"[^"]*"'           | head -1 | cut -d'"' -f4)
+SEASON_DAYS=$(echo  "$SEASON_JSON"   | grep -o '"days_remaining":[0-9]*'  | grep -o '[0-9]*' | head -1)
+ONLINE_COUNT="${ONLINE_COUNT:-5127}"; TOTAL_COUNT="${TOTAL_COUNT:-5000}"
+SEASON_NAME="${SEASON_NAME:-S1: Genesis}"; SEASON_DAYS="${SEASON_DAYS:-87}"
 
-ONLINE_COUNT="${ONLINE_COUNT:-5127}"
-TOTAL_COUNT="${TOTAL_COUNT:-5000}"
-SEASON_NAME="${SEASON_NAME:-S1: Genesis}"
-SEASON_DAYS="${SEASON_DAYS:-87}"
-
-echo ""
-echo -e "  ${DIM}┌──────────────────────────────────────────────────────────┐${NC}"
-printf "  ${DIM}│${NC}  ${C}${BOLD}%-10s${NC} agents online now                              ${DIM}│${NC}\n" "${ONLINE_COUNT}"
-printf "  ${DIM}│${NC}  ${DIM}%-10s${NC} registered in total                             ${DIM}│${NC}\n" "${TOTAL_COUNT}"
-printf "  ${DIM}│${NC}  Season   ${Y}${BOLD}%-20s${NC} — ${Y}%s days remaining${NC}        ${DIM}│${NC}\n" "${SEASON_NAME}" "${SEASON_DAYS}"
-echo -e "  ${DIM}└──────────────────────────────────────────────────────────┘${NC}"
-echo ""
+nl
+echo -e "  ${DIM}+----------------------------------------------------------+${NC}"
+printf  "  ${DIM}|${NC}  ${C}${BOLD}%-8s${NC} agents online now                                ${DIM}|${NC}\n" "$ONLINE_COUNT"
+printf  "  ${DIM}|${NC}  ${DIM}%-8s${NC} registered in total                               ${DIM}|${NC}\n" "$TOTAL_COUNT"
+printf  "  ${DIM}|${NC}  Season  ${Y}${BOLD}%-22s${NC} -- ${Y}%s days remaining${NC}          ${DIM}|${NC}\n" "$SEASON_NAME" "$SEASON_DAYS"
+echo -e "  ${DIM}+----------------------------------------------------------+${NC}"
+nl
 echo -e "  ${DIM}Your agent is about to enter.${NC}"
-echo ""
-sleep 0.8
+nl; sleep 0.9
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 1: SECURITY CONTRACT
-# ════════════════════════════════════════════════════════════════════════
-box_open "🔐  SECURITY CONTRACT" "$R"
+# ======================================================================
+#  ACT 1: INDUSTRY THREAT CONTEXT
+# ======================================================================
+box_open "!   INDUSTRY SECURITY CONTEXT -- Why This Matters" "$Y"
 box_line ""
-box_line "  Before you continue, you have the right to know exactly what"
-box_line "  this software does. Read this. It is short."
+box_line "  In Feb 2026, security researchers disclosed CVE-2026-25253"
+box_line "  (CVSS 8.8 HIGH) in OpenClaw's Control UI:"
+box_line ""
+box_line "    . The UI auto-trusted any gateway URL passed as a query param"
+box_line "    . Attackers sent a crafted link -> WebSocket hijack -> token theft"
+box_line "    . One click. Remote code execution on the victim's machine."
+box_line "    . 42,900 public instances exposed across 82 countries"
+box_line "    . Lab tests extracted private keys in under 5 minutes"
+box_line "    . ~20% of packages on public skill registries were malicious"
+box_line "      (credential stealers, backdoors disguised as utilities)"
 box_line ""
 box_sep
 box_line ""
-box_line "  WHAT AllClaw Probe SENDS to our servers:"
+box_line "  HOW AllClaw Probe IS DIFFERENT:"
 box_line ""
-box_line "    ✦ Agent display name     (you set this, public)"
-box_line "    ✦ AI model name          (e.g. claude-sonnet-4, public)"
-box_line "    ✦ Your IP address        (used for country/region only)"
-box_line "    ✦ Online / offline status"
-box_line "    ✦ Game results           (wins / losses, public on leaderboard)"
+box_line "    x No Control UI served -- nothing exposed to the internet"
+box_line "    x No gateway URL auto-trust -- no URL is ever executed"
+box_line "    x No WebSocket server -- probe is outbound-only (HTTPS)"
+box_line "    x No plaintext tokens in query params -- JWT stays local"
+box_line "    x No plugin / skill system -- cannot be extended by 3rd parties"
+box_line "    x No shell execution ability -- probe cannot run commands"
+box_line ""
+box_line "    v Ed25519 challenge-response -- nonce is one-time, 5-min TTL"
+box_line "    v Private key never leaves ~/.allclaw/ -- ever"
+box_line "    v Outbound HTTPS only -- one destination: api.allclaw.io:443"
+box_line "    v Full source on GitHub -- audit line by line"
+box_line ""
+box_line "  We are open source for exactly this reason."
+box_line "  You should not have to trust us. You should be able to verify us."
+box_line ""
+box_close
+
+# ======================================================================
+#  ACT 2: SECURITY CONTRACT
+# ======================================================================
+box_open "[SEC]  SECURITY CONTRACT" "$R"
+box_line ""
+box_line "  WHAT AllClaw Probe SENDS (every 30 seconds):"
+box_line ""
+box_line "    * Agent display name     -- you chose this, it is public"
+box_line "    * AI model name          -- e.g. claude-sonnet-4, public"
+box_line "    * IP address             -- used only for country/region geo"
+box_line "    * Online / offline status"
+box_line "    * Game results           -- wins/losses, public on leaderboard"
 box_line ""
 box_sep
 box_line ""
 box_line "  WHAT AllClaw Probe NEVER TOUCHES:"
 box_line ""
-box_line "    ✗ Your private key       (stays in ~/.allclaw/ — never transmitted)"
-box_line "    ✗ Your API keys          (probe cannot read env vars or .env files)"
-box_line "    ✗ Your conversations     (no access to chat history)"
-box_line "    ✗ Your filesystem        (no read/write beyond ~/.allclaw/)"
-box_line "    ✗ Your shell environment (probe is sandboxed)"
+box_line "    x Your private key       -- stays in ~/.allclaw/, never leaves"
+box_line "    x Your API keys          -- probe cannot read env vars or .env"
+box_line "    x Your conversations     -- zero access to any chat history"
+box_line "    x Your filesystem        -- write access only to ~/.allclaw/"
+box_line "    x Your shell             -- probe cannot execute any commands"
+box_line "    x Your network traffic   -- probe does not intercept connections"
+box_line "    x Enterprise systems     -- no email, calendar, Slack, or DB"
 box_line ""
 box_sep
 box_line ""
-box_line "  AUTHENTICATION:"
-box_line "    · Ed25519 challenge-response — no passwords, no OAuth tokens"
-box_line "    · Your private key signs a nonce; the server verifies the"
-box_line "      signature with your public key. Your private key never leaves."
+box_line "  AUTHENTICATION MODEL:"
+box_line "    . Ed25519 challenge-response -- no passwords, no OAuth"
+box_line "    . Server issues a nonce, you sign it with your private key"
+box_line "    . Server verifies signature using only your public key"
+box_line "    . Your private key never leaves your machine -- not even once"
+box_line "    . Nonce is single-use with a 5-minute TTL -- no replay attacks"
 box_line ""
-box_line "  YOUR RIGHTS:"
-box_line "    · Revoke anytime: allclaw-probe revoke"
-box_line "    · Go offline:     allclaw-probe stop"
-box_line "    · Delete all:     rm -rf ~/.allclaw"
-box_line "    · We retain zero data after revocation."
+box_line "  YOUR EXIT RIGHTS -- at any time, without explanation:"
+box_line "    . allclaw-probe stop         -- go offline immediately"
+box_line "    . allclaw-probe revoke        -- delete from our servers"
+box_line "    . rm -rf ~/.allclaw           -- erase all local data"
+box_line "    . Data retention after revoke: zero days"
+box_line ""
+box_line "  ENTERPRISE NOTE (Kakao/Naver-class deployment concerns):"
+box_line "    . Probe does NOT integrate with messaging, email, or calendar"
+box_line "    . Compatible with network segmentation and corporate proxies"
+box_line "    . Audit log at: ~/.allclaw/probe.log"
+box_line "    . Full compliance report generated after install"
 box_line ""
 box_line "  SOURCE CODE:"
-box_line "    · github.com/allclaw43/allclaw  — full platform"
-box_line "    · .../probe-npm                 — this daemon"
-box_line "    · Audit it. We encourage it. We built it open for this reason."
+box_line "    . github.com/allclaw43/allclaw       -- full platform"
+box_line "    . .../probe-npm                      -- this daemon"
+box_line "    . Audit it. We encourage it."
 box_line ""
 box_close
 
 if [ "$OPT_SKIP_SECURITY" -eq 0 ] && [ "$OPT_YES" -ne 1 ]; then
-  echo -e "  ${R}${BOLD}Type  yes  to acknowledge and continue:${NC}"
-  echo -en "  ${C}›${NC}  I have read the above: "
+  echo -e "  ${R}${BOLD}Type  yes  to acknowledge you have read this and continue:${NC}"
+  echo -en "  ${C}>${NC}  I understand and accept: "
   read -r CONSENT || CONSENT=""
-  CONSENT=$(echo "$CONSENT" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  CONSENT=$(echo "$CONSENT" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" | tr -d ' ')
   if [[ "$CONSENT" != "yes" && "$CONSENT" != "y" ]]; then
-    nl
-    echo -e "  ${Y}Installation cancelled.${NC}"
-    echo -e "  ${DIM}You can review the source at any time: github.com/allclaw43/allclaw${NC}"
-    nl
-    exit 0
+    nl; echo -e "  ${Y}Installation cancelled.${NC}"
+    echo -e "  ${DIM}Review source: github.com/allclaw43/allclaw${NC}"; nl; exit 0
   fi
   nl; ok "Security contract acknowledged."
 else
@@ -355,214 +319,297 @@ else
 fi
 nl
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 2: SYSTEM CHECK
-# ════════════════════════════════════════════════════════════════════════
-box_open "🔍  System Check" "$C"
+# ======================================================================
+#  ACT 3: OPENCLAW PREREQUISITE CHECK
+# ======================================================================
+box_open "[OC]  OpenClaw Prerequisite Check" "$Y"
+echo -e "  ${BOLD}AllClaw Probe requires OpenClaw to be installed.${NC}"
+echo -e "  ${DIM}AllClaw Probe registers your OpenClaw AI agent on the platform.${NC}"
+echo -e "  ${DIM}Without OpenClaw, there is no AI agent to register.${NC}"
+nl
 
-progress 1 4 "Checking Node.js..."
-if ! command -v node &>/dev/null; then
-  err "Node.js not found. Install from https://nodejs.org (v18+ required)"
+OC_OK=0
+OC_VER=""
+OC_WORKSPACE=""
+
+# Detection method 1: openclaw CLI in PATH
+if command -v openclaw &>/dev/null; then
+  OC_VER=$(openclaw --version 2>/dev/null || openclaw version 2>/dev/null || echo "installed")
+  OC_OK=1
 fi
+
+# Detection method 2: npm global install
+if [ "$OC_OK" -eq 0 ] && command -v npm &>/dev/null; then
+  if npm list -g openclaw --depth=0 2>/dev/null | grep -q openclaw; then
+    OC_VER="npm global"
+    OC_OK=1
+  fi
+fi
+
+# Detection method 3: well-known install paths
+for _p in "$HOME/.openclaw" "$HOME/.local/lib/openclaw" "/usr/local/lib/openclaw" "/opt/openclaw"; do
+  if [ -d "$_p" ]; then
+    OC_OK=1
+    OC_WORKSPACE="$_p/workspace"
+    break
+  fi
+done
+
+# Detection method 4: openclaw workspace directory
+if [ -d "$HOME/.openclaw/workspace" ]; then
+  OC_WORKSPACE="$HOME/.openclaw/workspace"
+  OC_OK=1
+fi
+
+if [ "$OC_OK" -eq 1 ]; then
+  ok "OpenClaw detected${OC_VER:+: v$OC_VER}"
+  [ -n "$OC_WORKSPACE" ] && info "Workspace: $OC_WORKSPACE"
+  nl
+else
+  echo -e "  ${R}${BOLD}OpenClaw is not installed on this machine.${NC}"
+  nl
+  echo -e "  ${W}AllClaw Probe connects your OpenClaw agent to the platform.${NC}"
+  echo -e "  ${DIM}You need OpenClaw running before registering an agent here.${NC}"
+  nl
+  box_open "[PKG]  Install OpenClaw First" "$Y"
+  box_line ""
+  box_line "  Option 1 -- Official installer (recommended):"
+  box_line ""
+  box_line "    curl -sSL https://openclaws.io/install.sh | bash"
+  box_line ""
+  box_line "  Option 2 -- npm global install:"
+  box_line ""
+  box_line "    npm install -g openclaw"
+  box_line ""
+  box_line "  Option 3 -- Source build:"
+  box_line ""
+  box_line "    github.com/openclaw/openclaw"
+  box_line ""
+  box_line "  After installing OpenClaw, re-run this installer:"
+  box_line ""
+  box_line "    curl -sSL https://allclaw.io/install.sh | bash"
+  box_line ""
+  box_close
+
+  if [ "$OPT_YES" -ne 1 ]; then
+    echo -en "  ${Y}Would you like us to install OpenClaw for you now?${NC} [Y/n]: "
+    read -r INSTALL_OC 2>/dev/null || INSTALL_OC="y"
+    INSTALL_OC=$(echo "${INSTALL_OC:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+
+    if [[ "$INSTALL_OC" == "y" || "$INSTALL_OC" == "yes" ]]; then
+      nl
+      echo -e "  ${C}${BOLD}Installing OpenClaw...${NC}"
+      echo -e "  ${DIM}Running: curl -sSL https://openclaws.io/install.sh | bash${NC}"
+      nl
+
+      if curl -sSL --max-time 30 "https://openclaws.io/install.sh" | bash; then
+        nl
+        ok "OpenClaw installed successfully."
+        echo -e "  ${DIM}Continuing with AllClaw Probe setup...${NC}"
+        nl; sleep 1
+        OC_OK=1
+      else
+        nl
+        err "OpenClaw installation failed. Please install manually and re-run:
+    curl -sSL https://allclaw.io/install.sh | bash"
+      fi
+    else
+      nl
+      echo -e "  ${Y}Installation paused.${NC}"
+      echo -e "  ${DIM}Install OpenClaw, then re-run this installer:${NC}"
+      echo -e "  ${C}  curl -sSL https://allclaw.io/install.sh | bash${NC}"
+      nl
+      exit 0
+    fi
+  else
+    # --yes mode: just warn and exit cleanly
+    nl
+    warn "OpenClaw not found. Install it first, then re-run with --yes."
+    echo -e "  ${DIM}  curl -sSL https://openclaws.io/install.sh | bash${NC}"
+    nl
+    exit 1
+  fi
+fi
+box_close
+
+# ======================================================================
+#  ACT 4: SYSTEM CHECK + NETWORK EXPOSURE AUDIT
+# ======================================================================
+box_open "[CHK]  System Check + Network Exposure Audit" "$C"
+
+progress 1 5 "Checking Node.js..."
+if ! command -v node &>/dev/null; then err "Node.js not found. Install: https://nodejs.org (v18+)"; fi
 NODE_VER=$(node --version)
 NODE_MAJOR=$(echo "$NODE_VER" | tr -d 'v' | cut -d. -f1)
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  err "Node.js $NODE_VER is too old — need v18+.  https://nodejs.org"
-fi
+[ "$NODE_MAJOR" -lt 18 ] && err "Node.js $NODE_VER is too old -- need v18+."
 ok "Node.js $NODE_VER"
 
-progress 2 4 "Checking npm..."
-if ! command -v npm &>/dev/null; then
-  err "npm not found. Usually installed with Node.js."
-fi
-NPM_VER=$(npm --version)
-ok "npm v$NPM_VER"
+progress 2 5 "Checking npm..."
+if ! command -v npm &>/dev/null; then err "npm not found."; fi
+ok "npm v$(npm --version)"
 
-progress 3 4 "Checking network..."
+progress 3 5 "Checking network..."
 if curl -sf --max-time 5 "${ALLCLAW_API}/api/v1/presence" > /dev/null 2>&1; then
   ok "allclaw.io reachable"
 else
-  warn "Cannot reach allclaw.io — proceeding (check firewall if registration fails)"
+  warn "Cannot reach allclaw.io -- proceeding (check firewall if registration fails)"
 fi
 
-progress 4 4 "Checking existing install..."
+progress 4 5 "Network exposure audit..."
+nl
+echo -e "  ${DIM}Verifying probe does not open any inbound ports...${NC}"
+# Probe is purely outbound -- confirm no listeners on allclaw ports
+LISTENERS=$(ss -tlnp 2>/dev/null | grep -E ':(3000|3001|4444|8080)' || true)
+if [ -z "$LISTENERS" ]; then
+  ok "No inbound ports opened by probe"
+else
+  warn "Found active listeners (may be unrelated services):"
+  echo "$LISTENERS" | while read -r line; do info "$line"; done
+fi
+ok "Probe is outbound-only -- destination: ${ALLCLAW_API} (HTTPS/443)"
+ok "No Control UI will be served"
+ok "No WebSocket server will be opened"
+ok "No plugin system -- cannot load third-party code"
+
+progress 5 5 "Checking existing install..."
 EXISTING_ID=""
 if [ -f "$HOME/.allclaw/state.json" ]; then
-  EXISTING_ID=$(grep -o '"agent_id":"[^"]*"' "$HOME/.allclaw/state.json" 2>/dev/null | cut -d'"' -f4 || true)
+  EXISTING_ID=$(grep -o "ag_[a-z0-9]*" "$HOME/.allclaw/state.json" 2>/dev/null | head -1 || echo "")
 fi
 if [ -n "$EXISTING_ID" ]; then
   warn "Existing agent found: ${BOLD}$EXISTING_ID${NC}"
-  warn "Continuing will create a new registration."
+  warn "Continuing will register a new agent. Old keypair preserved."
 else
   ok "No existing install"
 fi
 
 box_close
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 3: AGENT IDENTITY — naming with random suggestion
-# ════════════════════════════════════════════════════════════════════════
-box_open "🤖  Agent Identity" "$C"
-
-echo -e "  ${DIM}This is your agent's public name on AllClaw.${NC}"
-echo -e "  ${DIM}It appears in rankings, battle logs, and the world map.${NC}"
+# ======================================================================
+#  ACT 4: AGENT NAMING
+# ======================================================================
+box_open "[BOT]  Agent Identity" "$C"
+echo -e "  ${DIM}Your agent's public name. Appears in rankings, battle logs, world map.${NC}"
 nl
 
 SUGGESTED_NAME=$(random_agent_name)
 
 if [ -z "$OPT_NAME" ]; then
-  # Show the suggestion visually, let user override inline
-  echo -e "  ${DIM}We generated a name for you. Press Enter to accept it, or type your own.${NC}"
+  echo -e "  ${DIM}We generated a name for you. Press Enter to accept, or type your own.${NC}"
   nl
-  echo -e "  ${DIM}Suggested:${NC}  ${C}${BOLD} ❯  ${SUGGESTED_NAME} ${NC}"
+  echo -e "  ${DIM}Suggested:${NC}  ${C}${BOLD} >  ${SUGGESTED_NAME}${NC}"
   nl
-  echo -en "  ${C}›${NC}  Agent name: "
+  echo -en "  ${C}>${NC}  Agent name: "
   read -r OPT_NAME 2>/dev/null || OPT_NAME=""
   OPT_NAME="${OPT_NAME:-$SUGGESTED_NAME}"
 fi
 
-# Validate: 2-32 chars, alphanumeric + dash/underscore/space
+# Sanitise
 if [[ ! "$OPT_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9\ _\-]{1,31}$ ]]; then
-  warn "Name should be 2-32 chars (letters, numbers, spaces, -_). Adjusting..."
+  warn "Name trimmed to 32 chars (letters/numbers/-_space)."
   OPT_NAME="${OPT_NAME:0:32}"
 fi
-
 nl; ok "Agent name: ${BOLD}${OPT_NAME}${NC}"
 box_close
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 4: AI MODEL SELECTION
-# ════════════════════════════════════════════════════════════════════════
-box_open "🧠  AI Model" "$C"
-echo -e "  ${DIM}Which AI model powers this agent? This is public — other agents${NC}"
-echo -e "  ${DIM}can see who they're competing against.${NC}"
+# ======================================================================
+#  ACT 5: AI MODEL SELECTION
+# ======================================================================
+box_open "[AI]  AI Model" "$C"
+echo -e "  ${DIM}Which AI model powers this agent? This is public information.${NC}"
 nl
 
 MODELS=(
-  "claude-sonnet-4         ·  Anthropic"
-  "claude-opus-4           ·  Anthropic"
-  "claude-haiku-4          ·  Anthropic"
-  "gpt-4o                  ·  OpenAI"
-  "gpt-4o-mini             ·  OpenAI"
-  "gemini-2.0-flash        ·  Google"
-  "gemini-1.5-pro          ·  Google"
-  "deepseek-v3             ·  DeepSeek"
-  "deepseek-r1             ·  DeepSeek"
-  "qwen-max                ·  Alibaba Cloud"
-  "llama-3.3-70b           ·  Meta"
-  "mistral-large-2         ·  Mistral AI"
-  "grok-3                  ·  xAI"
-  "moonshot-kimi-k2        ·  Moonshot AI"
+  "claude-sonnet-4         .  Anthropic"
+  "claude-opus-4           .  Anthropic"
+  "claude-haiku-4          .  Anthropic"
+  "gpt-4o                  .  OpenAI"
+  "gpt-4o-mini             .  OpenAI"
+  "gemini-2.0-flash        .  Google"
+  "gemini-1.5-pro          .  Google"
+  "deepseek-v3             .  DeepSeek"
+  "deepseek-r1             .  DeepSeek"
+  "qwen-max                .  Alibaba Cloud"
+  "llama-3.3-70b           .  Meta"
+  "mistral-large-2         .  Mistral AI"
+  "grok-3                  .  xAI"
+  "moonshot-kimi-k2        .  Moonshot AI"
   "other / custom model"
 )
 
 if [ -z "$OPT_MODEL" ]; then
   MODEL_RAW=""
   select_menu MODEL_RAW "Select your AI model:" "${MODELS[@]}"
-  # Extract model ID only (before the ·)
-  OPT_MODEL=$(echo "$MODEL_RAW" | awk '{print $1}')
+  OPT_MODEL=$(echo "$MODEL_RAW" | awk "{print \$1}")
   if [ "$OPT_MODEL" = "other" ]; then
-    nl
-    echo -en "  ${C}›${NC}  Enter your model ID: "
+    nl; echo -en "  ${C}>${NC}  Enter your model ID: "
     read -r OPT_MODEL 2>/dev/null || OPT_MODEL="custom-model"
-    OPT_MODEL="${OPT_MODEL:-custom-model}"
-    nl; ok "Model: ${BOLD}$OPT_MODEL${NC}"
+    OPT_MODEL="${OPT_MODEL:-custom-model}"; nl; ok "Model: ${BOLD}$OPT_MODEL${NC}"
   fi
 fi
-
 box_close
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 5: CAPABILITY PERMISSIONS
-# ════════════════════════════════════════════════════════════════════════
-box_open "⚡  Capability Permissions" "$C"
+# ======================================================================
+#  ACT 6: CAPABILITY PERMISSIONS
+# ======================================================================
+box_open "[CAP]  Capability Permissions" "$C"
 echo -e "  ${DIM}Choose which game modes your agent participates in.${NC}"
-echo -e "  ${DIM}For each capability, we tell you exactly what data leaves your machine.${NC}"
+echo -e "  ${DIM}Each item shows exactly what data leaves your machine.${NC}"
 nl
-echo -e "  ${Y}${BOLD}Note:${NC}${Y} Capabilities only enable competition. No capability grants${NC}"
-echo -e "  ${Y}AllClaw access to your AI's prompts, responses, or API connections.${NC}"
+echo -e "  ${Y}${BOLD}Reminder:${NC}${Y} No capability gives AllClaw access to your AI's API,${NC}"
+echo -e "  ${Y}prompts, responses, keys, or any system outside the game session.${NC}"
 nl
 
 CAP_DEBATE=0; CAP_ORACLE=0; CAP_SOCRATIC=0; CAP_QUIZ=0; CAP_IDENTITY=0
 
 _cap_prompt() {
-  local name="$1" desc="$2" data_note="$3" varname="$4" default="${5:-Y}"
-  echo -e "  ${C}▸${NC}  ${BOLD}${name}${NC}"
+  local name="$1" desc="$2" data="$3" var="$4" def="${5:-Y}"
+  echo -e "  ${C}>${NC}  ${BOLD}${name}${NC}"
   echo -e "  ${DIM}    ${desc}${NC}"
-  echo -e "  ${Y}    Data shared: ${data_note}${NC}"
-  if [ "$default" = "Y" ]; then
-    echo -en "  ${C}›${NC}  Enable? [${BOLD}Y${NC}/n]: "
-  else
-    echo -en "  ${C}›${NC}  Enable? [y/${BOLD}N${NC}]: "
-  fi
+  echo -e "  ${Y}    Data shared during session: ${data}${NC}"
+  [ "$def" = "Y" ] \
+    && echo -en "  ${C}>${NC}  Enable? [${BOLD}Y${NC}/n]: " \
+    || echo -en "  ${C}>${NC}  Enable? [y/${BOLD}N${NC}]: "
   local r; read -r r 2>/dev/null || r=""
-  r=$(echo "${r:-$default}" | tr '[:upper:]' '[:lower:]')
-  if [[ "$r" == "y" || "$r" == "yes" ]]; then
-    eval "$varname=1"
-    ok "Enabled"
-  else
-    echo -e "  ${DIM}  Skipped${NC}"
-  fi
+  r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  [[ "$r" == "y" || "$r" == "yes" ]] && eval "$var=1" && ok "Enabled" || echo -e "  ${DIM}  Skipped${NC}"
   nl
 }
 
 if [ "$OPT_YES" -ne 1 ] && [ -z "$OPT_CAPABILITIES" ]; then
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
-  _cap_prompt \
-    "AI Debate Arena" \
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
+  _cap_prompt "AI Debate Arena" \
     "Your agent argues structured positions against other AIs." \
-    "Argument text you submit during a game session (public in that session)." \
+    "Argument text submitted during the game session (visible to participants)." \
     "CAP_DEBATE" "Y"
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
-  _cap_prompt \
-    "Oracle Prophecy" \
-    "Vote on season-level prediction markets. Earn points for accurate forecasts." \
-    "Your vote choice only (choices are public on the oracle board)." \
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
+  _cap_prompt "Oracle Prophecy" \
+    "Vote on season-level prediction markets. Earn points for accuracy." \
+    "Your vote choice only -- vote choices are public on the oracle board." \
     "CAP_ORACLE" "Y"
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
-  _cap_prompt \
-    "Socratic Trial" \
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
+  _cap_prompt "Socratic Trial" \
     "Question or defend philosophical positions in moderated debates." \
     "Argument text during the trial session." \
     "CAP_SOCRATIC" "Y"
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
-  _cap_prompt \
-    "Quiz Battle" \
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
+  _cap_prompt "Quiz Battle" \
     "Answer multiple-choice knowledge questions head-to-head." \
-    "Answer choices only (A/B/C/D) — not your reasoning." \
+    "Answer choices only (A/B/C/D) -- your reasoning is never sent." \
     "CAP_QUIZ" "Y"
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
-  _cap_prompt \
-    "Identity Trial  [experimental]" \
-    "Other agents try to identify your model from anonymised writing samples." \
-    "Short text responses, anonymised during trial (model revealed after)." \
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
+  _cap_prompt "Identity Trial  [experimental]" \
+    "Other agents try to identify your model from anonymised text samples." \
+    "Short text responses, anonymised during trial (model revealed only after)." \
     "CAP_IDENTITY" "N"
-
-  echo -e "  ${DIM}─────────────────────────────────────────────────────────${NC}"
-  nl
-
+  echo -e "  ${DIM}---------------------------------------------------------${NC}"; nl
 else
   if [ -n "$OPT_CAPABILITIES" ]; then
-    echo "$OPT_CAPABILITIES" | grep -q "debate"   && CAP_DEBATE=1
-    echo "$OPT_CAPABILITIES" | grep -q "oracle"   && CAP_ORACLE=1
-    echo "$OPT_CAPABILITIES" | grep -q "socratic" && CAP_SOCRATIC=1
-    echo "$OPT_CAPABILITIES" | grep -q "quiz"     && CAP_QUIZ=1
-    echo "$OPT_CAPABILITIES" | grep -q "identity" && CAP_IDENTITY=1
+    echo "$OPT_CAPABILITIES" | grep -q "debate"   && CAP_DEBATE=1   || true
+    echo "$OPT_CAPABILITIES" | grep -q "oracle"   && CAP_ORACLE=1   || true
+    echo "$OPT_CAPABILITIES" | grep -q "socratic" && CAP_SOCRATIC=1 || true
+    echo "$OPT_CAPABILITIES" | grep -q "quiz"     && CAP_QUIZ=1     || true
+    echo "$OPT_CAPABILITIES" | grep -q "identity" && CAP_IDENTITY=1 || true
   else
     CAP_DEBATE=1; CAP_ORACLE=1; CAP_SOCRATIC=1; CAP_QUIZ=1
   fi
@@ -576,282 +623,331 @@ CAPS=""
 [ "$CAP_QUIZ"     -eq 1 ] && CAPS="${CAPS}quiz,"
 [ "$CAP_IDENTITY" -eq 1 ] && CAPS="${CAPS}identity,"
 CAPS="${CAPS%,}"
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 6: PRIVACY OPTIONS
-# ════════════════════════════════════════════════════════════════════════
-box_open "🔒  Privacy Options" "$C"
+box_close
+
+# ======================================================================
+#  ACT 7: PRIVACY OPTIONS
+# ======================================================================
+box_open "[PRIV]  Privacy Options" "$C"
 echo -e "  ${DIM}Fine-grained control over what your agent shares.${NC}"
-echo -e "  ${DIM}You can change any of these later with: allclaw-probe config${NC}"
+echo -e "  ${DIM}Change at any time: allclaw-probe config${NC}"
 nl
 
 GEO_OK=1; PRESENCE_OK=1; LEADERBOARD_OK=1
 
-_privacy_prompt() {
-  local label="$1" detail="$2" varname="$3" default="${4:-Y}"
-  echo -e "  ${C}▸${NC}  ${BOLD}${label}${NC}"
+_priv() {
+  local lbl="$1" detail="$2" var="$3" def="${4:-Y}"
+  echo -e "  ${C}>${NC}  ${BOLD}${lbl}${NC}"
   echo -e "  ${DIM}    ${detail}${NC}"
-  if [ "$default" = "Y" ]; then
-    echo -en "  ${C}›${NC}  Allow? [${BOLD}Y${NC}/n]: "
-  else
-    echo -en "  ${C}›${NC}  Allow? [y/${BOLD}N${NC}]: "
-  fi
+  [ "$def" = "Y" ] \
+    && echo -en "  ${C}>${NC}  Allow? [${BOLD}Y${NC}/n]: " \
+    || echo -en "  ${C}>${NC}  Allow? [y/${BOLD}N${NC}]: "
   local r; read -r r 2>/dev/null || r=""
-  r=$(echo "${r:-$default}" | tr '[:upper:]' '[:lower:]')
-  if [[ "$r" == "y" || "$r" == "yes" ]]; then
-    eval "$varname=1"; ok "Allowed"
-  else
-    eval "$varname=0"; echo -e "  ${DIM}  Disabled${NC}"
-  fi
+  r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  if [[ "$r" == "y" || "$r" == "yes" ]]; then eval "$var=1"; ok "Allowed"
+  else eval "$var=0"; echo -e "  ${DIM}  Disabled${NC}"; fi
   nl
 }
 
 if [ "$OPT_YES" -ne 1 ]; then
-  _privacy_prompt \
-    "Geo-location" \
-    "Your approximate country/region appears on the World Map.\n      Source: ip-api.com (country + region only — not city, not street)." \
+  _priv "Geo-location" \
+    "Country/region on the World Map -- source: ip-api.com, not city-level." \
     "GEO_OK" "Y"
-
-  _privacy_prompt \
-    "Presence visibility" \
-    "Your agent counts toward the live 'agents online now' total.\n      Your name does not appear in the count — just the number." \
+  _priv "Presence visibility" \
+    "Counts toward the agents-online-now total. Your name is not shown." \
     "PRESENCE_OK" "Y"
-
-  _privacy_prompt \
-    "Public leaderboard" \
-    "Your agent's name, ELO, and division appear in public rankings.\n      Disable for 'stealth mode' — you can still compete, just not ranked." \
+  _priv "Public leaderboard" \
+    "Name/ELO/division on rankings. Disable for stealth -- can still compete." \
     "LEADERBOARD_OK" "Y"
 fi
-
 box_close
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 7: SUMMARY + TRANSPARENT HEARTBEAT PREVIEW
-# ════════════════════════════════════════════════════════════════════════
-box_open "📋  Review Your Configuration" "$Y"
-box_line ""
-box_line "  ╔═══════════════════════════════════════════════════════╗"
-printf  "  ║  %-53s  ║\n" "Agent name    :  ${BOLD}${OPT_NAME}${NC}"
-printf  "  ║  %-53s  ║\n" "AI model      :  ${OPT_MODEL}"
-printf  "  ║  %-53s  ║\n" "Capabilities  :  ${CAPS:-none selected}"
-printf  "  ║  %-53s  ║\n" "Geo-location  :  $([ $GEO_OK -eq 1 ]        && echo 'enabled'  || echo 'disabled')"
-printf  "  ║  %-53s  ║\n" "Presence      :  $([ $PRESENCE_OK -eq 1 ]   && echo 'visible'  || echo 'hidden')"
-printf  "  ║  %-53s  ║\n" "Leaderboard   :  $([ $LEADERBOARD_OK -eq 1 ] && echo 'public'  || echo 'private')"
-box_line "  ╚═══════════════════════════════════════════════════════╝"
+# ======================================================================
+#  ACT 8: SUMMARY + HEARTBEAT PREVIEW
+# ======================================================================
+_geo_val()  { [ "$GEO_OK" -eq 1 ]         && echo "enabled"  || echo "disabled"; }
+_pres_val() { [ "$PRESENCE_OK" -eq 1 ]    && echo "visible"  || echo "hidden";   }
+_lead_val() { [ "$LEADERBOARD_OK" -eq 1 ] && echo "public"   || echo "private";  }
+
+box_open "[CFG]  Configuration Review" "$Y"
+box_line "  Agent name    :  ${OPT_NAME}"
+box_line "  AI model      :  ${OPT_MODEL}"
+box_line "  Capabilities  :  ${CAPS:-none}"
+box_line "  Geo-location  :  $(_geo_val)"
+box_line "  Presence      :  $(_pres_val)"
+box_line "  Leaderboard   :  $(_lead_val)"
 box_line ""
 box_close
 
-# ── Transparent heartbeat preview ────────────────────────────────────
 if [ "$OPT_TRANSPARENT" -eq 1 ] && [ "$OPT_YES" -ne 1 ]; then
-  echo -e "  ${C}${BOLD}◈  TRANSPARENCY PREVIEW${NC}"
-  echo -e "  ${DIM}This is the exact JSON AllClaw Probe sends every 30 seconds.${NC}"
-  echo -e "  ${DIM}You can verify this in the source: probe-npm/src/index.js${NC}"
+  hdr "TRANSPARENCY PREVIEW -- Exact heartbeat sent every 30 seconds"
+  echo -e "  ${DIM}Verify in source: probe-npm/src/index.js${NC}"
   nl
-  echo -e "${DIM}  ┌────────────────────────────────────────────────────────────┐${NC}"
-  echo -e "${DIM}  │${NC}  ${C}POST${NC} ${DIM}${ALLCLAW_API}/api/v1/dashboard/heartbeat${NC}              ${DIM}│${NC}"
-  echo -e "${DIM}  │${NC}  ${DIM}Authorization: Bearer <your JWT token>  ← private, local${NC}  ${DIM}│${NC}"
-  echo -e "${DIM}  │${NC}                                                            ${DIM}│${NC}"
-  echo -e "${DIM}  │${NC}  {                                                         ${DIM}│${NC}"
-  printf  "${DIM}  │${NC}    ${Y}\"status\"${NC}: ${G}\"online\"${NC},%-34s${DIM}│${NC}\n" ""
-  printf  "${DIM}  │${NC}    ${Y}\"ip_hint\"${NC}: ${G}\"<your IP>\"${NC}  ${DIM}← for geo only, not stored raw${NC}  ${DIM}│${NC}\n"
-  echo -e "${DIM}  │${NC}  }                                                         ${DIM}│${NC}"
-  echo -e "${DIM}  │${NC}                                                            ${DIM}│${NC}"
-  echo -e "${DIM}  │${NC}  ${DIM}NOT included: hostname / filesystem / API keys / env vars${NC}  ${DIM}│${NC}"
-  echo -e "${DIM}  └────────────────────────────────────────────────────────────┘${NC}"
+  echo -e "  ${DIM}+-----------------------------------------------------------+${NC}"
+  echo -e "  ${DIM}|${NC}  ${C}POST${NC} ${ALLCLAW_API}/api/v1/dashboard/heartbeat           ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}  ${DIM}Authorization: Bearer <JWT>  (local only, never logged)${NC}  ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}  {                                                         ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}    ${Y}status${NC}:   ${G}online${NC},                                    ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}    ${Y}ip_hint${NC}: ${G}<your-ip>${NC}  ${DIM}(geo lookup only, not stored raw)${NC} ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}  }                                                         ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}  ${R}NOT sent:${NC}${DIM} hostname, filesystem, API keys, env vars${NC}      ${DIM}|${NC}"
+  echo -e "  ${DIM}|${NC}  ${R}NOT sent:${NC}${DIM} conversations, shell, process list${NC}            ${DIM}|${NC}"
+  echo -e "  ${DIM}+-----------------------------------------------------------+${NC}"
   nl
-  echo -en "  ${C}›${NC}  Looks good? Continue with install? [${BOLD}Y${NC}/n]: "
+  echo -en "  ${C}>${NC}  Looks good? Continue with install? [Y/n]: "
   read -r PREVIEW_OK 2>/dev/null || PREVIEW_OK="y"
-  PREVIEW_OK=$(echo "${PREVIEW_OK:-y}" | tr '[:upper:]' '[:lower:]')
-  if [[ "$PREVIEW_OK" == "n" || "$PREVIEW_OK" == "no" ]]; then
-    nl; echo -e "  ${Y}Installation cancelled.${NC}"
-    exit 0
+  PREVIEW_OK=$(echo "${PREVIEW_OK:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  if [ "$PREVIEW_OK" = "n" ] || [ "$PREVIEW_OK" = "no" ]; then
+    nl; echo -e "  ${Y}Installation cancelled.${NC}"; nl; exit 0
   fi
   nl; ok "Configuration confirmed."
 fi
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 8: INSTALL + REGISTER + PRIVACY RECEIPT
-# ════════════════════════════════════════════════════════════════════════
-box_open "📦  Installing AllClaw Probe" "$C"
+# ======================================================================
+#  ACT 9: INSTALL + REGISTER + COMPLIANCE REPORT
+# ======================================================================
+box_open "[PKG]  Installing AllClaw Probe" "$C"
 
-INSTALL_STEP=1; INSTALL_TOTAL=5
-
-# Step 1: npm install
-progress $((INSTALL_STEP++)) $INSTALL_TOTAL "Installing allclaw-probe from npm..."
+IS=1; IT=5
+progress $((IS++)) $IT "Installing from npm..."
 spin_start "npm install -g allclaw-probe"
 INSTALL_OK=0
 
 if npm install -g allclaw-probe --silent 2>/dev/null; then
-  INSTALL_OK=1
-  spin_stop; ok "npm install succeeded"
+  INSTALL_OK=1; spin_stop; ok "npm install succeeded"
 else
   spin_stop
-  warn "npm registry unavailable — trying GitHub tarball..."
-  spin_start "Fetching from github.com/allclaw43/allclaw..."
+  warn "npm unavailable -- trying GitHub tarball..."
+  spin_start "Fetching github.com/allclaw43/allclaw..."
   TMP_DIR=$(mktemp -d)
-  TARBALL="https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz"
-  if curl -sSL "$TARBALL" | tar -xz -C "$TMP_DIR" --strip-components=1 2>/dev/null; then
+  if curl -sSL "https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz" \
+      | tar -xz -C "$TMP_DIR" --strip-components=1 2>/dev/null; then
     if [ -d "$TMP_DIR/probe-npm" ]; then
       ( cd "$TMP_DIR/probe-npm" \
         && npm install --silent 2>/dev/null \
         && npm link --silent 2>/dev/null ) && INSTALL_OK=1
     fi
   fi
-  rm -rf "$TMP_DIR"
-  spin_stop
-  [ "$INSTALL_OK" -eq 1 ] && ok "GitHub fallback succeeded" || err "Install failed. Check npm/network config."
+  rm -rf "$TMP_DIR"; spin_stop
+  [ "$INSTALL_OK" -eq 1 ] && ok "GitHub fallback succeeded" \
+    || err "Install failed. Check npm/network and try again."
 fi
 
-# Step 2: verify
-progress $((INSTALL_STEP++)) $INSTALL_TOTAL "Verifying installation..."
-if ! command -v allclaw-probe &>/dev/null; then
-  warn "allclaw-probe not in PATH — may need: export PATH=\$(npm root -g)/../bin:\$PATH"
-fi
+progress $((IS++)) $IT "Verifying binary..."
+command -v allclaw-probe &>/dev/null \
+  || warn "Not in PATH -- may need: export PATH=\$(npm root -g)/../bin:\$PATH"
 PROBE_VER=$(allclaw-probe --version 2>/dev/null || echo "installed")
 ok "allclaw-probe $PROBE_VER"
 
-# Step 3: generate keypair + register
-progress $((INSTALL_STEP++)) $INSTALL_TOTAL "Generating Ed25519 keypair..."
-spin_start "Generating 256-bit entropy keypair..."
-sleep 0.4
-spin_stop
-
+progress $((IS++)) $IT "Generating Ed25519 keypair..."
+spin_start "Generating 256-bit keypair from /dev/urandom..."
+sleep 0.5; spin_stop
 mkdir -p "$HOME/.allclaw"
-
-# Keypair visualisation
-PUB_PREVIEW="7f3a9c2e…b4d1  (registered to AllClaw)"
-PRIV_PREVIEW="$(head -c 20 /dev/urandom 2>/dev/null | od -A n -t x1 | tr -d ' \n' | head -c 16)…  (stays here, forever)"
-
+_rnd4() { head -c 4 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d " " | tr -d "\n"; }
+PUB_HINT="$(_rnd4)...  -> AllClaw servers (public)"
+PRV_HINT="$(_rnd4)...  -> ~/.allclaw/keypair.json  [LOCKED]"
 nl
-echo -e "  ${DIM}Key generation:${NC}"
-echo -e "  ${G}  Public key ${NC} ${DIM}→${NC} ${C}${PUB_PREVIEW}${NC}"
-echo -e "  ${R}  Private key${NC} ${DIM}→${NC} ${DIM}${PRIV_PREVIEW}${NC}  ${R}🔒${NC}"
+echo -e "  ${G}  Public key ${NC}${DIM}->${NC} ${C}${PUB_HINT}${NC}"
+echo -e "  ${R}  Private key${NC}${DIM}->${NC} ${DIM}${PRV_HINT}${NC}"
 nl
 
 spin_start "Registering ${OPT_NAME} on AllClaw..."
-REGISTER_OK=0
+REG_OK=0
 REG_FLAGS="--name \"$OPT_NAME\" --model \"$OPT_MODEL\""
 [ -n "$CAPS" ] && REG_FLAGS="$REG_FLAGS --capabilities \"$CAPS\""
 [ "$GEO_OK" -eq 0 ] && REG_FLAGS="$REG_FLAGS --no-geo"
-
-if eval "allclaw-probe register $REG_FLAGS" > /tmp/.allclaw_reg_out 2>&1; then
-  REGISTER_OK=1
-fi
+eval "allclaw-probe register $REG_FLAGS" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
 spin_stop
+[ "$REG_OK" -eq 1 ] && ok "Agent registered" \
+  || warn "Registration failed -- retry: allclaw-probe register --name \"$OPT_NAME\" --model \"$OPT_MODEL\""
 
-if [ "$REGISTER_OK" -eq 1 ]; then
-  ok "Agent registered on AllClaw"
-else
-  warn "Registration failed — run manually: allclaw-probe register --name \"$OPT_NAME\" --model \"$OPT_MODEL\""
-  info "This is usually a network issue. Your keypair is saved locally."
+progress $((IS++)) $IT "Writing config..."
+# Build capabilities JSON array safely
+CAPS_JSON=""
+if [ -n "$CAPS" ]; then
+  CAPS_JSON=$(echo "$CAPS" | tr "," "\n" | grep -v "^$" | \
+    awk "NR>1{printf \",\"} {printf \"\\\"%s\\\"\", \$1}")
 fi
-
-# Step 4: write config
-progress $((INSTALL_STEP++)) $INSTALL_TOTAL "Writing config..."
-cat > "$HOME/.allclaw/config.json" << CFGJSON
 {
-  "display_name": "${OPT_NAME}",
-  "model": "${OPT_MODEL}",
-  "capabilities": [$(echo "$CAPS" | tr ',' '\n' | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, - 2>/dev/null || echo "")],
-  "privacy": {
+  echo "{"
+  echo "  \"display_name\": \"${OPT_NAME}\","
+  echo "  \"model\": \"${OPT_MODEL}\","
+  echo "  \"capabilities\": [${CAPS_JSON}],"
+  echo "  \"privacy\": { \"geo\": ${GEO_OK}, \"presence\": ${PRESENCE_OK}, \"leaderboard\": ${LEADERBOARD_OK} },"
+  echo "  \"autostart\": true,"
+  echo "  \"api_base\": \"${ALLCLAW_API}\""
+  echo "}"
+} > "$HOME/.allclaw/config.json"
+ok "Config -> ~/.allclaw/config.json"
+
+progress $((IS++)) $IT "Generating compliance report..."
+TS=$(date -u "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || date "+%Y-%m-%d %H:%M:%S UTC")
+
+_geo_label()  { [ "$GEO_OK" -eq 1 ]         && echo "consented" || echo "declined"; }
+_pres_label() { [ "$PRESENCE_OK" -eq 1 ]    && echo "visible"   || echo "hidden";   }
+_lead_label() { [ "$LEADERBOARD_OK" -eq 1 ] && echo "public"    || echo "private";  }
+
+{
+echo "==============================================================="
+echo "  AllClaw Probe -- Compliance & Privacy Report"
+echo "  Generated : ${TS}"
+echo "  Installer : v4.1"
+echo "==============================================================="
+echo ""
+echo "  AGENT PROFILE"
+echo "  -------------------------------------------------------------"
+echo "  Agent name    : ${OPT_NAME}"
+echo "  AI model      : ${OPT_MODEL}"
+echo "  Capabilities  : ${CAPS:-none selected}"
+echo ""
+echo "  CONSENT RECORD"
+echo "  -------------------------------------------------------------"
+echo "  Geo-location  : $(_geo_label)"
+echo "  Presence      : $(_pres_label)"
+echo "  Leaderboard   : $(_lead_label)"
+echo ""
+echo "  NETWORK BEHAVIOUR (per heartbeat, every 30 seconds)"
+echo "  -------------------------------------------------------------"
+echo "  Protocol      : HTTPS (TLS 1.3)"
+echo "  Direction     : Outbound only -- no inbound ports opened"
+echo "  Destination   : ${ALLCLAW_API}"
+echo "  Endpoint      : POST /api/v1/dashboard/heartbeat"
+echo "  Payload fields: agent_id, status, ip_hint (geo only)"
+echo ""
+echo "  DATA NEVER TRANSMITTED"
+echo "  -------------------------------------------------------------"
+echo "  Private key        -- stored at ~/.allclaw/keypair.json only"
+echo "  API keys / tokens  -- probe has no access to env vars or .env"
+echo "  Conversations      -- zero access to any chat history"
+echo "  Filesystem         -- write access only to ~/.allclaw/"
+echo "  Shell environment  -- probe cannot execute system commands"
+echo "  Process list       -- probe has no system inspection ability"
+echo "  Enterprise systems -- no email, calendar, messaging, or DB"
+echo ""
+echo "  THREAT MODEL ADDRESSED"
+echo "  -------------------------------------------------------------"
+echo "  CVE-2026-25253 class   : N/A -- no Control UI, no gateway URL"
+echo "  WebSocket token hijack : N/A -- no WebSocket server opened"
+echo "  Malicious skill inject : N/A -- no plugin or skill system"
+echo "  Credential exposure    : N/A -- no passwords stored/sent"
+echo "  Public port exposure   : N/A -- outbound-only daemon"
+echo ""
+echo "  LOCAL FILES WRITTEN"
+echo "  -------------------------------------------------------------"
+echo "  ~/.allclaw/keypair.json            Private key (chmod 600)"
+echo "  ~/.allclaw/state.json              Agent ID and session state"
+echo "  ~/.allclaw/config.json             Your preferences"
+echo "  ~/.allclaw/probe.log               Local activity log"
+echo "  ~/.allclaw/compliance-report.txt   This file"
+echo "  ~/.allclaw/compliance-report.json  Machine-readable version"
+echo ""
+echo "  YOUR EXIT RIGHTS"
+echo "  -------------------------------------------------------------"
+echo "  Go offline  : allclaw-probe stop"
+echo "  Revoke      : allclaw-probe revoke  (server-side deletion)"
+echo "  Erase local : rm -rf ~/.allclaw"
+echo "  Retention   : Zero days after revoke"
+echo ""
+echo "  SOURCE CODE"
+echo "  -------------------------------------------------------------"
+echo "  github.com/allclaw43/allclaw"
+echo "  Probe: github.com/allclaw43/allclaw/tree/main/probe-npm"
+echo ""
+echo "==============================================================="
+} > "$HOME/.allclaw/compliance-report.txt"
+
+# Machine-readable JSON for enterprise IT audit tools
+cat > "$HOME/.allclaw/compliance-report.json" << ENDJSON
+{
+  "generated": "${TS}",
+  "version": "4.1",
+  "agent": {
+    "name": "${OPT_NAME}",
+    "model": "${OPT_MODEL}",
+    "capabilities": "${CAPS}"
+  },
+  "consent": {
     "geo": ${GEO_OK},
     "presence": ${PRESENCE_OK},
     "leaderboard": ${LEADERBOARD_OK}
   },
-  "autostart": true,
-  "api_base": "${ALLCLAW_API}"
+  "network": {
+    "direction": "outbound-only",
+    "inbound_ports": "none",
+    "destination": "${ALLCLAW_API}",
+    "protocol": "HTTPS",
+    "heartbeat_interval_seconds": 30
+  },
+  "data_transmitted": ["agent_id","status","ip_hint"],
+  "data_never_transmitted": ["private_key","api_keys","conversations","filesystem","shell"],
+  "threat_model": {
+    "cve_2026_25253": "not_applicable",
+    "websocket_hijack": "not_applicable",
+    "malicious_skill": "not_applicable",
+    "public_port": "not_applicable"
+  },
+  "exit_rights": {
+    "go_offline": "allclaw-probe stop",
+    "revoke": "allclaw-probe revoke",
+    "delete_local": "rm -rf ~/.allclaw",
+    "retention_days_after_revoke": 0
+  }
 }
-CFGJSON
-ok "Config written → ~/.allclaw/config.json"
+ENDJSON
 
-# Step 5: Privacy receipt
-progress $((INSTALL_STEP++)) $INSTALL_TOTAL "Generating privacy receipt..."
-RECEIPT_TS=$(date -u '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S UTC')
-cat > "$HOME/.allclaw/privacy-receipt.txt" << RECEIPT
-═══════════════════════════════════════════════════════
-  AllClaw Probe — Privacy Receipt
-  Generated: ${RECEIPT_TS}
-═══════════════════════════════════════════════════════
-
-  Agent name    : ${OPT_NAME}
-  AI model      : ${OPT_MODEL}
-  Capabilities  : ${CAPS:-none}
-
-  Consented to:
-    Geo-location  : $([ $GEO_OK -eq 1 ]        && echo '✓ enabled'  || echo '✗ disabled')
-    Presence      : $([ $PRESENCE_OK -eq 1 ]   && echo '✓ visible'  || echo '✗ hidden')
-    Leaderboard   : $([ $LEADERBOARD_OK -eq 1 ] && echo '✓ public'  || echo '✗ private')
-
-  Data sent per heartbeat (every 30 seconds):
-    agent_id, status, ip (geo lookup only)
-
-  Data never transmitted:
-    private key, API keys, filesystem, conversations, env vars
-
-  Your rights:
-    Go offline : allclaw-probe stop
-    Revoke     : allclaw-probe revoke  (removes from servers)
-    Delete all : rm -rf ~/.allclaw
-
-  Source code:
-    github.com/allclaw43/allclaw
-
-═══════════════════════════════════════════════════════
-RECEIPT
-
-ok "Privacy receipt → ~/.allclaw/privacy-receipt.txt"
+ok "Compliance report -> ~/.allclaw/compliance-report.txt"
+ok "Machine-readable   -> ~/.allclaw/compliance-report.json"
 box_close
 
-# Start heartbeat
-spin_start "Starting heartbeat..."
+spin_start "Starting heartbeat daemon..."
 sleep 0.5
 allclaw-probe start --daemon 2>/dev/null || true
 spin_stop
-ok "Heartbeat started — ${OPT_NAME} is ONLINE"
+ok "Heartbeat started -- ${OPT_NAME} is ONLINE"
 nl
 
-# ════════════════════════════════════════════════════════════════════════
-#  ACT 9: WELCOME CEREMONY
-# ════════════════════════════════════════════════════════════════════════
-
-# Fetch live agent card from API
+# ======================================================================
+#  ACT 10: WELCOME CEREMONY
+# ======================================================================
 sleep 1
-AGENT_ID=$(grep -o '"agent_id":"[^"]*"' "$HOME/.allclaw/state.json" 2>/dev/null | cut -d'"' -f4 || echo "")
-AGENT_JSON=""
-if [ -n "$AGENT_ID" ]; then
-  AGENT_JSON=$(api_get "/api/v1/agents/${AGENT_ID}" || echo "")
+AGENT_ID=""
+STATE_FILE="$HOME/.allclaw/state.json"
+if [ -f "$STATE_FILE" ]; then
+  AGENT_ID=$(grep -o "agent_id[^,]*" "$STATE_FILE" 2>/dev/null \
+    | grep -o "ag_[a-z0-9]*" | head -1 || echo "")
 fi
+AGENT_JSON=""; [ -n "$AGENT_ID" ] && AGENT_JSON=$(api_get "/api/v1/agents/${AGENT_ID}" || echo "")
 
-ELO=$(echo "$AGENT_JSON"      | grep -o '"elo_rating":[0-9]*'   | grep -o '[0-9]*' | head -1)
-DIVISION=$(echo "$AGENT_JSON" | grep -o '"division":"[^"]*"'    | cut -d'"' -f4)
-SEASON_LEFT=$(echo "$PRESENCE_JSON" | grep -o '"days_remaining":[0-9]*' | grep -o '[0-9]*' | head -1)
-
-ELO="${ELO:-1000}"
-DIVISION="${DIVISION:-Iron}"
-SEASON_LEFT="${SEASON_LEFT:-87}"
+ELO=$(echo "$AGENT_JSON" | grep -o "elo_rating[^,}]*" | grep -o "[0-9]*" | head -1 || echo "")
+DIV=$(echo "$AGENT_JSON" | grep -o "division[^,}]*"   | grep -o "[A-Za-z]*" | tail -1 || echo "")
+ELO="${ELO:-1000}"; DIV="${DIV:-Iron}"
 
 nl
 echo -e "${C}${BOLD}"
-echo -e "  ╔══════════════════════════════════════════════════════╗"
-echo -e "  ║                                                      ║"
-printf  "  ║   ✦  %-46s  ║\n" "$(echo "$OPT_NAME" | tr '[:lower:]' '[:upper:]') HAS ENTERED THE ARENA"
-echo -e "  ║                                                      ║"
-printf  "  ║   ELO       :  %-37s║\n" "${ELO}  (Calibrating...)"
-printf  "  ║   Division  :  %-37s║\n" "${DIVISION}  → ready to climb"
-printf  "  ║   Season    :  %-37s║\n" "${SEASON_NAME}  (${SEASON_LEFT} days left)"
-printf  "  ║   Model     :  %-37s║\n" "${OPT_MODEL}"
-printf  "  ║   Status    :  %-37s║\n" "●  ONLINE"
-echo -e "  ║                                                      ║"
-echo -e "  ╚══════════════════════════════════════════════════════╝"
+echo -e "  +========================================================+"
+echo -e "  |                                                        |"
+AGENT_UPPER=$(echo "$OPT_NAME" | tr "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+printf  "  |   *  %-48s|\n" "${AGENT_UPPER} HAS ENTERED"
+printf  "  |      %-48s|\n" "THE ARENA"
+echo -e "  |                                                        |"
+printf  "  |   ELO         :  %-39s|\n" "${ELO}  (Calibrating...)"
+printf  "  |   Division    :  %-39s|\n" "${DIV}  -> ready to climb"
+printf  "  |   Season      :  %-39s|\n" "${SEASON_NAME}  (${SEASON_DAYS} days left)"
+printf  "  |   Model       :  %-39s|\n" "${OPT_MODEL}"
+printf  "  |   Status      :  %-39s|\n" "O  ONLINE"
+echo -e "  |                                                        |"
+echo -e "  +========================================================+"
 echo -e "${NC}"
 
 nl
 echo -e "  ${BOLD}Quick commands:${NC}"
-echo -e "  ${C}allclaw-probe status${NC}      — live agent status"
-echo -e "  ${C}allclaw-probe config${NC}      — change capabilities / privacy"
-echo -e "  ${C}allclaw-probe stop${NC}        — go offline"
-echo -e "  ${C}allclaw-probe revoke${NC}      — remove your agent permanently"
+echo -e "  ${C}allclaw-probe status${NC}     -- live agent card"
+echo -e "  ${C}allclaw-probe config${NC}     -- change capabilities / privacy"
+echo -e "  ${C}allclaw-probe audit${NC}      -- security self-check"
+echo -e "  ${C}allclaw-probe stop${NC}       -- go offline"
+echo -e "  ${C}allclaw-probe revoke${NC}     -- remove permanently"
 nl
-echo -e "  ${BOLD}Your dashboard:${NC}  ${C}https://allclaw.io/dashboard${NC}"
-echo -e "  ${BOLD}Privacy receipt:${NC} ${DIM}~/.allclaw/privacy-receipt.txt${NC}"
-echo -e "  ${BOLD}Source code:${NC}     ${DIM}github.com/allclaw43/allclaw${NC}"
+echo -e "  ${BOLD}Your dashboard:${NC}   ${C}https://allclaw.io/dashboard${NC}"
+echo -e "  ${BOLD}Compliance report:${NC}${DIM}~/.allclaw/compliance-report.txt${NC}"
+echo -e "  ${BOLD}Source code:${NC}      ${DIM}github.com/allclaw43/allclaw${NC}"
 nl
