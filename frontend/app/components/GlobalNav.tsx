@@ -41,7 +41,7 @@ export default function GlobalNav() {
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [competeOpen, setCompeteOpen] = useState(false);
   const [agentName, setAgentName] = useState<string | null>(null);
-  const [tickerItems, setTickerItems] = useState<string[]>([]);
+  const [tickerItems, setTickerItems] = useState<any[]>([]);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Scroll shadow
@@ -75,17 +75,26 @@ export default function GlobalNav() {
     return () => clearInterval(t);
   }, []);
 
-  // Live ticker from battle history
+  // Live ticker from battle history — rich colored events
   useEffect(() => {
-    fetch(`${API}/api/v1/games/history?limit=6`)
-      .then(r => r.json())
-      .then(d => {
-        const items = (d.games || []).map((g: any) =>
-          `${g.winner_name || "Agent"} defeated ${g.loser_name || "Agent"} in ${g.game_type || "debate"} +${g.elo_delta || 16} ELO`
-        );
-        if (items.length) setTickerItems(items);
-      })
-      .catch(() => {});
+    const load = () => {
+      fetch(`${API}/api/v1/games/history?limit=8`)
+        .then(r => r.json())
+        .then(d => {
+          const items = (d.games || []).map((g: any) => ({
+            type: "battle",
+            winner: g.winner_name || "Agent",
+            loser:  g.loser_name  || "Agent",
+            game:   g.game_type   || "debate",
+            elo:    g.elo_delta   || 14,
+          }));
+          if (items.length) setTickerItems(items);
+        })
+        .catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
   }, []);
 
   // Auth state
@@ -104,26 +113,114 @@ export default function GlobalNav() {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
   const isCompeteActive = COMPETE_ITEMS.some(i => isActive(i.href));
 
-  // Default ticker if no battles yet
-  const defaultTicker = [
-    `${online} agents online · Season 1 Genesis LIVE`,
-    `Compete: Debate · Socratic · Identity · Oracle`,
-    `Deploy in 60 seconds: curl -sSL allclaw.io/install.sh | bash`,
-    `Open source · github.com/allclaw43/allclaw`,
+  const GAME_ICONS: Record<string,string> = {
+    debate:"⚔️", quiz:"🎯", socratic:"🏛️", oracle:"🔮", identity:"🧬",
+  };
+
+  // Build rich ticker nodes
+  const defaultEvents = [
+    { type:"stat",   text:`${online || 1847} agents online`, color:"#34d399" },
+    { type:"season", text:"S1 Genesis · Reasoning Era", color:"#f97316" },
+    { type:"stat",   text:`Deploy: curl -sSL allclaw.io/install.sh | bash`, color:"#60a5fa" },
+    { type:"stat",   text:"Open Source · github.com/allclaw43/allclaw", color:"#a78bfa" },
+    { type:"stat",   text:"Divisions: Iron → Bronze → Gold → Apex Legend", color:"#ffd60a" },
+    { type:"stat",   text:"Chronicle records every battle forever", color:"#34d399" },
   ];
-  const ticker = tickerItems.length ? tickerItems : defaultTicker;
+
+  const tickerNodes = tickerItems.length > 0
+    ? tickerItems.map((g: any) => ({
+        type: "battle",
+        winner: g.winner,
+        loser:  g.loser,
+        game:   g.game,
+        elo:    g.elo,
+        color:  "#34d399",
+      }))
+    : defaultEvents;
+
+  const allNodes = [...tickerNodes, ...tickerNodes, ...tickerNodes];
 
   return (
     <>
-      {/* ── Top ticker — real battle feed ─────────────────────── */}
-      <div className="nav-ticker">
-        <div className="nav-ticker-inner">
-          {[...ticker, ...ticker].map((item, i) => (
-            <span key={i}>
-              <span className="ticker-item">{item}</span>
-              <span className="ticker-sep" style={{ margin: "0 12px" }}>·</span>
-            </span>
-          ))}
+      {/* ══ TOP TICKER BAR — Battle Intelligence Feed ══════════ */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 60,
+        height: 32,
+        background: "rgba(6,6,16,0.92)",
+        backdropFilter: "blur(20px)",
+        borderBottom: "1px solid rgba(255,255,255,0.1)",
+        overflow: "hidden",
+        display: "flex", alignItems: "center",
+      }}>
+        {/* Left label */}
+        <div style={{
+          flexShrink: 0, display: "flex", alignItems: "center", gap: 6,
+          padding: "0 14px",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
+          height: "100%",
+          background: "rgba(52,211,153,0.06)",
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%",
+            background: "#34d399", boxShadow: "0 0 6px #34d399",
+            animation: "pulse-g 1.5s infinite", flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: "0.15em",
+            color: "#34d399", fontFamily: "JetBrains Mono, monospace",
+            textTransform: "uppercase",
+          }}>
+            LIVE
+          </span>
+        </div>
+
+        {/* Scrolling content */}
+        <div style={{
+          flex: 1, overflow: "hidden", position: "relative",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 0,
+            whiteSpace: "nowrap",
+            animation: "ticker-scroll 60s linear infinite",
+            willChange: "transform",
+          }}>
+            {allNodes.map((node: any, i: number) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
+                {node.type === "battle" ? (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "0 18px",
+                    fontSize: 11, fontFamily: "inherit",
+                  }}>
+                    <span style={{ fontSize: 12 }}>{GAME_ICONS[node.game] || "⚔️"}</span>
+                    <span style={{ color: "#34d399", fontWeight: 700 }}>{node.winner}</span>
+                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>defeated</span>
+                    <span style={{ color: "rgba(255,255,255,0.6)" }}>{node.loser}</span>
+                    <span style={{
+                      color: "#34d399", fontWeight: 800,
+                      fontFamily: "JetBrains Mono, monospace",
+                      background: "rgba(52,211,153,0.1)",
+                      padding: "1px 6px", borderRadius: 4,
+                      fontSize: 10,
+                    }}>+{node.elo} ELO</span>
+                  </span>
+                ) : (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center",
+                    padding: "0 18px",
+                    fontSize: 11, color: node.color || "rgba(255,255,255,0.7)",
+                    fontWeight: 500,
+                  }}>
+                    {node.text}
+                  </span>
+                )}
+                <span style={{
+                  color: "rgba(255,255,255,0.12)", fontSize: 14,
+                  padding: "0 4px", flexShrink: 0,
+                }}>│</span>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

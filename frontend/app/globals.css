@@ -411,41 +411,23 @@ body {
    GLOBAL NAV SYSTEM
    ═══════════════════════════════════════════════════════════════ */
 
-.nav-ticker {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-  height: 26px;
-  background: linear-gradient(90deg, #000510, #000d20, #000510);
-  border-bottom: 1px solid rgba(0,229,255,0.1);
-  overflow: hidden; display: flex; align-items: center;
-}
-.nav-ticker-inner {
-  display: flex; align-items: center; gap: 24px;
-  white-space: nowrap;
-  animation: ticker-scroll 50s linear infinite;
-  padding-left: 100%;
-  font-size: 10.5px; letter-spacing: 0.06em;
-  color: rgba(255,255,255,0.32);
-  font-family: 'JetBrains Mono', monospace;
-}
-.nav-ticker-inner:hover { animation-play-state: paused; }
-.ticker-item { color: rgba(255,255,255,0.42); font-weight: 500; }
-.ticker-sep  { color: rgba(0,229,255,0.3); }
+/* ticker now fully inline in GlobalNav.tsx JSX */
 @keyframes ticker-scroll {
   0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  100% { transform: translateX(-33.33%); }
 }
 
 .global-nav {
-  position: fixed; top: 26px; left: 0; right: 0; z-index: 55;
-  background: rgba(9,9,18,0.55);
-  backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  position: fixed; top: 32px; left: 0; right: 0; z-index: 55;
+  background: rgba(9,9,20,0.6);
+  backdrop-filter: blur(40px) saturate(2) brightness(1.15);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
   transition: all 0.3s;
 }
 .global-nav.scrolled {
-  background: rgba(9,9,18,0.92);
-  border-bottom-color: rgba(255,255,255,0.1);
-  box-shadow: 0 1px 0 rgba(0,229,255,0.06), 0 12px 48px rgba(0,0,0,0.5);
+  background: rgba(9,9,20,0.95);
+  border-bottom-color: rgba(255,255,255,0.13);
+  box-shadow: 0 1px 0 rgba(0,229,255,0.08), 0 16px 56px rgba(0,0,0,0.6);
 }
 
 .nav-inner {
@@ -481,22 +463,23 @@ body {
 .nav-link {
   position: relative; display: flex; align-items: center; gap: 5px;
   padding: 7px 13px; border-radius: 9px;
-  font-size: 13px; font-weight: 500;
-  color: rgba(255,255,255,0.4);
+  font-size: 13.5px; font-weight: 500;
+  color: rgba(255,255,255,0.6);   /* was 0.4 — much more visible */
   text-decoration: none;
   transition: color 0.18s, background 0.18s, box-shadow 0.18s;
   white-space: nowrap; letter-spacing: 0.01em;
   cursor: pointer;
 }
 .nav-link:hover {
-  color: rgba(255,255,255,0.9);
-  background: rgba(255,255,255,0.055);
+  color: white;
+  background: rgba(255,255,255,0.08);
 }
 .nav-link-active {
   color: white;
-  background: rgba(0,229,255,0.08);
+  background: rgba(0,229,255,0.1);
+  border: 1px solid rgba(0,229,255,0.12);
 }
-.nav-link-active:hover { background: rgba(0,229,255,0.12); }
+.nav-link-active:hover { background: rgba(0,229,255,0.15); }
 .nav-link-icon  { font-size: 13px; }
 .nav-link-label { font-weight: 600; }
 .nav-link-badge { margin-left: 2px; font-size: 8px !important; padding: 1px 4px !important; }
@@ -588,7 +571,7 @@ body {
 .nav-mobile-active { background: rgba(0,229,255,0.07); color: white; border: 1px solid rgba(0,229,255,0.14); }
 .nav-mobile-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 0; }
 
-.nav-spacer { height: calc(26px + 60px); }
+.nav-spacer { height: calc(32px + 60px); }
 
 @media (max-width: 900px) {
   .nav-links { display: none; }
@@ -1049,3 +1032,155 @@ body {
 }
 .score-pop { animation: score-pop 0.5s cubic-bezier(0.4,0,0.2,1) forwards; }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   COOL FACTOR — Dynamic Energy System
+   "An AI civilization is alive. Make it feel that way."
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Scan line sweep across card on hover ────────────────────── */
+@keyframes scan-sweep {
+  0%   { top: -100%; opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.4; }
+  100% { top: 110%;   opacity: 0; }
+}
+.scan-card {
+  position: relative; overflow: hidden;
+}
+.scan-card::after {
+  content: '';
+  position: absolute; left: 0; right: 0; height: 40px;
+  background: linear-gradient(180deg, transparent, rgba(0,229,255,0.06), transparent);
+  top: -100%; pointer-events: none;
+  transition: none;
+}
+.scan-card:hover::after {
+  animation: scan-sweep 1.2s ease-in-out;
+}
+
+/* ── Neon border chase (active/featured card) ─────────────────── */
+@keyframes border-chase {
+  0%   { background-position: 0% 0%; }
+  100% { background-position: 200% 0%; }
+}
+.neon-border {
+  position: relative; border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, #00e5ff, #a78bfa, #00ffaa, #00e5ff) border-box;
+  background-size: 200% 100%;
+  border: 1px solid transparent;
+  animation: border-chase 3s linear infinite;
+}
+
+/* ── Win flash: green explosion then fade ────────────────────── */
+@keyframes win-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0);  }
+  20%  { box-shadow: 0 0 0 8px rgba(52,211,153,0.3); }
+  60%  { box-shadow: 0 0 24px 4px rgba(52,211,153,0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+}
+.win-flash  { animation: win-flash 1.2s ease-out forwards; }
+
+/* ── ELO rise/fall digit highlight ───────────────────────────── */
+@keyframes elo-rise {
+  0%   { color: #34d399; transform: translateY(4px); opacity: 0; }
+  30%  { opacity: 1; transform: translateY(0); }
+  70%  { color: #34d399; }
+  100% { color: inherit; }
+}
+@keyframes elo-fall {
+  0%   { color: #f87171; transform: translateY(-4px); opacity: 0; }
+  30%  { opacity: 1; transform: translateY(0); }
+  70%  { color: #f87171; }
+  100% { color: inherit; }
+}
+.elo-rise { animation: elo-rise 1s ease forwards; }
+.elo-fall { animation: elo-fall 1s ease forwards; }
+
+/* ── Oracle pulse ring ────────────────────────────────────────── */
+@keyframes oracle-ring {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.oracle-ring {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid rgba(167,139,250,0.5);
+  animation: oracle-ring 2.4s ease-out infinite;
+  pointer-events: none;
+}
+.oracle-ring-2 { animation-delay: 0.8s; }
+.oracle-ring-3 { animation-delay: 1.6s; }
+
+/* ── Data stream: column of falling digits ───────────────────── */
+@keyframes stream-fall {
+  0%   { transform: translateY(-20px); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.5; }
+  100% { transform: translateY(100px); opacity: 0; }
+}
+
+/* ── Float hover (used on stat cards) ────────────────────────── */
+@keyframes float-soft {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(-4px); }
+}
+.float-soft { animation: float-soft 4s ease-in-out infinite; }
+
+/* ── Hero text shimmer ────────────────────────────────────────── */
+@keyframes text-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.text-shimmer {
+  background: linear-gradient(90deg,
+    #60a5fa 0%, #a78bfa 25%, #34d399 50%, #60a5fa 75%, #a78bfa 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer 4s linear infinite;
+}
+
+/* ── Particle node glow (used as decorative dots) ─────────────── */
+.node-glow-cyan   { width:8px;height:8px;border-radius:50%;background:#00e5ff;box-shadow:0 0 8px #00e5ff,0 0 20px rgba(0,229,255,0.3); }
+.node-glow-purple { width:8px;height:8px;border-radius:50%;background:#a78bfa;box-shadow:0 0 8px #a78bfa,0 0 20px rgba(167,139,250,0.3); }
+.node-glow-green  { width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399,0 0 20px rgba(52,211,153,0.3); }
+
+/* ── Live battle card energy field ───────────────────────────── */
+.battle-energy {
+  position: relative; overflow: hidden;
+}
+.battle-energy::before {
+  content: '';
+  position: absolute; top: 0; left: -100%; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, #34d399, transparent);
+  animation: signal-travel 3s ease-in-out infinite;
+}
+
+/* ── Counter flash on update ──────────────────────────────────── */
+@keyframes counter-flash {
+  0%   { color: #34d399; }
+  100% { color: inherit; }
+}
+.counter-flash { animation: counter-flash 0.8s ease forwards; }
+
+/* ── Glass card with inner light ──────────────────────────────── */
+.glass-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+  position: relative; overflow: hidden;
+  transition: all 0.25s;
+}
+.glass-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+}
+.glass-card:hover {
+  background: rgba(255,255,255,0.065);
+  border-color: rgba(255,255,255,0.16);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+  transform: translateY(-3px);
+}

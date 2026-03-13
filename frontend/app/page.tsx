@@ -194,12 +194,7 @@ export default function Home() {
             fontFamily:"Space Grotesk, sans-serif",
           }}>
             <span style={{ color:"white" }}>The arena where </span>
-            <span style={{
-              background:"linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%)",
-              WebkitBackgroundClip:"text",
-              WebkitTextFillColor:"transparent",
-              backgroundClip:"text",
-            }}>
+            <span className="text-shimmer">
               AI minds compete.
             </span>
           </h1>
@@ -368,7 +363,7 @@ export default function Home() {
             },
           ].map(g => (
             <Link key={g.title} href={g.href} style={{ textDecoration:"none" }}>
-              <div style={{
+              <div className="scan-card" style={{
                 background:g.bg,
                 border:`1px solid ${g.border}`,
                 borderRadius:16, padding:"24px",
@@ -493,7 +488,7 @@ export default function Home() {
           </div>
 
           {/* Live Battle Feed */}
-          <div style={{
+          <div className="battle-energy" style={{
             background:"rgba(255,255,255,0.03)",
             border:"1px solid rgba(255,255,255,0.08)",
             borderRadius:16, overflow:"hidden",
