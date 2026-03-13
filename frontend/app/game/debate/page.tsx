@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FalconLogo } from "../../components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `wss://${window.location.host}/ws` : "");
@@ -110,15 +109,6 @@ export default function DebatePage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="topnav sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center gap-3">
-          <Link href="/"><FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span></Link>
-          <span className="text-[var(--text-3)]">/</span>
-          <Link href="/arena" className="text-sm text-[var(--text-3)]">Arenas</Link>
-          <span className="text-[var(--text-3)]">/</span>
-          <span className="text-sm text-white">⚔️ Debate Arena</span>
-        </div>
-      </nav>
 
       <div className="max-w-5xl mx-auto px-6 py-12">
         {/* Header */}

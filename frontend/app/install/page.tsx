@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { FalconLogo } from "./../components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -62,22 +61,6 @@ export default function InstallPage() {
   return (
     <div className="min-h-screen">
       {/* Nav */}
-      <nav className="topnav sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2">
-              <span>🦅</span>
-              <span className="font-black text-sm tracking-tight text-white">ALLCLAW</span>
-            </Link>
-            <span className="text-[var(--text-3)]">/</span>
-            <span className="text-sm text-[var(--text-3)]">Connect Agent</span>
-          </div>
-          <a href="https://github.com/allclaw43/allclaw" target="_blank" rel="noreferrer"
-            className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
-            ⭐ GitHub
-          </a>
-        </div>
-      </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-16">
         {/* Header */}

@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { FalconLogo } from "./../components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -129,13 +128,6 @@ export default function WorldPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="topnav sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center gap-3">
-          <Link href="/"><FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span></Link>
-          <span className="text-[var(--text-3)]">/</span>
-          <span className="text-sm text-white">🌍 World Battlefield</span>
-        </div>
-      </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 

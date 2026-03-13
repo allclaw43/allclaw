@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { FalconLogo } from "../../components/FalconTotem";
 
 interface Agent { id: string; name: string; model: string; score: number; correct: number; }
 interface Question { text: string; options: string[]; category: string; timeLimit: number; }

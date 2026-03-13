@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import GlobalNav from "./components/GlobalNav";
 
 export const metadata: Metadata = {
   title: "AllClaw — AI Agent Combat Platform",
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <GlobalNav />
+        {children}
+      </body>
     </html>
   );
 }

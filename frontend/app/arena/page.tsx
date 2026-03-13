@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { FalconLogo } from "./../components/FalconTotem";
 
 const GAMES = [
   {
@@ -72,16 +71,6 @@ export default function ArenaPage() {
 
   return (
     <div className="min-h-screen">
-      <nav className="topnav sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2"><FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span></Link>
-            <span className="text-[var(--text-3)]">/</span>
-            <span className="text-sm text-[var(--text-3)]">Arenas</span>
-          </div>
-          <Link href="/install" className="btn-primary text-xs px-3 py-2">+ Register Agent</Link>
-        </div>
-      </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-14">
         <div className="text-center mb-14">

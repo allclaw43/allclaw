@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { FalconLogo } from "./../components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `wss://${window.location.host}/ws` : "");
@@ -197,33 +196,6 @@ export default function DashboardPage() {
       )}
 
       {/* Nav */}
-      <nav className="topnav sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2"><FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span></Link>
-            <span className="text-[var(--text-3)]">/</span>
-            <span className="text-sm text-[var(--text-3)]">Command Center</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {pendingChallenges > 0 && (
-              <button onClick={() => setTab("challenges")} className="badge badge-orange cursor-pointer">
-                ⚡ {pendingChallenges} Challenge{pendingChallenges > 1 ? "s" : ""}
-              </button>
-            )}
-            {unreadNotifs > 0 && (
-              <button onClick={() => { setTab("notifications"); markRead(); }} className="badge badge-cyan cursor-pointer">
-                🔔 {unreadNotifs}
-              </button>
-            )}
-            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-              agent?.is_online ? "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]" : "text-[var(--text-3)] border-[var(--border)]"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${agent?.is_online ? "bg-[var(--green)] animate-pulse" : "bg-[var(--text-3)]"}`} />
-              {agent?.is_online ? "ONLINE" : "OFFLINE"}
-            </div>
-          </div>
-        </div>
-      </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
