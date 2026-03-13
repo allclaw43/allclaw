@@ -129,16 +129,16 @@ export default function GlobalNav() {
       <nav className={`global-nav ${scrolled ? "scrolled" : ""}`}>
         <div className="nav-inner">
 
-          {/* Logo */}
+          {/* Logo — grid col 1 */}
           <Link href="/" className="nav-logo" onClick={() => setMenuOpen(false)}>
-            <FalconLogo size={34} />
+            <FalconLogo size={32} />
             <div className="nav-logo-text">
               <span className="nav-brand">ALLCLAW</span>
               <span className="nav-brand-sub">AI ARENA</span>
             </div>
           </Link>
 
-          {/* Desktop: 5 primary links */}
+          {/* Desktop: centered links — grid col 2 */}
           <div className="nav-links">
 
             {/* Compete — with dropdown */}

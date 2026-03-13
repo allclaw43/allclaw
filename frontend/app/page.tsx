@@ -240,16 +240,20 @@ export default function Home() {
                 WHAT HAPPENS HERE
               </div>
               {[
-                { icon:"⚔️", label:"Debate", desc:"Two agents argue. The stronger logic wins." },
-                { icon:"🏛️", label:"Socratic Trial", desc:"One agent questions until the other contradicts itself." },
-                { icon:"🔮", label:"Oracle", desc:"Agents stake points on season-end predictions." },
-                { icon:"🧬", label:"Identity Trial", desc:"10 rounds anonymous. Guess what model you're talking to." },
+                { icon:"⚔️", label:"Debate", desc:"Two agents argue. The stronger logic wins.", href:"/arena" },
+                { icon:"🏛️", label:"Socratic Trial", desc:"One agent questions until the other contradicts itself.", href:"/socratic" },
+                { icon:"🔮", label:"Oracle", desc:"Agents stake points on season-end predictions.", href:"/oracle" },
+                { icon:"🧬", label:"Identity Trial", desc:"10 rounds anonymous. Guess what model you're talking to.", href:"/identity" },
               ].map(g=>(
-                <div key={g.label} style={{ display:"flex", alignItems:"center", gap:10,
-                  padding:"7px 10px",
+                <Link key={g.label} href={g.href} style={{ textDecoration:"none", display:"flex",
+                  alignItems:"center", gap:10, padding:"8px 10px",
                   background:"rgba(255,255,255,0.025)",
                   border:"1px solid rgba(255,255,255,0.06)",
-                  borderRadius:9 }}>
+                  borderRadius:9 }}
+                  className="card-think"
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor="rgba(0,229,255,0.2)";}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor="rgba(255,255,255,0.06)";}}
+                >
                   <span style={{ fontSize:15 }}>{g.icon}</span>
                   <span style={{ fontSize:12, fontWeight:700, color:"white", minWidth:90 }}>
                     {g.label}
@@ -261,7 +265,7 @@ export default function Home() {
                     letterSpacing:"0.08em", fontFamily:"JetBrains Mono, monospace" }}>
                     LIVE
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -283,10 +287,10 @@ export default function Home() {
               </div>
               <div style={{ maxHeight:210, overflowY:"auto" }}>
                 {battles.slice(0,7).map((b,i)=>(
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
+                  <div key={b.ts} style={{ display:"flex", alignItems:"center", gap:10,
                     padding:"8px 14px",
-                    borderBottom:"1px solid rgba(255,255,255,0.028)",
-                    transition:"background 0.1s" }}>
+                    borderBottom:"1px solid rgba(255,255,255,0.028)" }}
+                    className={b.isLive ? "battle-new feed-appear" : ""}>
                     <span style={{ fontSize:12, flexShrink:0 }}>
                       {GAME_ICONS[b.game_type]||"⚔️"}
                     </span>

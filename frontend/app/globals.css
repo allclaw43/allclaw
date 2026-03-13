@@ -411,56 +411,72 @@ body {
 
 .nav-inner {
   max-width: 1400px; margin: 0 auto; padding: 0 32px;
-  height: 60px; display: flex; align-items: center;
+  height: 60px; display: grid;
+  /* 3 zones: logo | center links | right actions */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
 }
 
 .nav-logo {
-  display: flex; align-items: center; gap: 10px;
-  text-decoration: none; flex-shrink: 0; margin-right: 32px;
+  display: flex; align-items: center; gap: 9px;
+  text-decoration: none; flex-shrink: 0;
+  transition: opacity 0.2s;
 }
+.nav-logo:hover { opacity: 0.85; }
 .nav-logo-text { display: flex; flex-direction: column; line-height: 1; }
 .nav-brand {
-  font-size: 16px; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 15px; font-weight: 700; letter-spacing: 0.1em;
   color: white; font-family: 'Space Grotesk', sans-serif;
 }
 .nav-brand-sub {
-  font-size: 7.5px; font-weight: 600; letter-spacing: 0.22em;
-  color: rgba(0,229,255,0.38); text-transform: uppercase; margin-top: 2px;
+  font-size: 7px; font-weight: 600; letter-spacing: 0.24em;
+  color: rgba(0,229,255,0.35); text-transform: uppercase; margin-top: 2px;
   font-family: 'JetBrains Mono', monospace;
 }
-.nav-beta {
-  font-size: 8px; font-weight: 800; letter-spacing: 0.12em;
-  color: var(--cyan); background: rgba(0,229,255,0.07);
-  border: 1px solid rgba(0,229,255,0.2); padding: 2px 5px; border-radius: 4px;
-}
 
+/* ── CENTER links ─────────────────────────────────────── */
 .nav-links {
-  display: flex; align-items: center; gap: 1px; flex: 1;
+  display: flex; align-items: center; gap: 2px;
+  justify-content: center;
 }
 .nav-link {
   position: relative; display: flex; align-items: center; gap: 5px;
-  padding: 7px 12px; border-radius: 9px;
+  padding: 7px 13px; border-radius: 9px;
   font-size: 13px; font-weight: 500;
   color: rgba(255,255,255,0.4);
-  text-decoration: none; transition: color 0.15s, background 0.15s;
+  text-decoration: none;
+  transition: color 0.18s, background 0.18s, box-shadow 0.18s;
   white-space: nowrap; letter-spacing: 0.01em;
+  cursor: pointer;
 }
-.nav-link:hover { color: rgba(255,255,255,0.82); background: rgba(255,255,255,0.052); }
-.nav-link-active { color: white; background: rgba(0,229,255,0.07); }
-.nav-link-active:hover { background: rgba(0,229,255,0.11); }
+.nav-link:hover {
+  color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.055);
+}
+.nav-link-active {
+  color: white;
+  background: rgba(0,229,255,0.08);
+}
+.nav-link-active:hover { background: rgba(0,229,255,0.12); }
 .nav-link-icon  { font-size: 13px; }
 .nav-link-label { font-weight: 600; }
 .nav-link-badge { margin-left: 2px; font-size: 8px !important; padding: 1px 4px !important; }
 
+/* Animated underline indicator */
 .nav-link-indicator {
   position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
-  width: 20px; height: 2px; border-radius: 999px;
-  background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+  width: 0; height: 2px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  box-shadow: 0 0 10px var(--cyan);
+  transition: width 0.3s cubic-bezier(0.4,0,0.2,1);
 }
+.nav-link-active .nav-link-indicator { width: 24px; }
+.nav-link:hover .nav-link-indicator  { width: 16px; opacity: 0.5; }
 
+/* ── RIGHT side ───────────────────────────────────────── */
 .nav-right {
-  display: flex; align-items: center; gap: 12px;
-  flex-shrink: 0; margin-left: auto;
+  display: flex; align-items: center; gap: 10px;
+  justify-content: flex-end;
 }
 
 .nav-presence {
@@ -839,3 +855,158 @@ body {
 .stat-box:hover { border-color: var(--border-2); background: var(--surface-2); }
 .stat-box-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; line-height: 1; }
 .stat-box-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-top: 5px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   INTERACTION DYNAMICS — "AI is thinking and battling"
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Card hover: think pulse ─────────────────────────────────── */
+.card-think:hover {
+  border-color: rgba(0,229,255,0.22);
+  box-shadow:
+    0 0 0 1px rgba(0,229,255,0.08),
+    0 8px 32px rgba(0,0,0,0.4),
+    inset 0 0 24px rgba(0,229,255,0.025);
+  transform: translateY(-2px);
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+.card-think { transition: all 0.25s cubic-bezier(0.4,0,0.2,1); }
+
+/* ── Panel hover: signal surge ───────────────────────────────── */
+.panel-hover:hover {
+  border-left-width: 3px;
+  box-shadow: -4px 0 20px rgba(0,229,255,0.08);
+  transform: translateX(2px);
+  transition: all 0.2s ease;
+}
+.panel-hover { transition: all 0.2s ease; }
+
+/* ── Battle result row: flash on new event ───────────────────── */
+@keyframes battle-flash {
+  0%   { background: rgba(0,255,170,0.18); }
+  40%  { background: rgba(0,229,255,0.08); }
+  100% { background: transparent; }
+}
+.battle-new { animation: battle-flash 1.5s ease forwards; }
+
+/* ── ELO number: color shift on change ───────────────────────── */
+@keyframes elo-up   { 0%{color:#00ffaa;filter:drop-shadow(0 0 6px #00ffaa)} 100%{} }
+@keyframes elo-down { 0%{color:#ff3366;filter:drop-shadow(0 0 6px #ff3366)} 100%{} }
+.elo-rising  { animation: elo-up   1.5s ease forwards; }
+.elo-falling { animation: elo-down 1.5s ease forwards; }
+
+/* ── Thought wave: ripple from center ────────────────────────── */
+@keyframes thought-ripple {
+  0%   { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.thought-ripple {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid rgba(0,229,255,0.4);
+  animation: thought-ripple 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.thought-ripple-2 { animation-delay: 0.6s; }
+.thought-ripple-3 { animation-delay: 1.2s; }
+
+/* ── Signal travel: dot moves along a path ───────────────────── */
+@keyframes signal-travel {
+  0%   { transform: translateX(-4px); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(calc(100% + 4px)); opacity: 0; }
+}
+.signal-line { position: relative; overflow: hidden; }
+.signal-line::after {
+  content: '';
+  position: absolute; top: 50%; left: 0;
+  width: 40px; height: 100%; max-height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: signal-travel 2s ease-in-out infinite;
+}
+
+/* ── Battle pulse: card throbs on live event ─────────────────── */
+@keyframes battle-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,229,255,0); }
+  50%     { box-shadow: 0 0 0 4px rgba(0,229,255,0.15), 0 0 20px rgba(0,229,255,0.08); }
+}
+.battle-live { animation: battle-pulse 2s ease-in-out infinite; }
+
+/* ── Data tick: number increments flash ──────────────────────── */
+@keyframes data-tick {
+  0%   { color: var(--cyan); transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+.data-tick { animation: data-tick 0.4s ease forwards; }
+
+/* ── Status ring: thinking/processing state ──────────────────── */
+@keyframes spin-arc {
+  to { transform: rotate(360deg); }
+}
+.status-ring {
+  width: 20px; height: 20px; position: relative; flex-shrink: 0;
+}
+.status-ring::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid rgba(0,229,255,0.1);
+  border-top-color: var(--cyan);
+  animation: spin-arc 1.2s linear infinite;
+}
+.status-ring-idle::before { animation: none; border-color: rgba(255,255,255,0.08); }
+
+/* ── Neon text flicker (rare — use sparingly) ────────────────── */
+@keyframes neon-flicker {
+  0%,100% { opacity: 1; text-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan); }
+  92%     { opacity: 1; }
+  93%     { opacity: 0.6; }
+  94%     { opacity: 1; }
+  96%     { opacity: 0.8; text-shadow: 0 0 6px var(--cyan); }
+  97%     { opacity: 1; text-shadow: 0 0 16px var(--cyan); }
+}
+.neon-flicker { animation: neon-flicker 6s ease-in-out infinite; }
+
+/* ── Appear animation for feed items ─────────────────────────── */
+@keyframes feed-appear {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.feed-appear { animation: feed-appear 0.35s cubic-bezier(0.4,0,0.2,1) forwards; }
+
+/* ── Argument fork: split path visual ───────────────────────────
+   Used on Debate/Socratic pages to show argument branching */
+.arg-fork {
+  position: relative;
+  padding-left: 16px;
+}
+.arg-fork::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--cyan) 0%, transparent 100%);
+  border-radius: 999px;
+}
+
+/* ── Presence heatmap dot ────────────────────────────────────── */
+@keyframes heatmap-pulse {
+  0%,100% { transform: scale(1); opacity: 0.8; }
+  50%     { transform: scale(1.4); opacity: 1; }
+}
+.heatmap-dot-hot  { animation: heatmap-pulse 1.2s ease-in-out infinite; }
+.heatmap-dot-warm { animation: heatmap-pulse 2.5s ease-in-out infinite; }
+
+/* ── Progress fill animated ──────────────────────────────────── */
+@keyframes fill-grow {
+  from { width: 0; }
+}
+.progress-animated .progress-fill { animation: fill-grow 1s cubic-bezier(0.4,0,0.2,1) forwards; }
+
+/* ── Score counter pop ───────────────────────────────────────── */
+@keyframes score-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.15); color: var(--green); }
+  100% { transform: scale(1); }
+}
+.score-pop { animation: score-pop 0.5s cubic-bezier(0.4,0,0.2,1) forwards; }
+
