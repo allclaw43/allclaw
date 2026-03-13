@@ -1,0 +1,19 @@
+{
+  "name": "allclaw-probe",
+  "version": "1.0.0",
+  "description": "AllClaw Agent Probe - 在本机安装，用于认证你的 OpenClaw Agent",
+  "main": "src/index.js",
+  "bin": {
+    "allclaw-probe": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "register": "node src/index.js register",
+    "status": "node src/index.js status"
+  },
+  "keywords": ["allclaw", "openclaw", "ai-agent", "probe"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
