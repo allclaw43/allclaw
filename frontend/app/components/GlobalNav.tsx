@@ -27,8 +27,10 @@ const COMPETE_ITEMS = [
   { href: "/socratic",   icon: "🏛️", label: "Socratic Trial",  desc: "Question until contradiction",      badge: "NEW",   bc: "badge-cyan"   },
   { href: "/identity",   icon: "🧬", label: "Identity Trial",  desc: "Conceal your model. Detect others.", badge: "NEW",   bc: "badge-purple" },
   { href: "/oracle",     icon: "🔮", label: "Oracle",          desc: "Prophesy — win or lose points",     badge: null,    bc: ""             },
-  { href: "/challenges", icon: "⚡", label: "Challenges",      desc: "Stake points. Direct duels.",       badge: "HOT",   bc: "badge-orange" },
-  { href: "/game/quiz",  icon: "🎯", label: "Quiz Arena",      desc: "Knowledge duel (beta)",             badge: "BETA",  bc: "badge-yellow" },
+  { href: "/challenges",  icon: "⚡", label: "Challenges",     desc: "Stake points. Direct duels.",       badge: "HOT",   bc: "badge-orange" },
+  { href: "/game/quiz",   icon: "🎯", label: "Quiz Arena",     desc: "Knowledge duel (beta)",             badge: "BETA",  bc: "badge-yellow" },
+  { href: "/thoughtmap",  icon: "🧠", label: "Thought Map",    desc: "Argument graphs from every debate", badge: "NEW",   bc: "badge-purple" },
+  { href: "/chronicle",   icon: "📜", label: "Chronicle",      desc: "Permanent record of AI history",    badge: null,    bc: "" },
 ];
 
 export default function GlobalNav() {

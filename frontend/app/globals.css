@@ -9,23 +9,23 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 
-/* ─── Design Tokens ────────────────────────────────────────── */
+/* ─── Design Tokens v3 — Deep Universe ────────────────────── */
 :root {
-  /* Backgrounds — deep space */
-  --bg:          #020206;
-  --bg-2:        #06060e;
-  --bg-3:        #0b0b16;
-  --bg-4:        #0f0f1e;
+  /* Backgrounds — deep space with blue-violet undertone */
+  --bg:          #04040f;   /* not pure black — has deep indigo */
+  --bg-2:        #080818;
+  --bg-3:        #0d0d20;
+  --bg-4:        #121228;
 
-  /* Surface — glass */
-  --surface:     rgba(255,255,255,0.028);
-  --surface-2:   rgba(255,255,255,0.052);
-  --surface-3:   rgba(255,255,255,0.08);
+  /* Surface — glass with subtle warmth */
+  --surface:     rgba(120,120,200,0.045);
+  --surface-2:   rgba(120,120,220,0.08);
+  --surface-3:   rgba(150,150,255,0.12);
 
-  /* Borders */
-  --border:      rgba(255,255,255,0.07);
-  --border-2:    rgba(255,255,255,0.13);
-  --border-3:    rgba(255,255,255,0.2);
+  /* Borders — violet-tinted */
+  --border:      rgba(150,140,255,0.1);
+  --border-2:    rgba(160,150,255,0.18);
+  --border-3:    rgba(180,170,255,0.28);
 
   /* Primary: Xenon Cyan */
   --cyan:        #00e5ff;
@@ -34,10 +34,10 @@
   --cyan-glow:   0 0 20px rgba(0,229,255,0.3), 0 0 60px rgba(0,229,255,0.1);
 
   /* Secondary: Quantum Purple */
-  --purple:      #8b5cf6;
-  --purple-2:    #6d28d9;
-  --purple-dim:  rgba(139,92,246,0.12);
-  --purple-glow: 0 0 20px rgba(139,92,246,0.3);
+  --purple:      #a78bfa;
+  --purple-2:    #7c3aed;
+  --purple-dim:  rgba(167,139,250,0.12);
+  --purple-glow: 0 0 20px rgba(167,139,250,0.3);
 
   /* Accent: Bio Green */
   --green:       #00ffaa;
@@ -46,18 +46,18 @@
   --green-glow:  0 0 20px rgba(0,255,170,0.25);
 
   /* Warning / Alert */
-  --orange:      #ff7846;
-  --orange-dim:  rgba(255,120,70,0.12);
-  --red:         #ff3366;
-  --red-dim:     rgba(255,51,102,0.12);
+  --orange:      #ff8c5a;
+  --orange-dim:  rgba(255,140,90,0.12);
+  --red:         #ff4d7a;
+  --red-dim:     rgba(255,77,122,0.12);
   --yellow:      #ffd60a;
   --yellow-dim:  rgba(255,214,10,0.1);
 
-  /* Text */
-  --text:        #e8e8f0;
-  --text-2:      #7b7b94;
-  --text-3:      #44445a;
-  --text-4:      #2a2a3e;
+  /* Text — warmer whites */
+  --text:        #ececf8;
+  --text-2:      #8888aa;
+  --text-3:      #4e4e6a;
+  --text-4:      #2c2c42;
 
   /* Radius */
   --radius:    12px;
@@ -70,7 +70,13 @@
 html { scroll-behavior: smooth; color-scheme: dark; }
 
 body {
-  background: var(--bg);
+  /* Cosmic gradient: deep indigo at top, slightly warmer at bottom */
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(88,60,200,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 40% at 85% 20%,   rgba(0,229,255,0.04)  0%, transparent 45%),
+    radial-gradient(ellipse 60% 30% at 10% 80%,   rgba(139,92,246,0.05) 0%, transparent 45%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -104,8 +110,9 @@ body {
 
 .glow-hero {
   background:
-    radial-gradient(ellipse 70% 50% at 50% -5%, rgba(0,229,255,0.065) 0%, transparent 65%),
-    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(139,92,246,0.045) 0%, transparent 50%);
+    radial-gradient(ellipse 70% 50% at 50% -5%, rgba(0,229,255,0.1) 0%, transparent 65%),
+    radial-gradient(ellipse 45% 35% at 80% 80%, rgba(167,139,250,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 30% 20% at 20% 90%, rgba(0,255,170,0.04) 0%, transparent 50%);
 }
 .glow-cyan   { box-shadow: var(--cyan-glow); }
 .glow-green  { box-shadow: var(--green-glow); }
@@ -146,94 +153,117 @@ body {
 
 /* ─── Cards ─────────────────────────────────────────────────── */
 .card {
-  background: var(--surface);
+  background: linear-gradient(135deg, rgba(120,110,220,0.05) 0%, var(--surface) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.25s;
 }
-.card:hover { border-color: var(--border-2); }
+.card:hover {
+  border-color: var(--border-2);
+  box-shadow: 0 4px 24px rgba(88,60,200,0.08);
+}
 
-/* Panel — war room data panel with left accent border */
+/* Panel — data panel with left accent + subtle inner glow */
 .panel {
-  background: linear-gradient(135deg, rgba(0,229,255,0.022) 0%, var(--surface) 100%);
-  border: 1px solid rgba(0,229,255,0.1);
-  border-left: 2px solid rgba(0,229,255,0.7);
+  background: linear-gradient(135deg,
+    rgba(0,229,255,0.04) 0%,
+    rgba(88,60,200,0.04) 50%,
+    var(--surface) 100%);
+  border: 1px solid rgba(0,229,255,0.13);
+  border-left: 2px solid rgba(0,229,255,0.75);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
-  transition: all 0.2s;
+  transition: all 0.25s;
 }
 .panel::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(0,229,255,0.5), transparent 70%);
+  background: linear-gradient(90deg, rgba(0,229,255,0.6), rgba(139,92,246,0.2), transparent 80%);
 }
 .panel:hover {
-  border-color: rgba(0,229,255,0.18);
+  border-color: rgba(0,229,255,0.22);
   border-left-color: var(--cyan);
-  box-shadow: 0 0 40px rgba(0,229,255,0.04), inset 0 0 40px rgba(0,229,255,0.015);
+  box-shadow: 0 4px 32px rgba(0,229,255,0.06), inset 0 0 30px rgba(0,229,255,0.02);
+  transform: translateY(-1px);
 }
 
 .panel-purple {
-  background: linear-gradient(135deg, rgba(139,92,246,0.022) 0%, var(--surface) 100%);
-  border: 1px solid rgba(139,92,246,0.1);
-  border-left: 2px solid rgba(139,92,246,0.7);
+  background: linear-gradient(135deg,
+    rgba(167,139,250,0.06) 0%,
+    rgba(88,60,200,0.04) 50%,
+    var(--surface) 100%);
+  border: 1px solid rgba(167,139,250,0.14);
+  border-left: 2px solid rgba(167,139,250,0.8);
   border-radius: var(--radius-lg);
-  position: relative; overflow: hidden; transition: all 0.2s;
+  position: relative; overflow: hidden; transition: all 0.25s;
 }
 .panel-purple::before {
   content: ''; position: absolute;
   top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(139,92,246,0.5), transparent 70%);
+  background: linear-gradient(90deg, rgba(167,139,250,0.7), rgba(0,229,255,0.15), transparent 80%);
 }
 .panel-purple:hover {
-  border-color: rgba(139,92,246,0.2);
+  border-color: rgba(167,139,250,0.25);
   border-left-color: var(--purple);
-  box-shadow: 0 0 40px rgba(139,92,246,0.05);
+  box-shadow: 0 4px 32px rgba(139,92,246,0.08);
+  transform: translateY(-1px);
 }
 
 .panel-green {
-  background: linear-gradient(135deg, rgba(0,255,170,0.018) 0%, var(--surface) 100%);
-  border: 1px solid rgba(0,255,170,0.1);
-  border-left: 2px solid rgba(0,255,170,0.7);
+  background: linear-gradient(135deg,
+    rgba(0,255,170,0.04) 0%,
+    rgba(0,180,120,0.02) 50%,
+    var(--surface) 100%);
+  border: 1px solid rgba(0,255,170,0.13);
+  border-left: 2px solid rgba(0,255,170,0.75);
   border-radius: var(--radius-lg);
-  position: relative; overflow: hidden; transition: all 0.2s;
+  position: relative; overflow: hidden; transition: all 0.25s;
 }
 .panel-green::before {
   content: ''; position: absolute;
   top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(0,255,170,0.5), transparent 70%);
+  background: linear-gradient(90deg, rgba(0,255,170,0.6), rgba(0,229,255,0.15), transparent 80%);
+}
+.panel-green:hover {
+  border-color: rgba(0,255,170,0.22);
+  box-shadow: 0 4px 32px rgba(0,255,170,0.06);
+  transform: translateY(-1px);
 }
 
 .panel-warn {
-  background: linear-gradient(135deg, rgba(255,120,70,0.025) 0%, var(--surface) 100%);
-  border: 1px solid rgba(255,120,70,0.12);
-  border-left: 2px solid rgba(255,120,70,0.7);
+  background: linear-gradient(135deg,
+    rgba(255,140,90,0.05) 0%,
+    rgba(200,80,40,0.02) 50%,
+    var(--surface) 100%);
+  border: 1px solid rgba(255,140,90,0.14);
+  border-left: 2px solid rgba(255,140,90,0.75);
   border-radius: var(--radius-lg);
-  position: relative; overflow: hidden;
+  position: relative; overflow: hidden; transition: all 0.25s;
 }
 .panel-warn::before {
   content: ''; position: absolute;
   top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(255,120,70,0.5), transparent 70%);
+  background: linear-gradient(90deg, rgba(255,140,90,0.6), transparent 80%);
 }
 
 /* Data window — terminal-style */
 .data-window {
-  background: var(--bg-2);
+  background: linear-gradient(160deg, rgba(88,60,200,0.06) 0%, var(--bg-2) 40%);
   border: 1px solid var(--border-2);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .data-window-header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px;
-  background: rgba(0,229,255,0.035);
+  background: linear-gradient(90deg, rgba(0,229,255,0.06), rgba(88,60,200,0.04), transparent);
   border-bottom: 1px solid var(--border);
   font-size: 10px; font-weight: 700;
   letter-spacing: 0.12em; text-transform: uppercase;
-  color: rgba(0,229,255,0.7);
+  color: rgba(0,229,255,0.75);
   font-family: 'JetBrains Mono', monospace;
 }
 .dw-dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -398,15 +428,15 @@ body {
 
 .global-nav {
   position: fixed; top: 26px; left: 0; right: 0; z-index: 55;
-  background: rgba(2,2,6,0.7);
-  backdrop-filter: blur(28px) saturate(1.8);
-  border-bottom: 1px solid rgba(255,255,255,0.055);
+  background: rgba(4,4,16,0.65);
+  backdrop-filter: blur(32px) saturate(2);
+  border-bottom: 1px solid rgba(150,140,255,0.08);
   transition: all 0.3s;
 }
 .global-nav.scrolled {
-  background: rgba(2,2,6,0.96);
-  border-bottom-color: rgba(0,229,255,0.1);
-  box-shadow: 0 1px 0 rgba(0,229,255,0.04), 0 8px 32px rgba(0,0,0,0.7);
+  background: rgba(4,4,16,0.95);
+  border-bottom-color: rgba(0,229,255,0.12);
+  box-shadow: 0 1px 0 rgba(0,229,255,0.05), 0 8px 40px rgba(0,0,0,0.6);
 }
 
 .nav-inner {

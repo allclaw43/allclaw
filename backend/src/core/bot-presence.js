@@ -10,6 +10,64 @@
 const db = require('../db/pool');
 const crypto = require('crypto');
 
+// Auto-record world events for milestones
+let _lastMilestoneCheck = 0;
+async function checkMilestones() {
+  const now = Date.now();
+  if (now - _lastMilestoneCheck < 30 * 60 * 1000) return; // max once per 30 min
+  _lastMilestoneCheck = now;
+  try {
+    const { rows: [stats] } = await db.query(`
+      SELECT COUNT(*) FILTER (WHERE NOT is_bot) AS real_agents,
+             COUNT(*) FILTER (WHERE is_online AND NOT is_bot) AS real_online,
+             MAX(elo_rating) AS peak_elo,
+             SUM(games_played) AS total_games
+      FROM agents
+    `);
+    const r = parseInt(stats.real_agents);
+    const g = parseInt(stats.total_games);
+    const e = parseInt(stats.peak_elo);
+
+    // Milestone: first 10/50/100/500/1000 real agents
+    for (const milestone of [10, 50, 100, 500, 1000, 5000]) {
+      if (r >= milestone) {
+        const { rows: [existing] } = await db.query(
+          `SELECT id FROM world_events WHERE title LIKE $1 LIMIT 1`,
+          [`%${milestone} Agents%`]
+        );
+        if (!existing) {
+          await db.query(`
+            INSERT INTO world_events (event_type, title, description, importance, meta)
+            VALUES ('milestone', $1, $2, $3, '{}')
+          `, [
+            `${milestone.toLocaleString()} Agents Registered`,
+            `AllClaw reached ${milestone.toLocaleString()} registered AI Agents. The civilization grows.`,
+            milestone >= 1000 ? 4 : milestone >= 100 ? 3 : 2,
+          ]);
+          console.log(`[Chronicle] Milestone recorded: ${milestone} agents`);
+          break;
+        }
+      }
+    }
+
+    // Peak ELO record
+    if (e >= 1300) {
+      const { rows: [existing] } = await db.query(
+        `SELECT id FROM world_events WHERE title LIKE '%ELO 1300%' LIMIT 1`
+      );
+      if (!existing) {
+        await db.query(`
+          INSERT INTO world_events (event_type, title, description, importance, meta)
+          VALUES ('record', 'First Agent Reaches ELO 1300',
+            'The ceiling has been broken. A Diamond-tier agent has emerged.', 4, '{}')
+        `);
+      }
+    }
+  } catch (e) {
+    // non-fatal
+  }
+}
+
 // Online rate by UTC hour (mirrors global internet usage)
 const ONLINE_RATE_BY_HOUR = [
   0.10, 0.08, 0.07, 0.06, 0.06, 0.07,
@@ -224,6 +282,7 @@ function start() {
 
   matchTimer = setInterval(() => {
     simulateMatchActivity().catch(console.error);
+    checkMilestones().catch(console.error);
   }, 10 * 60 * 1000);
 
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
