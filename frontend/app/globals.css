@@ -1184,3 +1184,15 @@ body {
   box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
   transform: translateY(-3px);
 }
+
+/* ── Scroll mouse bounce ─────────────────────────────────────── */
+@keyframes scroll-mouse {
+  0%,100% { transform: translateY(0); opacity: 1; }
+  60%     { transform: translateY(10px); opacity: 0.3; }
+}
+
+/* ── Pulse green (presence dot) ─────────────────────────────── */
+@keyframes pulse-g {
+  0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52,211,153,0.4); }
+  50%     { opacity: 0.8; box-shadow: 0 0 0 4px rgba(52,211,153,0); }
+}

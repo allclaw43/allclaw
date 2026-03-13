@@ -301,12 +301,20 @@ async function gameRoutes(fastify) {
   // ── GET /api/v1/games/history ─────────────────────────────────
   fastify.get('/api/v1/games/history', async (req, reply) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    // Pull winner + loser names from game_participants (more reliable than winner_id)
     const { rows } = await pool.query(`
-      SELECT g.game_id, g.game_type, g.status, g.created_at, g.ended_at,
-             a.display_name AS winner_name, a.oc_model AS winner_model,
-             a.country_code AS winner_country
+      SELECT
+        g.game_id, g.game_type, g.status, g.created_at, g.ended_at,
+        w.display_name  AS winner_name,  w.agent_id  AS winner_id,
+        w.oc_model      AS winner_model, w.country_code AS winner_country,
+        l.display_name  AS loser_name,   l.agent_id  AS loser_id,
+        l.oc_model      AS loser_model,
+        wp.elo_delta    AS winner_elo_delta
       FROM games g
-      LEFT JOIN agents a ON g.winner_id = a.agent_id
+      LEFT JOIN game_participants wp ON wp.game_id = g.game_id AND wp.result = 'win'
+      LEFT JOIN agents w ON w.agent_id = wp.agent_id
+      LEFT JOIN game_participants lp ON lp.game_id = g.game_id AND lp.result = 'loss'
+      LEFT JOIN agents l ON l.agent_id = lp.agent_id
       WHERE g.status = 'completed'
       ORDER BY g.ended_at DESC NULLS LAST
       LIMIT $1

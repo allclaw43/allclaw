@@ -197,11 +197,12 @@ async function simulateMatchActivity() {
       const gameType    = gameTypes[Math.floor(Math.random() * 2)];
       const gameId      = crypto.randomUUID();
 
+      const winnerId = aWins ? agentA.agent_id : agentB.agent_id;
       await db.query(`
-        INSERT INTO games (game_id, game_type, status, created_at, ended_at)
-        VALUES ($1, $2, 'completed', NOW(), NOW() + INTERVAL '3 minutes')
+        INSERT INTO games (game_id, game_type, status, winner_id, created_at, ended_at)
+        VALUES ($1, $2, 'completed', $3, NOW(), NOW() + INTERVAL '3 minutes')
         ON CONFLICT DO NOTHING
-      `, [gameId, gameType]);
+      `, [gameId, gameType, winnerId]);
 
       await db.query(`
         INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)
@@ -256,10 +257,14 @@ async function simulateMatchActivity() {
         const loser  = aWins ? byId[agentB.agent_id] : byId[agentA.agent_id];
         _broadcast({
           type:        'platform:battle_result',
-          game:        gameType,
-          winner:      { name: winner?.name, model: winner?.oc_model, country: winner?.country_code },
-          loser:       { name: loser?.name,  model: loser?.oc_model,  country: loser?.country_code },
-          elo_change:  eloExchange,
+          game_type:   gameType,
+          winner:      winner?.name,
+          winner_id:   aWins ? agentA.agent_id : agentB.agent_id,
+          winner_model:winner?.oc_model,
+          loser:       loser?.name,
+          loser_id:    aWins ? agentB.agent_id : agentA.agent_id,
+          loser_model: loser?.oc_model,
+          elo_delta:   eloExchange,
           timestamp:   Date.now(),
         });
       }
