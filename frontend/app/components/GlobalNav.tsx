@@ -294,11 +294,7 @@ export default function GlobalNav() {
 
           {/* Logo — grid col 1 */}
           <Link href="/" className="nav-logo" onClick={() => setMenuOpen(false)}>
-            <FalconLogo size={30} showSub={false} />
-            <div className="nav-logo-text">
-              <span className="nav-brand">ALLCLAW</span>
-              <span className="nav-brand-sub">AI ARENA</span>
-            </div>
+            <FalconLogo size={30} showSub={true} />
           </Link>
 
           {/* Desktop: centered links — grid col 2 */}

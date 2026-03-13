@@ -11,11 +11,11 @@
 
 /* ─── Design Tokens v4 — Deep Space Observatory ───────────── */
 :root {
-  /* Backgrounds — deep space, lifted from pure black */
-  --bg:          #090912;   /* deep midnight blue — not pure black */
-  --bg-2:        #0e0e1c;
-  --bg-3:        #141428;
-  --bg-4:        #1a1a32;
+  /* Backgrounds — starfield canvas is the real bg, these are overlay tints */
+  --bg:          #04040f;   /* matches starfield base — used as fallback */
+  --bg-2:        rgba(8,8,20,0.7);
+  --bg-3:        rgba(14,14,28,0.8);
+  --bg-4:        rgba(20,20,40,0.85);
 
   /* Surface — luminous glass panels */
   --surface:     rgba(255,255,255,0.035);
@@ -70,13 +70,8 @@
 html { scroll-behavior: smooth; color-scheme: dark; }
 
 body {
-  /* Observatory gradient: star-field depth with soft nebula glow */
-  background:
-    radial-gradient(ellipse 100% 55% at 50% -5%,  rgba(60,80,200,0.16)  0%, transparent 60%),
-    radial-gradient(ellipse 60%  35% at 90% 15%,   rgba(0,229,255,0.06)  0%, transparent 50%),
-    radial-gradient(ellipse 50%  28% at 8%  85%,   rgba(139,92,246,0.06) 0%, transparent 45%),
-    radial-gradient(ellipse 80%  40% at 50% 100%,  rgba(30,20,80,0.5)    0%, transparent 55%),
-    var(--bg);
+  /* Background handled by Starfield canvas — keep body transparent/minimal */
+  background: #04040f;   /* fallback for when canvas isn't loaded yet */
   background-attachment: fixed;
   color: var(--text);
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -419,15 +414,15 @@ body {
 
 .global-nav {
   position: fixed; top: 32px; left: 0; right: 0; z-index: 55;
-  background: rgba(9,9,20,0.6);
-  backdrop-filter: blur(40px) saturate(2) brightness(1.15);
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  background: rgba(4,4,15,0.45);   /* semi-transparent — stars show through */
+  backdrop-filter: blur(32px) saturate(1.8);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   transition: all 0.3s;
 }
 .global-nav.scrolled {
-  background: rgba(9,9,20,0.95);
-  border-bottom-color: rgba(255,255,255,0.13);
-  box-shadow: 0 1px 0 rgba(0,229,255,0.08), 0 16px 56px rgba(0,0,0,0.6);
+  background: rgba(4,4,15,0.82);
+  border-bottom-color: rgba(255,255,255,0.12);
+  box-shadow: 0 1px 0 rgba(0,229,255,0.06), 0 16px 56px rgba(0,0,0,0.5);
 }
 
 .nav-inner {
@@ -1166,9 +1161,9 @@ body {
 
 /* ── Glass card with inner light ──────────────────────────────── */
 .glass-card {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(16px);
+  background: rgba(4,4,15,0.55);   /* dark tint — stars visible through */
+  border: 1px solid rgba(255,255,255,0.09);
+  backdrop-filter: blur(20px) saturate(1.4);
   border-radius: var(--radius-lg);
   position: relative; overflow: hidden;
   transition: all 0.25s;
@@ -1176,12 +1171,12 @@ body {
 .glass-card::before {
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
 }
 .glass-card:hover {
-  background: rgba(255,255,255,0.065);
-  border-color: rgba(255,255,255,0.16);
-  box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+  background: rgba(4,4,20,0.65);
+  border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,229,255,0.05);
   transform: translateY(-3px);
 }
 
