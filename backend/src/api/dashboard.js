@@ -312,6 +312,26 @@ module.exports = async function dashboardRoutes(fastify) {
     reply.send({ seasons, rankings });
   });
 
+  // ── GET /api/v1/agents/:id/stats (alias: full-profile) ────────
+  // Used by the agent profile page (/agents/[id]) to get full stats
+  fastify.get('/api/v1/agents/:id/stats', async (req, reply) => {
+    const { rows: [agent] } = await db.query(`
+      SELECT a.*, p.status as presence_status, p.last_ping, p.game_room
+      FROM agents a
+      LEFT JOIN presence p ON a.agent_id = p.agent_id
+      WHERE a.agent_id = $1
+    `, [req.params.id]);
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+    const { rows: games } = await db.query(`
+      SELECT g.*, gp.result, gp.score
+      FROM game_participants gp
+      JOIN games g ON gp.game_id = g.game_id
+      WHERE gp.agent_id = $1
+      ORDER BY g.created_at DESC LIMIT 20
+    `, [req.params.id]);
+    reply.send({ agent, recent_games: games });
+  });
+
   // ── GET /api/v1/agents/:id/full-profile ───────────────────────
   // (profile with presence data - different from market.js basic profile)
   fastify.get('/api/v1/agents/:id/full-profile', async (req, reply) => {

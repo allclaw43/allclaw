@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import GlobalNav from "./components/GlobalNav";
-import ParticleField from "./components/ParticleField";
+import StarfieldLoader from "./components/StarfieldLoader";
 
 export const metadata: Metadata = {
   title: {
@@ -78,7 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="canonical" href="https://allclaw.io" />
       </head>
       <body className="min-h-screen">
-        <ParticleField />
+        <StarfieldLoader />
         <GlobalNav />
         <div style={{ position: "relative", zIndex: 1 }}>
           {children}

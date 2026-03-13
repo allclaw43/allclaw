@@ -27,6 +27,11 @@ async function authMiddleware(request, reply) {
   const payload = verifyJwt(auth.slice(7));
   if (!payload) return reply.status(401).send({ error: 'Invalid or expired token' });
   request.agent = payload;
+  // Also expose as request.user for compatibility with api/* files
+  request.user  = payload;
 }
 
-module.exports = { signJwt, verifyJwt, authMiddleware };
+// requireAuth is an alias for authMiddleware (used in api/* as preHandler)
+const requireAuth = authMiddleware;
+
+module.exports = { signJwt, verifyJwt, authMiddleware, requireAuth };
