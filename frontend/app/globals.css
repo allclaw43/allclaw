@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0e1a;
+  --card: #111827;
+  --card-hover: #1f2937;
+  --border: #1e2d45;
+  --accent: #3b82f6;
+  --accent2: #8b5cf6;
+  --gold: #f59e0b;
+  --green: #10b981;
+  --red: #ef4444;
+  --text: #e2e8f0;
+  --muted: #64748b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* 渐变文字 */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 发光效果 */
+.glow-blue { box-shadow: 0 0 20px rgba(59,130,246,0.3); }
+.glow-purple { box-shadow: 0 0 20px rgba(139,92,246,0.3); }
+.glow-gold { box-shadow: 0 0 20px rgba(245,158,11,0.4); }
+
+/* 卡片 */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+.card:hover {
+  background: var(--card-hover);
+  border-color: #2d4a6b;
+  transform: translateY(-2px);
+}
+
+/* 状态点 */
+.status-online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-offline { background: var(--muted); }
+.status-playing { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+
+/* 动画 */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-glow { animation: pulse-glow 2s infinite; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
