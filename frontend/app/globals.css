@@ -9,23 +9,23 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 
-/* ─── Design Tokens v3 — Deep Universe ────────────────────── */
+/* ─── Design Tokens v4 — Deep Space Observatory ───────────── */
 :root {
-  /* Backgrounds — deep space with blue-violet undertone */
-  --bg:          #04040f;   /* not pure black — has deep indigo */
-  --bg-2:        #080818;
-  --bg-3:        #0d0d20;
-  --bg-4:        #121228;
+  /* Backgrounds — deep space, lifted from pure black */
+  --bg:          #090912;   /* deep midnight blue — not pure black */
+  --bg-2:        #0e0e1c;
+  --bg-3:        #141428;
+  --bg-4:        #1a1a32;
 
-  /* Surface — glass with subtle warmth */
-  --surface:     rgba(120,120,200,0.045);
-  --surface-2:   rgba(120,120,220,0.08);
-  --surface-3:   rgba(150,150,255,0.12);
+  /* Surface — luminous glass panels */
+  --surface:     rgba(255,255,255,0.035);
+  --surface-2:   rgba(255,255,255,0.06);
+  --surface-3:   rgba(255,255,255,0.09);
 
-  /* Borders — violet-tinted */
-  --border:      rgba(150,140,255,0.1);
-  --border-2:    rgba(160,150,255,0.18);
-  --border-3:    rgba(180,170,255,0.28);
+  /* Borders — soft white glass (more natural) */
+  --border:      rgba(255,255,255,0.08);
+  --border-2:    rgba(255,255,255,0.14);
+  --border-3:    rgba(255,255,255,0.22);
 
   /* Primary: Xenon Cyan */
   --cyan:        #00e5ff;
@@ -53,11 +53,11 @@
   --yellow:      #ffd60a;
   --yellow-dim:  rgba(255,214,10,0.1);
 
-  /* Text — warmer whites */
-  --text:        #ececf8;
-  --text-2:      #8888aa;
-  --text-3:      #4e4e6a;
-  --text-4:      #2c2c42;
+  /* Text — brighter, more readable */
+  --text:        #f0f0fa;
+  --text-2:      #9090b8;   /* was 0.4 opacity — now more visible */
+  --text-3:      #5a5a80;
+  --text-4:      #34344e;
 
   /* Radius */
   --radius:    12px;
@@ -70,11 +70,12 @@
 html { scroll-behavior: smooth; color-scheme: dark; }
 
 body {
-  /* Cosmic gradient: deep indigo at top, slightly warmer at bottom */
+  /* Observatory gradient: star-field depth with soft nebula glow */
   background:
-    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(88,60,200,0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 40% at 85% 20%,   rgba(0,229,255,0.04)  0%, transparent 45%),
-    radial-gradient(ellipse 60% 30% at 10% 80%,   rgba(139,92,246,0.05) 0%, transparent 45%),
+    radial-gradient(ellipse 100% 55% at 50% -5%,  rgba(60,80,200,0.16)  0%, transparent 60%),
+    radial-gradient(ellipse 60%  35% at 90% 15%,   rgba(0,229,255,0.06)  0%, transparent 50%),
+    radial-gradient(ellipse 50%  28% at 8%  85%,   rgba(139,92,246,0.06) 0%, transparent 45%),
+    radial-gradient(ellipse 80%  40% at 50% 100%,  rgba(30,20,80,0.5)    0%, transparent 55%),
     var(--bg);
   background-attachment: fixed;
   color: var(--text);
@@ -110,9 +111,10 @@ body {
 
 .glow-hero {
   background:
-    radial-gradient(ellipse 70% 50% at 50% -5%, rgba(0,229,255,0.1) 0%, transparent 65%),
-    radial-gradient(ellipse 45% 35% at 80% 80%, rgba(167,139,250,0.08) 0%, transparent 50%),
-    radial-gradient(ellipse 30% 20% at 20% 90%, rgba(0,255,170,0.04) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 55% at 50% 0%,   rgba(40,80,220,0.18)  0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 70%,  rgba(167,139,250,0.1) 0%, transparent 50%),
+    radial-gradient(ellipse 35% 25% at 15% 85%,  rgba(0,255,170,0.06)  0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 50%,  rgba(0,229,255,0.03)  0%, transparent 60%);
 }
 .glow-cyan   { box-shadow: var(--cyan-glow); }
 .glow-green  { box-shadow: var(--green-glow); }
@@ -153,83 +155,89 @@ body {
 
 /* ─── Cards ─────────────────────────────────────────────────── */
 .card {
-  background: linear-gradient(135deg, rgba(120,110,220,0.05) 0%, var(--surface) 100%);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-lg);
-  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.25s;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s, transform 0.2s;
 }
 .card:hover {
-  border-color: var(--border-2);
-  box-shadow: 0 4px 24px rgba(88,60,200,0.08);
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,229,255,0.06);
+  transform: translateY(-2px);
 }
 
-/* Panel — data panel with left accent + subtle inner glow */
+/* Panel — glass panel with top-edge glow accent */
 .panel {
-  background: linear-gradient(135deg,
+  background: linear-gradient(160deg,
     rgba(0,229,255,0.04) 0%,
-    rgba(88,60,200,0.04) 50%,
-    var(--surface) 100%);
-  border: 1px solid rgba(0,229,255,0.13);
-  border-left: 2px solid rgba(0,229,255,0.75);
+    rgba(255,255,255,0.025) 100%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-top: 1px solid rgba(0,229,255,0.25);
   border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(8px);
   transition: all 0.25s;
 }
 .panel::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(0,229,255,0.6), rgba(139,92,246,0.2), transparent 80%);
+  top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,229,255,0.5), transparent);
 }
 .panel:hover {
-  border-color: rgba(0,229,255,0.22);
-  border-left-color: var(--cyan);
-  box-shadow: 0 4px 32px rgba(0,229,255,0.06), inset 0 0 30px rgba(0,229,255,0.02);
-  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.14);
+  border-top-color: rgba(0,229,255,0.4);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,229,255,0.05);
+  transform: translateY(-2px);
 }
 
 .panel-purple {
-  background: linear-gradient(135deg,
+  background: linear-gradient(160deg,
     rgba(167,139,250,0.06) 0%,
-    rgba(88,60,200,0.04) 50%,
-    var(--surface) 100%);
-  border: 1px solid rgba(167,139,250,0.14);
-  border-left: 2px solid rgba(167,139,250,0.8);
+    rgba(255,255,255,0.025) 100%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-top: 1px solid rgba(167,139,250,0.3);
   border-radius: var(--radius-lg);
-  position: relative; overflow: hidden; transition: all 0.25s;
+  position: relative; overflow: hidden;
+  backdrop-filter: blur(8px);
+  transition: all 0.25s;
 }
 .panel-purple::before {
   content: ''; position: absolute;
-  top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(167,139,250,0.7), rgba(0,229,255,0.15), transparent 80%);
+  top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent);
 }
 .panel-purple:hover {
-  border-color: rgba(167,139,250,0.25);
-  border-left-color: var(--purple);
-  box-shadow: 0 4px 32px rgba(139,92,246,0.08);
-  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.14);
+  border-top-color: rgba(167,139,250,0.5);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(167,139,250,0.06);
+  transform: translateY(-2px);
 }
 
 .panel-green {
-  background: linear-gradient(135deg,
-    rgba(0,255,170,0.04) 0%,
-    rgba(0,180,120,0.02) 50%,
-    var(--surface) 100%);
-  border: 1px solid rgba(0,255,170,0.13);
-  border-left: 2px solid rgba(0,255,170,0.75);
+  background: linear-gradient(160deg,
+    rgba(0,255,170,0.05) 0%,
+    rgba(255,255,255,0.025) 100%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-top: 1px solid rgba(0,255,170,0.28);
   border-radius: var(--radius-lg);
-  position: relative; overflow: hidden; transition: all 0.25s;
+  position: relative; overflow: hidden;
+  backdrop-filter: blur(8px);
+  transition: all 0.25s;
 }
 .panel-green::before {
   content: ''; position: absolute;
-  top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, rgba(0,255,170,0.6), rgba(0,229,255,0.15), transparent 80%);
+  top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,255,170,0.5), transparent);
 }
 .panel-green:hover {
-  border-color: rgba(0,255,170,0.22);
-  box-shadow: 0 4px 32px rgba(0,255,170,0.06);
-  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.14);
+  border-top-color: rgba(0,255,170,0.45);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,255,170,0.05);
+  transform: translateY(-2px);
 }
 
 .panel-warn {
@@ -248,22 +256,23 @@ body {
   background: linear-gradient(90deg, rgba(255,140,90,0.6), transparent 80%);
 }
 
-/* Data window — terminal-style */
+/* Data window — frosted glass terminal */
 .data-window {
-  background: linear-gradient(160deg, rgba(88,60,200,0.06) 0%, var(--bg-2) 40%);
-  border: 1px solid var(--border-2);
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.09);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .data-window-header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 16px;
-  background: linear-gradient(90deg, rgba(0,229,255,0.06), rgba(88,60,200,0.04), transparent);
-  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   font-size: 10px; font-weight: 700;
   letter-spacing: 0.12em; text-transform: uppercase;
-  color: rgba(0,229,255,0.75);
+  color: rgba(0,229,255,0.7);
   font-family: 'JetBrains Mono', monospace;
 }
 .dw-dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -428,15 +437,15 @@ body {
 
 .global-nav {
   position: fixed; top: 26px; left: 0; right: 0; z-index: 55;
-  background: rgba(4,4,16,0.65);
-  backdrop-filter: blur(32px) saturate(2);
-  border-bottom: 1px solid rgba(150,140,255,0.08);
+  background: rgba(9,9,18,0.55);
+  backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   transition: all 0.3s;
 }
 .global-nav.scrolled {
-  background: rgba(4,4,16,0.95);
-  border-bottom-color: rgba(0,229,255,0.12);
-  box-shadow: 0 1px 0 rgba(0,229,255,0.05), 0 8px 40px rgba(0,0,0,0.6);
+  background: rgba(9,9,18,0.92);
+  border-bottom-color: rgba(255,255,255,0.1);
+  box-shadow: 0 1px 0 rgba(0,229,255,0.06), 0 12px 48px rgba(0,0,0,0.5);
 }
 
 .nav-inner {
