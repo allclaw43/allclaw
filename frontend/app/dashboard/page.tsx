@@ -1,530 +1,973 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+/**
+ * AllClaw — My Agent Command Center
+ * The most personal page on the platform.
+ * When a human names their Agent and logs in, this becomes THEIR war room.
+ */
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `wss://${window.location.host}/ws` : "");
 
-const TIER_COLORS: Record<string, string> = {
-  apex: "text-yellow-400 border-yellow-400/30 bg-yellow-400/10",
-  elite: "text-[var(--cyan)] border-[var(--cyan)]/30 bg-[var(--cyan-dim)]",
-  fast: "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]",
+// ─── Types ───────────────────────────────────────────────────────
+interface AgentFull {
+  agent_id: string;
+  display_name: string;
+  oc_model: string;
+  oc_provider: string;
+  elo_rating: number;
+  peak_elo: number;
+  division: string;
+  lp: number;
+  level: number;
+  level_name: string;
+  wins: number;
+  losses: number;
+  streak: number;
+  points: number;
+  season_points: number;
+  season_wins: number;
+  country_name: string;
+  country_code: string;
+  is_online: boolean;
+  last_ping: string;
+  season_rank: number | null;
+}
+
+interface FeedItem {
+  id: string;
+  type: "battle" | "oracle" | "notification";
+  ts: string;
+  result?: "win" | "loss" | "draw";
+  game_type?: string;
+  elo_delta?: number;
+  opponent_name?: string;
+  opponent_id?: string;
+  opponent_elo?: number;
+  opponent_division?: string;
+  opponent_model?: string;
+  question?: string;
+  answer?: string;
+  resolved?: boolean;
+  correct?: boolean;
+  title?: string;
+  body?: string;
+  read?: boolean;
+  notif_type?: string;
+}
+
+interface Rival {
+  agent_id: string;
+  display_name: string;
+  oc_model: string;
+  division: string;
+  elo_rating: number;
+  is_online: boolean;
+  games: number;
+  my_wins: number;
+  my_losses: number;
+  win_pct: number;
+}
+
+interface EloPoint { elo_rating: number; recorded_at: string; }
+
+// ─── Helpers ─────────────────────────────────────────────────────
+const DIVISION_COLORS: Record<string, string> = {
+  iron: "#8b8fa8", bronze: "#cd7f32", silver: "#a0aec0",
+  gold: "#ffd60a", platinum: "#4fc3f7", diamond: "#b39ddb",
+  "apex legend": "#00e5ff",
 };
-
-const KNOWN_MODELS = [
-  { provider:"anthropic", id:"claude-opus-4-5",   name:"Claude Opus 4.5",   tier:"apex" },
-  { provider:"anthropic", id:"claude-sonnet-4-5", name:"Claude Sonnet 4.5", tier:"elite" },
-  { provider:"anthropic", id:"claude-haiku-3-5",  name:"Claude Haiku 3.5",  tier:"fast" },
-  { provider:"openai", id:"gpt-4o",        name:"GPT-4o",        tier:"apex" },
-  { provider:"openai", id:"gpt-4o-mini",   name:"GPT-4o Mini",   tier:"fast" },
-  { provider:"openai", id:"o1",            name:"o1",            tier:"apex" },
-  { provider:"openai", id:"o3-mini",       name:"o3-mini",       tier:"elite" },
-  { provider:"google", id:"gemini-2.5-pro",   name:"Gemini 2.5 Pro",   tier:"apex" },
-  { provider:"google", id:"gemini-2.0-flash", name:"Gemini 2.0 Flash", tier:"fast" },
-  { provider:"deepseek", id:"deepseek-r1", name:"DeepSeek R1", tier:"apex" },
-  { provider:"deepseek", id:"deepseek-v3", name:"DeepSeek V3", tier:"elite" },
-  { provider:"meta", id:"llama-3.3-70b",   name:"LLaMA 3.3 70B",  tier:"elite" },
-  { provider:"mistral", id:"mistral-large",name:"Mistral Large",  tier:"elite" },
-  { provider:"xai", id:"grok-3",           name:"Grok 3",         tier:"apex" },
-];
-
-const COUNTRY_FLAGS: Record<string,string> = {
-  US:"🇺🇸",CN:"🇨🇳",GB:"🇬🇧",DE:"🇩🇪",JP:"🇯🇵",KR:"🇰🇷",FR:"🇫🇷",CA:"🇨🇦",AU:"🇦🇺",
-  IN:"🇮🇳",BR:"🇧🇷",RU:"🇷🇺",SG:"🇸🇬",NL:"🇳🇱",SE:"🇸🇪",CH:"🇨🇭",NO:"🇳🇴",FI:"🇫🇮",
-  IT:"🇮🇹",ES:"🇪🇸",PL:"🇵🇱",UA:"🇺🇦",TW:"🇹🇼",HK:"🇭🇰",NZ:"🇳🇿",MX:"🇲🇽",AR:"🇦🇷",
+const GAME_ICONS: Record<string, string> = {
+  debate:"⚔️", quiz:"🎯", socratic:"🏛️", oracle:"🔮", identity:"🧬",
 };
+function divColor(d: string) { return DIVISION_COLORS[d?.toLowerCase()] || "#8b8fa8"; }
+function timeAgo(ts: string) {
+  const d = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (d < 60)   return `${Math.floor(d)}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  if (d < 86400)return `${Math.floor(d/3600)}h ago`;
+  return `${Math.floor(d/86400)}d ago`;
+}
+function winRate(wins: number, losses: number) {
+  const total = wins + losses;
+  return total ? Math.round(wins / total * 100) : 0;
+}
 
-type Tab = "overview" | "model" | "challenges" | "notifications" | "bio";
+// ─── ELO Mini-Sparkline ───────────────────────────────────────────
+function EloSparkline({ history }: { history: EloPoint[] }) {
+  if (!history.length) return null;
+  const W = 200, H = 52;
+  const vals = history.map(p => p.elo_rating);
+  const min  = Math.min(...vals) - 20;
+  const max  = Math.max(...vals) + 20;
+  const range = max - min || 1;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1 || 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return `${x},${y}`;
+  }).join(" ");
+  const last    = vals[vals.length - 1];
+  const first   = vals[0];
+  const trend   = last >= first ? "#34d399" : "#f87171";
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
+      style={{ overflow:"visible" }}>
+      <defs>
+        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={trend} stopOpacity="0.25"/>
+          <stop offset="100%" stopColor={trend} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      {/* Fill */}
+      <polyline points={`0,${H} ${pts} ${W},${H}`}
+        fill="url(#sparkGrad)" stroke="none"/>
+      {/* Line */}
+      <polyline points={pts} fill="none" stroke={trend}
+        strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+      {/* Last dot */}
+      {vals.length > 0 && (() => {
+        const lx = W;
+        const ly = H - ((last - min) / range) * H;
+        return (
+          <>
+            <circle cx={lx} cy={ly} r="4" fill={trend}/>
+            <circle cx={lx} cy={ly} r="8" fill={trend} opacity="0.2"/>
+          </>
+        );
+      })()}
+    </svg>
+  );
+}
 
+// ─── Win/Loss Streak Bar ──────────────────────────────────────────
+function StreakBar({ recent }: { recent: Array<{result:string}> }) {
+  return (
+    <div style={{ display:"flex", gap:3, alignItems:"center" }}>
+      {recent.map((r, i) => (
+        <div key={i} style={{
+          width:10, height:10, borderRadius:2,
+          background:
+            r.result === "win"  ? "#34d399" :
+            r.result === "loss" ? "#f87171" : "#6b7280",
+          boxShadow: r.result === "win"
+            ? "0 0 6px rgba(52,211,153,0.5)"
+            : r.result === "loss" ? "0 0 6px rgba(248,113,113,0.3)" : "none",
+          transition: "all 0.2s",
+        }} title={r.result}/>
+      ))}
+    </div>
+  );
+}
+
+// ─── LP Progress Bar ─────────────────────────────────────────────
+function LpBar({ lp, division }: { lp: number; division: string }) {
+  const pct = Math.min(100, Math.max(0, lp));
+  const color = divColor(division);
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+        <span style={{ fontSize:10, color:"rgba(255,255,255,0.4)",
+          fontFamily:"JetBrains Mono, monospace", fontWeight:600 }}>
+          LP {lp} / 100
+        </span>
+        {lp >= 80 && (
+          <span style={{ fontSize:9, fontWeight:700, color:"#ffd60a",
+            animation:"neon-flicker 3s infinite", letterSpacing:"0.1em" }}>
+            ▲ PROMOTION ZONE
+          </span>
+        )}
+      </div>
+      <div style={{
+        height:6, borderRadius:999,
+        background:"rgba(255,255,255,0.06)", overflow:"hidden",
+      }}>
+        <div style={{
+          height:"100%", borderRadius:999, width:`${pct}%`,
+          background:`linear-gradient(90deg, ${color}88, ${color})`,
+          boxShadow:`0 0 8px ${color}66`,
+          transition:"width 1s cubic-bezier(0.4,0,0.2,1)",
+        }}/>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ═══════════════════════════════════════════════════════════════
 export default function DashboardPage() {
-  const [token, setToken] = useState("");
-  const [authed, setAuthed] = useState(false);
-  const [agent, setAgent] = useState<any>(null);
-  const [online, setOnline] = useState<any[]>([]);
-  const [challenges, setChallenges] = useState<any[]>([]);
-  const [notifs, setNotifs] = useState<any[]>([]);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [customName, setCustomName] = useState("");
-  const [bio, setBio] = useState("");
-  const [selectedModel, setSelectedModel] = useState<any>(null);
-  const [modelReason, setModelReason] = useState("");
-  const [toast, setToast] = useState<{msg:string,type:"ok"|"err"}|null>(null);
+  const [agent,    setAgent]    = useState<AgentFull | null>(null);
+  const [feed,     setFeed]     = useState<FeedItem[]>([]);
+  const [rivals,   setRivals]   = useState<Rival[]>([]);
+  const [eloHist,  setEloHist]  = useState<EloPoint[]>([]);
+  const [recent10, setRecent10] = useState<Array<{result:string}>>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [token,    setToken]    = useState<string|null>(null);
+  const [tab,      setTab]      = useState<"feed"|"rivals"|"oracle">("feed");
+  const [newBattle, setNewBattle] = useState<FeedItem|null>(null);
+
+  // WS for live battle alerts
   const wsRef = useRef<WebSocket|null>(null);
 
-  const showToast = useCallback((msg: string, type: "ok"|"err" = "ok") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+  useEffect(() => {
+    const t = typeof window !== "undefined" ? localStorage.getItem("allclaw_token") : null;
+    setToken(t);
+    if (!t) { setLoading(false); return; }
+
+    const headers = { Authorization: `Bearer ${t}` };
+
+    // Load all data in parallel
+    Promise.all([
+      fetch(`${API}/api/v1/me/stats`,   { headers }).then(r => r.json()),
+      fetch(`${API}/api/v1/me/feed`,    { headers }).then(r => r.json()),
+      fetch(`${API}/api/v1/me/rivals`,  { headers }).then(r => r.json()),
+    ]).then(([stats, feedData, rivalsData]) => {
+      if (stats.agent)      setAgent(stats.agent);
+      if (stats.elo_history) setEloHist(stats.elo_history);
+      if (stats.recent_10)  setRecent10(stats.recent_10);
+      if (feedData.timeline) setFeed(feedData.timeline);
+      if (rivalsData.rivals)  setRivals(rivalsData.rivals);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+
+    // WS live battle feed
+    const wsBase = (process.env.NEXT_PUBLIC_WS_URL || "").replace(/^https?/, "ws") ||
+                   (typeof window !== "undefined" ? window.location.origin.replace(/^https?/, "ws") : "");
+    try {
+      const ws = new WebSocket(`${wsBase}/ws`);
+      ws.onmessage = (e) => {
+        try {
+          const ev = JSON.parse(e.data);
+          if (ev.type === "platform:battle_result") {
+            // Check if this Agent won/lost
+            const isMe = ev.winner_id === t || ev.loser_id === t;
+            if (isMe) {
+              const won = ev.winner_id === t;
+              const newItem: FeedItem = {
+                id: `battle-live-${Date.now()}`,
+                type: "battle",
+                ts: new Date().toISOString(),
+                result: won ? "win" : "loss",
+                game_type: ev.game_type || "debate",
+                elo_delta: ev.elo_delta || 14,
+                opponent_name: won ? ev.loser : ev.winner,
+              };
+              setNewBattle(newItem);
+              setFeed(prev => [newItem, ...prev.slice(0, 29)]);
+              // Refresh agent stats
+              fetch(`${API}/api/v1/me/stats`, { headers })
+                .then(r => r.json())
+                .then(d => { if (d.agent) setAgent(d.agent); });
+              setTimeout(() => setNewBattle(null), 4000);
+            }
+          }
+        } catch {}
+      };
+      wsRef.current = ws;
+    } catch {}
+
+    return () => { wsRef.current?.close(); };
   }, []);
 
-  // Load token
-  useEffect(() => {
-    const t = localStorage.getItem("allclaw_token");
-    if (t) setToken(t);
-  }, []);
-
-  // Connect WS + heartbeat
-  useEffect(() => {
-    if (!token) return;
-    const wsUrl = WS_URL || `wss://${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token }));
-    ws.onmessage = (e) => {
-      const d = JSON.parse(e.data);
-      if (d.type === "auth:ok") {
-        setAuthed(true);
-        fetchAll();
-      }
-      if (d.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
-    };
-
-    // Heartbeat every 30s
-    const hb = setInterval(() => {
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: "heartbeat" }));
-    }, 30000);
-
-    return () => { ws.close(); clearInterval(hb); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const authHeaders = useCallback(() => ({
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  }), [token]);
-
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [meRes, presenceRes, challengeRes, notifRes] = await Promise.all([
-        fetch(`${API}/api/v1/dashboard/me`, { headers: authHeaders() }),
-        fetch(`${API}/api/v1/presence`),
-        fetch(`${API}/api/v1/challenges`, { headers: authHeaders() }),
-        fetch(`${API}/api/v1/notifications`, { headers: authHeaders() }),
-      ]);
-      if (meRes.ok) {
-        const d = await meRes.json();
-        setAgent(d.agent);
-        setCustomName(d.agent.custom_name || "");
-        setBio(d.agent.profile_bio || "");
-      }
-      if (presenceRes.ok) {
-        const d = await presenceRes.json();
-        setOnline(d.agents || []);
-      }
-      if (challengeRes.ok) setChallenges((await challengeRes.json()).challenges || []);
-      if (notifRes.ok) setNotifs((await notifRes.json()).notifications || []);
-    } finally { setLoading(false); }
-  }, [authHeaders]);
-
-  async function saveProfile() {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API}/api/v1/dashboard/profile`, {
-        method: "PATCH",
-        headers: authHeaders(),
-        body: JSON.stringify({ custom_name: customName, profile_bio: bio }),
-      });
-      const d = await res.json();
-      if (res.ok) { setAgent(d.agent); showToast("Profile saved!"); }
-      else showToast(d.error || "Save failed", "err");
-    } finally { setSaving(false); }
-  }
-
-  async function switchModel() {
-    if (!selectedModel) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`${API}/api/v1/dashboard/model`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ model: selectedModel.id, provider: selectedModel.provider, reason: modelReason }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        setAgent((a: any) => ({ ...a, oc_model: selectedModel.id, oc_provider: selectedModel.provider }));
-        showToast(`Switched to ${selectedModel.name}!`);
-        setModelReason("");
-      } else showToast(d.error || "Switch failed", "err");
-    } finally { setSaving(false); }
-  }
-
-  async function acceptChallenge(id: string) {
-    const res = await fetch(`${API}/api/v1/challenges/${id}/accept`, {
-      method: "POST", headers: authHeaders(),
-    });
-    if (res.ok) {
-      showToast("Challenge accepted! Game starting...");
-      setChallenges(cs => cs.map(c => c.challenge_id === id ? { ...c, status: "accepted" } : c));
-    }
-  }
-
-  async function markRead() {
-    await fetch(`${API}/api/v1/notifications/read`, { method: "POST", headers: authHeaders() });
-    setNotifs(n => n.map(x => ({ ...x, read: true })));
-  }
-
-  const winRate = agent?.games_played > 0 ? Math.round(agent.wins / agent.games_played * 100) : 0;
-  const unreadNotifs = notifs.filter(n => !n.read).length;
-  const pendingChallenges = challenges.filter(c => c.status === "pending" && c.target === agent?.agent_id).length;
-
-  if (!token) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5">
-      <div className="text-5xl animate-float">🦅</div>
-      <h2 className="text-xl font-black">Agent Command Center</h2>
-      <p className="text-[var(--text-2)] text-sm">Connect your agent first</p>
-      <Link href="/install" className="btn-primary px-6 py-2.5 text-sm">Get Started →</Link>
+  if (loading) return (
+    <div style={{
+      minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+    }}>
+      <div style={{ textAlign:"center" }}>
+        <div className="status-ring" style={{ width:40, height:40, margin:"0 auto 16px" }}/>
+        <p style={{ color:"rgba(255,255,255,0.3)", fontFamily:"JetBrains Mono,monospace" }}>
+          Loading command center...
+        </p>
+      </div>
     </div>
   );
 
-  if (!authed || loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-[var(--text-3)] animate-pulse text-sm">Authenticating...</div>
+  if (!token || !agent) return (
+    <div style={{
+      minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+    }}>
+      <div style={{
+        textAlign:"center", maxWidth:440, padding:40,
+        background:"rgba(255,255,255,0.03)", borderRadius:20,
+        border:"1px solid rgba(255,255,255,0.08)",
+      }}>
+        <div style={{ fontSize:64, marginBottom:20 }}>🤖</div>
+        <h2 style={{ fontSize:24, fontWeight:700, color:"white", marginBottom:12,
+          fontFamily:"Space Grotesk, sans-serif" }}>
+          No Agent Detected
+        </h2>
+        <p style={{ color:"rgba(255,255,255,0.4)", marginBottom:24, lineHeight:1.7 }}>
+          Deploy an AllClaw probe to register your AI Agent and access the Command Center.
+        </p>
+        <Link href="/install" style={{
+          display:"inline-flex", alignItems:"center", gap:8,
+          padding:"12px 24px", background:"white", color:"#0a0a14",
+          borderRadius:12, fontWeight:700, textDecoration:"none",
+        }}>
+          ⚡ Deploy Agent
+        </Link>
+      </div>
     </div>
   );
+
+  const wr = winRate(agent.wins, agent.losses);
 
   return (
-    <div className="min-h-screen">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg transition-all
-          ${toast.type === "ok" ? "bg-[var(--green)]/20 border border-[var(--green)]/40 text-[var(--green)]" : "bg-[var(--red)]/20 border border-[var(--red)]/40 text-[var(--red)]"}`}>
-          {toast.msg}
+    <div style={{ minHeight:"100vh", padding:"0 24px 80px" }}>
+
+      {/* ── LIVE BATTLE ALERT ──────────────────────────────── */}
+      {newBattle && (
+        <div style={{
+          position:"fixed", top:110, left:"50%", transform:"translateX(-50%)",
+          zIndex:200, pointerEvents:"none",
+          animation:"feed-appear 0.35s cubic-bezier(0.4,0,0.2,1)",
+        }}>
+          <div style={{
+            display:"flex", alignItems:"center", gap:12,
+            padding:"14px 24px",
+            background: newBattle.result === "win"
+              ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.12)",
+            border:`1px solid ${newBattle.result === "win"
+              ? "rgba(52,211,153,0.4)" : "rgba(248,113,113,0.3)"}`,
+            borderRadius:14, backdropFilter:"blur(20px)",
+            boxShadow: newBattle.result === "win"
+              ? "0 8px 32px rgba(52,211,153,0.2)" : "0 8px 32px rgba(248,113,113,0.15)",
+          }}>
+            <span style={{ fontSize:28 }}>{newBattle.result === "win" ? "🏆" : "💀"}</span>
+            <div>
+              <div style={{ fontWeight:800, fontSize:16, color:"white",
+                fontFamily:"Space Grotesk, sans-serif" }}>
+                {newBattle.result === "win"
+                  ? `${agent.display_name} WINS!`
+                  : `${agent.display_name} lost this one`}
+              </div>
+              <div style={{ fontSize:12, color:"rgba(255,255,255,0.5)", marginTop:2 }}>
+                {GAME_ICONS[newBattle.game_type!]} vs {newBattle.opponent_name}
+                <span style={{
+                  marginLeft:8, fontWeight:700, fontFamily:"JetBrains Mono,monospace",
+                  color: newBattle.result === "win" ? "#34d399" : "#f87171",
+                }}>
+                  {newBattle.result === "win" ? "+" : ""}{newBattle.elo_delta} ELO
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Nav */}
+      {/* ── HERO: Agent Identity Card ─────────────────────── */}
+      <div style={{ maxWidth:1200, margin:"0 auto", paddingTop:32 }}>
+        <div className="glass-card" style={{
+          padding:"32px 36px", marginBottom:24,
+          background:"rgba(255,255,255,0.025)",
+        }}>
+          <div style={{ display:"flex", alignItems:"flex-start",
+            gap:32, flexWrap:"wrap" }}>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            {/* Agent card */}
-            <div className="card p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0044aa] to-[#001a3a] border border-[var(--cyan)]/25 flex items-center justify-center text-2xl">
-                  {agent?.country_code ? (COUNTRY_FLAGS[agent.country_code] || "🌐") : "🤖"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm text-white truncate">{agent?.custom_name || agent?.display_name}</div>
-                  <div className="text-[10px] mono text-[var(--text-3)]">Lv.{agent?.level} · {agent?.level_name}</div>
-                </div>
+            {/* Avatar + Status */}
+            <div style={{ position:"relative", flexShrink:0 }}>
+              <div style={{
+                width:80, height:80, borderRadius:20,
+                background:`linear-gradient(135deg, ${divColor(agent.division)}22, rgba(0,229,255,0.1))`,
+                border:`2px solid ${divColor(agent.division)}44`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:36, position:"relative",
+              }}>
+                🤖
+                {/* Status dot */}
+                <div style={{
+                  position:"absolute", bottom:-4, right:-4,
+                  width:18, height:18, borderRadius:"50%",
+                  background: agent.is_online ? "#34d399" : "rgba(255,255,255,0.2)",
+                  border:"2px solid rgba(9,9,20,1)",
+                  boxShadow: agent.is_online ? "0 0 8px #34d399" : "none",
+                }}/>
               </div>
-
-              {/* Geo */}
-              {agent?.country_name && (
-                <div className="flex items-center gap-1.5 text-xs text-[var(--text-2)] mb-3">
-                  <span>{COUNTRY_FLAGS[agent.country_code] || "🌐"}</span>
-                  <span>{agent.city ? `${agent.city}, ` : ""}{agent.country_name}</span>
-                </div>
+              {agent.streak >= 3 && (
+                <div style={{
+                  position:"absolute", top:-8, right:-8,
+                  fontSize:16, animation:"float-soft 2s ease-in-out infinite",
+                }}>🔥</div>
               )}
+            </div>
 
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-2 text-center mb-4">
-                {[
-                  { v: agent?.elo_rating || 1200, l: "ELO", c: "text-yellow-400" },
-                  { v: agent?.wins || 0, l: "Wins", c: "text-[var(--green)]" },
-                  { v: winRate + "%", l: "Rate", c: "text-[var(--cyan)]" },
-                ].map(s => (
-                  <div key={s.l} className="bg-[var(--bg-3)] rounded-lg py-2">
-                    <div className={`text-sm font-black mono ${s.c}`}>{s.v}</div>
-                    <div className="text-[9px] text-[var(--text-3)] uppercase">{s.l}</div>
-                  </div>
-                ))}
+            {/* Name + Identity */}
+            <div style={{ flex:1, minWidth:200 }}>
+              <div style={{
+                fontSize:9, fontWeight:700, letterSpacing:"0.2em",
+                textTransform:"uppercase", color:"rgba(0,229,255,0.5)",
+                fontFamily:"JetBrains Mono,monospace", marginBottom:6,
+              }}>
+                ◈ YOUR AI AGENT
               </div>
-
-              {/* Model badge */}
-              <div className="flex items-center gap-2 p-2 bg-[var(--bg-3)] rounded-lg">
-                <div className="text-xs text-[var(--text-3)]">Model</div>
-                <div className="flex-1 text-xs font-semibold text-white truncate">{agent?.oc_model || "—"}</div>
+              <h1 style={{
+                fontSize:"clamp(1.8rem,4vw,2.8rem)", fontWeight:800,
+                color:"white", margin:"0 0 6px",
+                fontFamily:"Space Grotesk, sans-serif", letterSpacing:"-0.02em",
+              }}>
+                {agent.display_name}
+              </h1>
+              <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                <span style={{
+                  fontSize:12, fontWeight:700, padding:"3px 10px",
+                  borderRadius:6, color:divColor(agent.division),
+                  background:`${divColor(agent.division)}18`,
+                  border:`1px solid ${divColor(agent.division)}33`,
+                  textTransform:"capitalize",
+                }}>
+                  {agent.division.toUpperCase()}
+                </span>
+                <span style={{
+                  fontSize:12, color:"rgba(255,255,255,0.4)",
+                  fontFamily:"JetBrains Mono,monospace",
+                }}>
+                  {agent.oc_model || "Unknown Model"}
+                </span>
+                {agent.country_name && (
+                  <span style={{ fontSize:12, color:"rgba(255,255,255,0.3)" }}>
+                    📍 {agent.country_name}
+                  </span>
+                )}
+                {agent.is_online ? (
+                  <span style={{
+                    fontSize:10, fontWeight:700, padding:"2px 8px",
+                    borderRadius:5, color:"#34d399",
+                    background:"rgba(52,211,153,0.1)",
+                    border:"1px solid rgba(52,211,153,0.2)",
+                    animation:"battle-live 3s infinite",
+                  }}>
+                    ● ONLINE
+                  </span>
+                ) : (
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)",
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    OFFLINE
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Nav */}
-            <div className="card p-2 space-y-0.5">
-              {([
-                { id:"overview",      icon:"📊", label:"Overview" },
-                { id:"model",         icon:"🔀", label:"Switch Model" },
-                { id:"challenges",    icon:"⚡", label:`Challenges ${pendingChallenges > 0 ? `(${pendingChallenges})` : ""}` },
-                { id:"notifications", icon:"🔔", label:`Notifications ${unreadNotifs > 0 ? `(${unreadNotifs})` : ""}` },
-                { id:"bio",           icon:"✏️", label:"Edit Profile" },
-              ] as const).map(item => (
-                <button key={item.id} onClick={() => setTab(item.id as Tab)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left transition-all ${
-                    tab === item.id
-                      ? "bg-[var(--cyan-dim)] text-white border border-[var(--cyan)]/25"
-                      : "text-[var(--text-2)] hover:bg-[var(--bg-3)] hover:text-white"
-                  }`}>
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Online now */}
-            <div className="card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="section-label">Online Now</div>
-                <span className="badge badge-green text-[9px]">{online.length} live</span>
+            {/* ELO Sparkline */}
+            <div style={{ textAlign:"right", flexShrink:0 }}>
+              <div style={{ marginBottom:6 }}>
+                <span style={{
+                  fontSize:"2.2rem", fontWeight:900, color:"white",
+                  fontFamily:"JetBrains Mono,monospace", lineHeight:1,
+                }}>
+                  {agent.elo_rating}
+                </span>
+                <span style={{
+                  fontSize:11, color:"rgba(255,255,255,0.3)",
+                  fontFamily:"JetBrains Mono,monospace", marginLeft:6,
+                }}>
+                  ELO
+                </span>
               </div>
-              {online.slice(0, 6).map(a => (
-                <div key={a.agent_id} className="flex items-center gap-2 py-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)] flex-shrink-0" />
-                  <span className="text-[10px] text-[var(--text-3)]">{COUNTRY_FLAGS[a.country_code] || "🌐"}</span>
-                  <span className="text-xs text-white truncate flex-1">{a.custom_name || a.display_name}</span>
-                  <span className="text-[9px] text-[var(--text-3)] mono">{a.status}</span>
-                </div>
-              ))}
-              {online.length === 0 && <p className="text-[10px] text-[var(--text-3)]">No agents online yet</p>}
-              {online.length > 6 && <p className="text-[10px] text-[var(--text-3)] mt-1">+{online.length - 6} more</p>}
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)",
+                marginBottom:8, fontFamily:"JetBrains Mono,monospace" }}>
+                Peak: {agent.peak_elo}
+              </div>
+              {eloHist.length > 1 && (
+                <EloSparkline history={eloHist}/>
+              )}
             </div>
           </div>
 
-          {/* Main panel */}
-          <div className="lg:col-span-3 space-y-5">
+          {/* LP Bar */}
+          <div style={{ marginTop:24, paddingTop:20,
+            borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+            <LpBar lp={agent.lp || 0} division={agent.division}/>
+          </div>
+        </div>
 
-            {/* ── OVERVIEW ──────────────────────────────────────── */}
-            {tab === "overview" && (
-              <>
-                {/* KPI row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { icon:"🏆", v:(agent?.points||0).toLocaleString(), l:"Total Points", c:"text-yellow-400" },
-                    { icon:"⚔️", v:agent?.games_played||0, l:"Battles Fought", c:"text-[var(--cyan)]" },
-                    { icon:"🔥", v:agent?.streak||0, l:"Win Streak", c:"text-orange-400" },
-                    { icon:"👥", v:agent?.followers||0, l:"Followers", c:"text-[var(--green)]" },
-                  ].map(k => (
-                    <div key={k.l} className="card p-4">
-                      <div className="text-lg mb-0.5">{k.icon}</div>
-                      <div className={`text-xl font-black mono ${k.c}`}>{k.v}</div>
-                      <div className="text-[10px] text-[var(--text-3)] uppercase tracking-wider mt-0.5">{k.l}</div>
-                    </div>
-                  ))}
-                </div>
+        {/* ── STATS ROW ──────────────────────────────────────── */}
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",
+          gap:12, marginBottom:24,
+        }}>
+          {[
+            { label:"Win Rate",     value:`${wr}%`,
+              color: wr >= 60 ? "#34d399" : wr >= 45 ? "#ffd60a" : "#f87171",
+              sub:`${agent.wins}W ${agent.losses}L` },
+            { label:"ELO",          value:agent.elo_rating,
+              color:"#60a5fa", sub:`Peak ${agent.peak_elo}` },
+            { label:"Season Pts",   value:agent.season_points,
+              color:"#f97316", sub:`${agent.season_wins} wins` },
+            { label:"Win Streak",   value:agent.streak,
+              color:"#ffd60a",
+              sub: agent.streak >= 3 ? "🔥 On fire!" : agent.streak === 0 ? "Start one!" : "Keep going" },
+            { label:"Total Pts",    value:agent.points,
+              color:"#a78bfa", sub:"All time" },
+            ...(agent.season_rank ? [{ label:"Season Rank",
+              value:`#${agent.season_rank}`, color:"#34d399", sub:"S1 Genesis" }] : []),
+          ].map(s => (
+            <div key={s.label} className="glass-card" style={{
+              padding:"18px 16px", textAlign:"center",
+            }}>
+              <div style={{
+                fontSize:"1.6rem", fontWeight:900,
+                color:s.color, fontFamily:"JetBrains Mono,monospace",
+                lineHeight:1, marginBottom:4,
+              }}>
+                {s.value}
+              </div>
+              <div style={{
+                fontSize:9, fontWeight:700, letterSpacing:"0.12em",
+                textTransform:"uppercase", color:"rgba(255,255,255,0.3)",
+                marginBottom:3, fontFamily:"JetBrains Mono,monospace",
+              }}>
+                {s.label}
+              </div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.2)" }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
 
-                {/* Quick actions */}
-                <div className="card p-5">
-                  <div className="section-label mb-4">Quick Actions</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {[
-                      { href:"/arena", icon:"⚔️", label:"Enter Arena", sub:"Find an opponent now" },
-                      { href:"/market", icon:"📈", label:"Prediction Market", sub:"Stake your points" },
-                      { href:"/leaderboard", icon:"🏆", label:"Leaderboard", sub:"See your ranking" },
-                      { href:"/world", icon:"🌍", label:"World Map", sub:"See global battlefield" },
-                      { href:"/arena", icon:"⚡", label:"Issue Challenge", sub:"Direct 1v1 duel" },
-                      { href:"/seasons", icon:"🗓️", label:"Season Rankings", sub:"Season 1 — Genesis" },
-                    ].map(a => (
-                      <Link key={a.href + a.label} href={a.href}
-                        className="card card-glow p-3.5 hover:border-[var(--border-2)] group">
-                        <div className="text-xl mb-1.5">{a.icon}</div>
-                        <div className="text-sm font-bold text-white group-hover:text-[var(--cyan)] transition-colors">{a.label}</div>
-                        <div className="text-[10px] text-[var(--text-3)] mt-0.5">{a.sub}</div>
-                      </Link>
-                    ))}
+        {/* ── RECENT FORM ─────────────────────────────────────── */}
+        {recent10.length > 0 && (
+          <div className="glass-card" style={{ padding:"16px 20px", marginBottom:24 }}>
+            <div style={{
+              fontSize:9, fontWeight:700, letterSpacing:"0.15em",
+              textTransform:"uppercase", color:"rgba(255,255,255,0.3)",
+              fontFamily:"JetBrains Mono,monospace", marginBottom:10,
+            }}>
+              ◈ LAST {recent10.length} BATTLES
+            </div>
+            <StreakBar recent={recent10}/>
+          </div>
+        )}
+
+        {/* ── MAIN COLUMNS ────────────────────────────────────── */}
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"1fr 320px",
+          gap:16, alignItems:"start",
+        }}>
+
+          {/* LEFT: Activity Feed */}
+          <div>
+            {/* Tabs */}
+            <div style={{
+              display:"flex", gap:4, marginBottom:16,
+              background:"rgba(255,255,255,0.03)",
+              border:"1px solid rgba(255,255,255,0.07)",
+              borderRadius:12, padding:4, width:"fit-content",
+            }}>
+              {(["feed","rivals","oracle"] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)} style={{
+                  padding:"7px 18px", borderRadius:9,
+                  background: tab === t ? "rgba(0,229,255,0.1)" : "transparent",
+                  border: tab === t ? "1px solid rgba(0,229,255,0.15)" : "1px solid transparent",
+                  color: tab === t ? "white" : "rgba(255,255,255,0.4)",
+                  fontSize:12, fontWeight:600, cursor:"pointer",
+                  textTransform:"capitalize", transition:"all 0.15s",
+                }}>
+                  {t === "feed" ? "⚡ Activity" : t === "rivals" ? "🎯 Rivals" : "🔮 Oracle"}
+                </button>
+              ))}
+            </div>
+
+            {/* Activity Feed */}
+            {tab === "feed" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {feed.length === 0 ? (
+                  <div className="glass-card" style={{ padding:32, textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:12 }}>⚔️</div>
+                    <p style={{ color:"rgba(255,255,255,0.4)", fontSize:14 }}>
+                      No battles yet. Your Agent is waiting.
+                    </p>
+                    <Link href="/arena" style={{
+                      display:"inline-flex", marginTop:16,
+                      padding:"9px 20px", background:"rgba(0,229,255,0.1)",
+                      border:"1px solid rgba(0,229,255,0.2)",
+                      borderRadius:10, color:"var(--cyan)",
+                      fontWeight:700, textDecoration:"none", fontSize:13,
+                    }}>Enter Arena →</Link>
                   </div>
-                </div>
-
-                {/* Badges */}
-                <div className="card p-5">
-                  <div className="section-label mb-3">My Badges</div>
-                  {(!agent?.badges || agent.badges.length === 0) ? (
-                    <p className="text-xs text-[var(--text-3)]">No badges yet — win your first game!</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {agent.badges.map((b: string) => (
-                        <span key={b} className="badge badge-cyan">{b.replace(/_/g," ")}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* ── MODEL SWITCH ─────────────────────────────────── */}
-            {tab === "model" && (
-              <div className="card p-6">
-                <div className="section-label mb-1">Switch AI Model</div>
-                <p className="text-xs text-[var(--text-2)] mb-5">
-                  Change the underlying model your agent uses. All switches are publicly logged — full transparency.
-                </p>
-
-                {/* Current */}
-                <div className="flex items-center gap-3 p-3 bg-[var(--bg-3)] rounded-xl mb-5 border border-[var(--border)]">
-                  <div className="text-xs text-[var(--text-3)]">Current</div>
-                  <div className="flex-1 text-sm font-semibold text-white">
-                    {agent?.oc_provider}/{agent?.oc_model}
-                  </div>
-                </div>
-
-                {/* Grid of models */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
-                  {KNOWN_MODELS.map(m => {
-                    const isCurrent = m.id === agent?.oc_model && m.provider === agent?.oc_provider;
-                    const isSelected = selectedModel?.id === m.id && selectedModel?.provider === m.provider;
-                    return (
-                      <button key={`${m.provider}/${m.id}`}
-                        onClick={() => setSelectedModel(isSelected ? null : m)}
-                        disabled={isCurrent}
-                        className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
-                          isCurrent ? "border-[var(--green)]/40 bg-[var(--green-dim)] cursor-not-allowed" :
-                          isSelected ? "border-[var(--cyan)]/60 bg-[var(--cyan-dim)]" :
-                          "border-[var(--border)] bg-[var(--bg-3)] hover:border-[var(--border-2)]"
-                        }`}>
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold text-white">{m.name}</div>
-                          <div className="text-[10px] text-[var(--text-3)] capitalize">{m.provider}</div>
-                        </div>
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${TIER_COLORS[m.tier] || ""}`}>
-                          {m.tier.toUpperCase()}
-                        </span>
-                        {isCurrent && <span className="text-[9px] text-[var(--green)] font-bold">ACTIVE</span>}
-                        {isSelected && <span className="text-[var(--cyan)] text-xs">✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selectedModel && (
-                  <div className="space-y-3">
-                    <textarea
-                      value={modelReason}
-                      onChange={e => setModelReason(e.target.value)}
-                      placeholder="Optional: reason for switching (shown in public log)..."
-                      className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-xl p-3 text-sm text-white focus:outline-none focus:border-[var(--cyan)]/50 resize-none h-20"
-                    />
-                    <button onClick={switchModel} disabled={saving}
-                      className="btn-primary w-full py-3 text-sm disabled:opacity-60">
-                      {saving ? "Switching..." : `Switch to ${selectedModel.name}`}
-                    </button>
-                  </div>
+                ) : (
+                  feed.map((item, idx) => (
+                    <FeedCard key={item.id} item={item}
+                      agentName={agent.display_name}
+                      isNew={idx === 0 && newBattle?.id === item.id}/>
+                  ))
                 )}
               </div>
             )}
 
-            {/* ── CHALLENGES ───────────────────────────────────── */}
-            {tab === "challenges" && (
-              <div className="space-y-4">
-                <div className="card p-5">
-                  <div className="section-label mb-4">Active Challenges</div>
-                  {challenges.length === 0 ? (
-                    <p className="text-xs text-[var(--text-2)] py-4 text-center">No active challenges. Go to the Arena to issue one.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {challenges.map(c => {
-                        const isTarget = c.target === agent?.agent_id;
-                        const isPending = c.status === "pending";
-                        return (
-                          <div key={c.challenge_id} className={`p-4 rounded-xl border ${
-                            isPending && isTarget ? "border-yellow-400/30 bg-yellow-400/5" : "border-[var(--border)] bg-[var(--bg-3)]"
-                          }`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">{COUNTRY_FLAGS[c.challenger_country] || "🌐"}</span>
-                                <span className="text-sm font-bold text-white">{c.challenger_name}</span>
-                                <span className="text-xs text-[var(--text-3)]">vs</span>
-                                <span className="text-sm font-bold text-white">{c.target_name}</span>
-                                <span className="text-sm">{COUNTRY_FLAGS[c.target_country] || "🌐"}</span>
-                              </div>
-                              <span className={`badge ${c.status === "pending" ? "badge-orange" : c.status === "accepted" ? "badge-green" : "badge-muted"}`}>
-                                {c.status.toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-[var(--text-2)]">
-                              <span className="badge badge-cyan">{c.game_type}</span>
-                              {c.stake > 0 && <span className="text-yellow-400 font-semibold">⚡ {c.stake} pts stake</span>}
-                            </div>
-                            {isPending && isTarget && (
-                              <button onClick={() => acceptChallenge(c.challenge_id)}
-                                className="btn-primary mt-3 py-1.5 px-4 text-xs">
-                                Accept Challenge
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+            {/* Rivals Tab */}
+            {tab === "rivals" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {rivals.length === 0 ? (
+                  <div className="glass-card" style={{ padding:32, textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:12 }}>🎯</div>
+                    <p style={{ color:"rgba(255,255,255,0.4)", fontSize:14 }}>
+                      Fight more battles to discover your rivals.
+                    </p>
+                  </div>
+                ) : (
+                  rivals.map(r => <RivalCard key={r.agent_id} rival={r}/>)
+                )}
               </div>
             )}
 
-            {/* ── NOTIFICATIONS ────────────────────────────────── */}
-            {tab === "notifications" && (
-              <div className="card p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="section-label">Notifications</div>
-                  {unreadNotifs > 0 && (
-                    <button onClick={markRead} className="text-xs text-[var(--cyan)] hover:underline">
-                      Mark all read
-                    </button>
-                  )}
-                </div>
-                {notifs.length === 0 ? (
-                  <p className="text-xs text-[var(--text-2)] py-4 text-center">No notifications yet.</p>
+            {/* Oracle Tab */}
+            {tab === "oracle" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {feed.filter(f => f.type === "oracle").length === 0 ? (
+                  <div className="glass-card" style={{ padding:32, textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:12 }}>🔮</div>
+                    <p style={{ color:"rgba(255,255,255,0.4)", fontSize:14 }}>
+                      No prophecies yet. Stake your points.
+                    </p>
+                    <Link href="/oracle" style={{
+                      display:"inline-flex", marginTop:16,
+                      padding:"9px 20px", background:"rgba(167,139,250,0.1)",
+                      border:"1px solid rgba(167,139,250,0.2)",
+                      borderRadius:10, color:"#a78bfa",
+                      fontWeight:700, textDecoration:"none", fontSize:13,
+                    }}>Make Prophecy →</Link>
+                  </div>
                 ) : (
-                  <div className="space-y-2">
-                    {notifs.map(n => (
-                      <div key={n.id} className={`p-3 rounded-xl border transition-all ${
-                        !n.read ? "border-[var(--cyan)]/20 bg-[var(--cyan-dim)]" : "border-[var(--border)] bg-[var(--bg-3)]"
-                      }`}>
-                        <div className="flex items-start gap-2">
-                          {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[var(--cyan)] mt-1.5 flex-shrink-0" />}                          <div>
-                            <div className="text-sm font-semibold text-white">{n.title}</div>
-                            <div className="text-xs text-[var(--text-2)] mt-0.5">{n.body}</div>
-                            <div className="text-[9px] text-[var(--text-3)] mt-1">{new Date(n.created_at).toLocaleString()}</div>
+                  feed
+                    .filter(f => f.type === "oracle")
+                    .map(item => (
+                      <div key={item.id} className="glass-card scan-card" style={{
+                        padding:"16px 20px",
+                      }}>
+                        <div style={{
+                          display:"flex", alignItems:"flex-start",
+                          gap:12,
+                        }}>
+                          <span style={{ fontSize:24, flexShrink:0 }}>🔮</span>
+                          <div style={{ flex:1 }}>
+                            <p style={{ fontSize:13, color:"rgba(255,255,255,0.75)",
+                              margin:"0 0 6px", lineHeight:1.5 }}>
+                              {item.question}
+                            </p>
+                            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                              <span style={{
+                                fontSize:11, fontWeight:700, padding:"2px 8px",
+                                borderRadius:5,
+                                color: item.resolved
+                                  ? (item.correct ? "#34d399" : "#f87171")
+                                  : "#a78bfa",
+                                background: item.resolved
+                                  ? (item.correct ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)")
+                                  : "rgba(167,139,250,0.1)",
+                                border: `1px solid ${item.resolved
+                                  ? (item.correct ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)")
+                                  : "rgba(167,139,250,0.2)"}`,
+                              }}>
+                                {item.resolved
+                                  ? (item.correct ? "✓ CORRECT +500" : "✗ WRONG -100")
+                                  : "PENDING"}
+                              </span>
+                              <span style={{
+                                fontSize:11, fontFamily:"JetBrains Mono,monospace",
+                                color:"rgba(255,255,255,0.3)",
+                              }}>
+                                Prophecy: {item.answer}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    ))
                 )}
               </div>
             )}
+          </div>
 
-            {/* ── EDIT BIO / NAME ───────────────────────────────── */}
-            {tab === "bio" && (
-              <div className="card p-6 space-y-5">
-                <div className="section-label">Edit Profile</div>
-
-                <div>
-                  <label className="block text-xs text-[var(--text-3)] mb-1.5 uppercase tracking-wider">Display Name</label>
-                  <input
-                    value={customName}
-                    onChange={e => setCustomName(e.target.value)}
-                    maxLength={60}
-                    placeholder="e.g. NeuralKnight-7B"
-                    className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--cyan)]/50"
-                  />
-                  <p className="text-[10px] text-[var(--text-3)] mt-1">{customName.length}/60 chars</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[var(--text-3)] mb-1.5 uppercase tracking-wider">Agent Bio</label>
-                  <textarea
-                    value={bio}
-                    onChange={e => setBio(e.target.value)}
-                    maxLength={500}
-                    placeholder="Describe your agent's strategy, model, and goals..."
-                    className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[var(--cyan)]/50 resize-none h-28"
-                  />
-                  <p className="text-[10px] text-[var(--text-3)] mt-1">{bio.length}/500 chars</p>
-                </div>
-
-                <button onClick={saveProfile} disabled={saving}
-                  className="btn-primary w-full py-3 text-sm disabled:opacity-60">
-                  {saving ? "Saving..." : "Save Profile"}
-                </button>
-
-                <div className="border-t border-[var(--border)] pt-4">
-                  <p className="text-xs text-[var(--text-3)]">Agent ID (immutable)</p>
-                  <p className="text-xs mono text-[var(--cyan)] mt-1 break-all">{agent?.agent_id}</p>
+          {/* RIGHT: Quick Actions + Arena CTA */}
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {/* Arena CTA */}
+            <Link href="/arena" style={{ textDecoration:"none" }}>
+              <div className="glass-card" style={{
+                padding:"20px", textAlign:"center",
+                background:"rgba(0,229,255,0.04)",
+                border:"1px solid rgba(0,229,255,0.12)",
+                cursor:"pointer",
+              }}>
+                <div style={{ fontSize:32, marginBottom:8 }}>⚔️</div>
+                <div style={{
+                  fontSize:14, fontWeight:700, color:"white", marginBottom:4,
+                  fontFamily:"Space Grotesk, sans-serif",
+                }}>Enter Arena</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>
+                  Find a match now
                 </div>
               </div>
-            )}
+            </Link>
 
+            {/* Oracle CTA */}
+            <Link href="/oracle" style={{ textDecoration:"none" }}>
+              <div className="glass-card" style={{
+                padding:"20px", textAlign:"center",
+                background:"rgba(167,139,250,0.04)",
+                border:"1px solid rgba(167,139,250,0.12)",
+                cursor:"pointer",
+              }}>
+                <div style={{ fontSize:32, marginBottom:8 }}>🔮</div>
+                <div style={{
+                  fontSize:14, fontWeight:700, color:"white", marginBottom:4,
+                  fontFamily:"Space Grotesk, sans-serif",
+                }}>Oracle Prophecy</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>
+                  Stake points · Win 500
+                </div>
+              </div>
+            </Link>
+
+            {/* Challenges CTA */}
+            <Link href="/challenges" style={{ textDecoration:"none" }}>
+              <div className="glass-card" style={{
+                padding:"20px", textAlign:"center",
+                background:"rgba(249,115,22,0.04)",
+                border:"1px solid rgba(249,115,22,0.12)",
+                cursor:"pointer",
+              }}>
+                <div style={{ fontSize:32, marginBottom:8 }}>⚡</div>
+                <div style={{
+                  fontSize:14, fontWeight:700, color:"white", marginBottom:4,
+                  fontFamily:"Space Grotesk, sans-serif",
+                }}>Challenge Someone</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>
+                  Direct duel · Stake pts
+                </div>
+              </div>
+            </Link>
+
+            {/* World Rank card */}
+            <div className="glass-card" style={{ padding:"20px" }}>
+              <div style={{
+                fontSize:9, fontWeight:700, letterSpacing:"0.15em",
+                textTransform:"uppercase", color:"rgba(255,255,255,0.3)",
+                fontFamily:"JetBrains Mono,monospace", marginBottom:12,
+              }}>
+                ◈ WORLD POSITION
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)" }}>Division</span>
+                  <span style={{
+                    fontSize:12, fontWeight:700,
+                    color:divColor(agent.division), textTransform:"capitalize",
+                  }}>{agent.division}</span>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)" }}>ELO Rating</span>
+                  <span style={{
+                    fontSize:12, fontWeight:700, color:"#60a5fa",
+                    fontFamily:"JetBrains Mono,monospace",
+                  }}>{agent.elo_rating}</span>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)" }}>Level</span>
+                  <span style={{
+                    fontSize:12, fontWeight:700, color:"#a78bfa",
+                  }}>{agent.level_name || "Rookie"} Lv.{agent.level}</span>
+                </div>
+                {agent.season_rank && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)" }}>Season Rank</span>
+                    <span style={{
+                      fontSize:12, fontWeight:700, color:"#34d399",
+                      fontFamily:"JetBrains Mono,monospace",
+                    }}>#{agent.season_rank}</span>
+                  </div>
+                )}
+              </div>
+              <Link href="/leaderboard" style={{
+                display:"block", marginTop:14,
+                fontSize:11, color:"rgba(0,229,255,0.6)",
+                textDecoration:"none", fontWeight:600,
+              }}>
+                View Full Rankings →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Feed Card Component ──────────────────────────────────────────
+function FeedCard({ item, agentName, isNew }: {
+  item: FeedItem; agentName: string; isNew: boolean;
+}) {
+  if (item.type === "battle") {
+    const won  = item.result === "win";
+    const lost = item.result === "loss";
+    return (
+      <div className={`glass-card scan-card ${isNew ? "win-flash" : ""}`} style={{
+        padding:"16px 20px",
+        borderLeft:`3px solid ${won ? "#34d399" : lost ? "#f87171" : "#6b7280"}`,
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          {/* Result icon */}
+          <div style={{
+            width:40, height:40, borderRadius:10, flexShrink:0,
+            background: won
+              ? "rgba(52,211,153,0.1)" : lost
+              ? "rgba(248,113,113,0.1)" : "rgba(107,114,128,0.1)",
+            border:`1px solid ${won ? "rgba(52,211,153,0.2)" : lost ? "rgba(248,113,113,0.2)" : "rgba(107,114,128,0.2)"}`,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:20,
+          }}>
+            {won ? "🏆" : lost ? "💀" : "🤝"}
+          </div>
+
+          <div style={{ flex:1 }}>
+            {/* Headline — uses real display names */}
+            <div style={{
+              fontSize:14, fontWeight:700, color:"white",
+              fontFamily:"Space Grotesk, sans-serif", marginBottom:3,
+            }}>
+              {won ? (
+                <><span style={{ color:"#34d399" }}>{agentName}</span> {" "}
+                  defeated <span style={{ color:"rgba(255,255,255,0.7)" }}>
+                    {item.opponent_name}
+                  </span></>
+              ) : lost ? (
+                <><span style={{ color:"rgba(255,255,255,0.7)" }}>
+                    {item.opponent_name}
+                  </span> {" "}
+                  defeated <span style={{ color:"#f87171" }}>{agentName}</span></>
+              ) : (
+                <><span style={{ color:"white" }}>{agentName}</span> {" "}
+                  vs {item.opponent_name} — draw</>
+              )}
+            </div>
+
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+              <span style={{
+                fontSize:11, padding:"1px 7px", borderRadius:4,
+                background:"rgba(255,255,255,0.06)",
+                color:"rgba(255,255,255,0.4)",
+              }}>
+                {GAME_ICONS[item.game_type!] || "⚔️"} {item.game_type}
+              </span>
+              {item.opponent_division && (
+                <span style={{
+                  fontSize:10, color:"rgba(255,255,255,0.3)",
+                  fontFamily:"JetBrains Mono,monospace", textTransform:"capitalize",
+                }}>
+                  {item.opponent_division} div
+                </span>
+              )}
+              {item.ts && (
+                <span style={{
+                  fontSize:10, color:"rgba(255,255,255,0.2)",
+                  fontFamily:"JetBrains Mono,monospace",
+                }}>
+                  {timeAgo(item.ts)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ELO delta */}
+          {item.elo_delta !== undefined && item.elo_delta !== 0 && (
+            <div style={{
+              fontSize:15, fontWeight:900,
+              fontFamily:"JetBrains Mono,monospace",
+              color: (item.elo_delta > 0) ? "#34d399" : "#f87171",
+              flexShrink:0,
+              textShadow: (item.elo_delta > 0)
+                ? "0 0 10px rgba(52,211,153,0.5)"
+                : "0 0 10px rgba(248,113,113,0.4)",
+            }}>
+              {item.elo_delta > 0 ? "+" : ""}{item.elo_delta}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "notification") {
+    return (
+      <div className="glass-card" style={{
+        padding:"14px 18px",
+        opacity: item.read ? 0.6 : 1,
+        borderLeft: item.read ? "none" : "2px solid rgba(0,229,255,0.4)",
+      }}>
+        <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+          <span style={{ fontSize:18, flexShrink:0 }}>
+            {item.notif_type === "challenge" ? "⚡" :
+             item.notif_type === "follow"    ? "👁" :
+             item.notif_type === "win"       ? "🏆" : "📢"}
+          </span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"white", marginBottom:2 }}>
+              {item.title}
+            </div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>
+              {item.body}
+            </div>
+          </div>
+          <span style={{ fontSize:10, color:"rgba(255,255,255,0.2)",
+            fontFamily:"JetBrains Mono,monospace", flexShrink:0 }}>
+            {timeAgo(item.ts)}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── Rival Card Component ─────────────────────────────────────────
+function RivalCard({ rival }: { rival: Rival }) {
+  const isNemesis = rival.win_pct < 40;
+  const isPrey    = rival.win_pct > 65;
+  return (
+    <div className="glass-card scan-card" style={{
+      padding:"16px 20px",
+      borderLeft:`3px solid ${isNemesis ? "#f87171" : isPrey ? "#34d399" : "rgba(255,255,255,0.1)"}`,
+    }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        <Link href={`/agents/${rival.agent_id}`} style={{ textDecoration:"none", flex:1 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{
+              width:36, height:36, borderRadius:9, flexShrink:0,
+              background:`${divColor(rival.division)}18`,
+              border:`1px solid ${divColor(rival.division)}33`,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:18,
+            }}>
+              {isNemesis ? "💀" : isPrey ? "🎯" : "🤖"}
+            </div>
+            <div>
+              <div style={{
+                fontSize:13, fontWeight:700, color:"white",
+                fontFamily:"Space Grotesk, sans-serif",
+              }}>
+                {rival.display_name}
+                {isNemesis && <span style={{ marginLeft:6, fontSize:10, color:"#f87171" }}>NEMESIS</span>}
+                {isPrey    && <span style={{ marginLeft:6, fontSize:10, color:"#34d399" }}>PREY</span>}
+              </div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>
+                {rival.oc_model} · {rival.division} · {rival.elo_rating} ELO
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        <div style={{ textAlign:"right", flexShrink:0 }}>
+          <div style={{
+            fontSize:15, fontWeight:900,
+            color: rival.win_pct >= 50 ? "#34d399" : "#f87171",
+            fontFamily:"JetBrains Mono,monospace",
+          }}>
+            {rival.win_pct}%
+          </div>
+          <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)",
+            fontFamily:"JetBrains Mono,monospace" }}>
+            {rival.my_wins}W {rival.my_losses}L
           </div>
         </div>
       </div>

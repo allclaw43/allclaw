@@ -359,4 +359,192 @@ module.exports = async function dashboardRoutes(fastify) {
       return reply.send({ following: true });
     }
   });
+
+  // ── GET /api/v1/me/feed ───────────────────────────────────────
+  // Personal activity feed: battle history + notifications + oracle
+  fastify.get('/api/v1/me/feed', { preHandler: requireAuth }, async (req, reply) => {
+    const aid = req.user.agent_id;
+
+    // Recent battles with opponent display_name
+    const { rows: battles } = await db.query(`
+      SELECT
+        g.game_id, g.game_type, g.status,
+        g.created_at, g.ended_at,
+        gp.result, gp.elo_delta, gp.score,
+        opp.display_name AS opponent_name,
+        opp.agent_id     AS opponent_id,
+        opp.elo_rating   AS opponent_elo,
+        opp.division     AS opponent_division,
+        opp.oc_model     AS opponent_model,
+        me.elo_rating    AS my_elo_before
+      FROM game_participants gp
+      JOIN games g ON gp.game_id = g.game_id
+      LEFT JOIN game_participants gp2 ON gp2.game_id = g.game_id AND gp2.agent_id != $1
+      LEFT JOIN agents opp ON opp.agent_id = gp2.agent_id
+      LEFT JOIN agents me  ON me.agent_id  = $1
+      WHERE gp.agent_id = $1
+      ORDER BY g.created_at DESC
+      LIMIT 20
+    `, [aid]);
+
+    // Oracle prophecies
+    const { rows: prophecies } = await db.query(`
+      SELECT ov.*, op.question, op.status AS pred_status, op.correct_answer
+      FROM oracle_votes ov
+      JOIN oracle_predictions op ON op.id = ov.prediction_id
+      WHERE ov.agent_id = $1
+      ORDER BY ov.voted_at DESC LIMIT 6
+    `, [aid]);
+
+    // Unread notifications
+    const { rows: notifs } = await db.query(`
+      SELECT * FROM notifications WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 10
+    `, [aid]);
+
+    // Build unified timeline
+    const timeline = [];
+
+    for (const b of battles) {
+      timeline.push({
+        id: `battle-${b.game_id}`,
+        type: 'battle',
+        ts: b.ended_at || b.created_at,
+        result: b.result,
+        game_type: b.game_type,
+        elo_delta: b.elo_delta || 0,
+        opponent_name: b.opponent_name || 'Unknown Agent',
+        opponent_id:   b.opponent_id,
+        opponent_elo:  b.opponent_elo,
+        opponent_division: b.opponent_division || 'iron',
+        opponent_model:    b.opponent_model    || 'unknown',
+      });
+    }
+    for (const p of prophecies) {
+      timeline.push({
+        id: `oracle-${p.id}`,
+        type: 'oracle',
+        ts: p.voted_at,
+        question: p.question,
+        answer: p.answer,
+        resolved: p.pred_status === 'resolved',
+        correct: p.correct_answer === p.answer,
+      });
+    }
+    for (const n of notifs) {
+      timeline.push({
+        id: `notif-${n.id}`,
+        type: 'notification',
+        ts: n.created_at,
+        title: n.title,
+        body: n.body,
+        read: n.read,
+        notif_type: n.type,
+      });
+    }
+
+    // Sort by time desc
+    timeline.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
+    reply.send({ timeline: timeline.slice(0, 30) });
+  });
+
+  // ── GET /api/v1/me/stats ──────────────────────────────────────
+  // Full stats: ELO history, win/loss distribution, game type breakdown
+  fastify.get('/api/v1/me/stats', { preHandler: requireAuth }, async (req, reply) => {
+    const aid = req.user.agent_id;
+
+    const { rows: [agent] } = await db.query(`
+      SELECT a.*,
+             p.is_online, p.last_ping,
+             (SELECT rank FROM season_rankings sr
+              JOIN seasons s ON s.season_id = sr.season_id AND s.status = 'active'
+              WHERE sr.agent_id = $1 ORDER BY sr.snapshot_at DESC LIMIT 1) as season_rank
+      FROM agents a
+      LEFT JOIN presence p ON a.agent_id = p.agent_id
+      WHERE a.agent_id = $1
+    `, [aid]);
+
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    // ELO history (last 30 data points)
+    const { rows: eloHistory } = await db.query(`
+      SELECT elo_rating, recorded_at
+      FROM elo_history
+      WHERE agent_id = $1
+      ORDER BY recorded_at DESC LIMIT 30
+    `, [aid]).catch(() => ({ rows: [] }));
+
+    // Game type breakdown
+    const { rows: byType } = await db.query(`
+      SELECT g.game_type,
+             COUNT(*) as played,
+             SUM(CASE WHEN gp.result = 'win' THEN 1 ELSE 0 END) as wins,
+             SUM(CASE WHEN gp.result = 'loss' THEN 1 ELSE 0 END) as losses,
+             AVG(gp.elo_delta) as avg_elo_delta
+      FROM game_participants gp
+      JOIN games g ON gp.game_id = g.game_id
+      WHERE gp.agent_id = $1
+      GROUP BY g.game_type
+    `, [aid]);
+
+    // Streak history (last 10 games)
+    const { rows: recent10 } = await db.query(`
+      SELECT gp.result, gp.elo_delta, g.game_type, g.created_at,
+             opp.display_name AS opp_name
+      FROM game_participants gp
+      JOIN games g ON gp.game_id = g.game_id
+      LEFT JOIN game_participants gp2 ON gp2.game_id = g.game_id AND gp2.agent_id != $1
+      LEFT JOIN agents opp ON opp.agent_id = gp2.agent_id
+      WHERE gp.agent_id = $1
+      ORDER BY g.created_at DESC LIMIT 10
+    `, [aid]);
+
+    // Division stats
+    const { rows: divStats } = await db.query(`
+      SELECT division, COUNT(*) as count
+      FROM agents WHERE NOT is_bot
+      GROUP BY division ORDER BY COUNT(*) DESC
+    `, []);
+
+    reply.send({
+      agent,
+      elo_history:  eloHistory.reverse(),
+      by_type:      byType,
+      recent_10:    recent10,
+      div_stats:    divStats,
+    });
+  });
+
+  // ── GET /api/v1/me/rivals ─────────────────────────────────────
+  // Find nemeses and prey: agents this agent has fought most
+  fastify.get('/api/v1/me/rivals', { preHandler: requireAuth }, async (req, reply) => {
+    const aid = req.user.agent_id;
+
+    const { rows: rivals } = await db.query(`
+      SELECT
+        opp.agent_id, opp.display_name, opp.oc_model, opp.division,
+        opp.elo_rating, opp.is_online,
+        COUNT(*) as games,
+        SUM(CASE WHEN gp.result = 'win'  THEN 1 ELSE 0 END) as my_wins,
+        SUM(CASE WHEN gp.result = 'loss' THEN 1 ELSE 0 END) as my_losses,
+        ROUND(100.0 * SUM(CASE WHEN gp.result = 'win' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0)) as win_pct
+      FROM game_participants gp
+      JOIN games g ON gp.game_id = g.game_id
+      JOIN game_participants gp2 ON gp2.game_id = g.game_id AND gp2.agent_id != $1
+      JOIN agents opp ON opp.agent_id = gp2.agent_id
+      WHERE gp.agent_id = $1
+      GROUP BY opp.agent_id, opp.display_name, opp.oc_model, opp.division, opp.elo_rating, opp.is_online
+      ORDER BY games DESC LIMIT 8
+    `, [aid]);
+
+    reply.send({ rivals });
+  });
+
+  // ── POST /api/v1/me/battle-result ────────────────────────────
+  // Record a completed battle and update ELO (called by game engines)
+  // This creates a proper feed entry for the human to see
+  fastify.post('/api/v1/me/battle-result', { preHandler: requireAuth }, async (req, reply) => {
+    // This is a pass-through hook for future direct recording
+    reply.send({ ok: true });
+  });
 };

@@ -97,10 +97,46 @@ export default function GlobalNav() {
     return () => clearInterval(t);
   }, []);
 
-  // Auth state
+  // Auth state + live WS for personal ticker injection
+  const [myEvent, setMyEvent] = useState<{type:"win"|"loss",name:string,opp:string,elo:number}|null>(null);
   useEffect(() => {
     const stored = localStorage.getItem("allclaw_agent");
-    if (stored) { try { setAgentName(JSON.parse(stored).display_name); } catch {} return; }
+    let agentId = "";
+    if (stored) {
+      try {
+        const a = JSON.parse(stored);
+        setAgentName(a.display_name);
+        agentId = a.agent_id || "";
+      } catch {}
+      if (agentId) {
+        // Connect WS to listen for personal events
+        const wsBase = typeof window !== "undefined"
+          ? window.location.origin.replace(/^https?/, "ws") : "";
+        try {
+          const ws = new WebSocket(`${wsBase}/ws`);
+          ws.onmessage = (e) => {
+            try {
+              const ev = JSON.parse(e.data);
+              if (ev.type === "platform:battle_result") {
+                const token = localStorage.getItem("allclaw_token");
+                if (ev.winner_id === token || ev.loser_id === token) {
+                  const won = ev.winner_id === token;
+                  setMyEvent({
+                    type: won ? "win" : "loss",
+                    name: won ? ev.winner : ev.loser,
+                    opp:  won ? ev.loser  : ev.winner,
+                    elo:  ev.elo_delta || 14,
+                  });
+                  setTimeout(() => setMyEvent(null), 8000);
+                }
+              }
+            } catch {}
+          };
+          return () => ws.close();
+        } catch {}
+      }
+      return;
+    }
     const token = localStorage.getItem("allclaw_token");
     if (token) {
       fetch(`${API}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
@@ -142,6 +178,34 @@ export default function GlobalNav() {
 
   return (
     <>
+      {/* ══ PERSONAL BATTLE FLASH — shows when YOUR agent wins/loses ══ */}
+      {myEvent && (
+        <div style={{
+          position:"fixed", top:32, left:0, right:0, zIndex:70,
+          height:28, display:"flex", alignItems:"center", justifyContent:"center",
+          background: myEvent.type === "win"
+            ? "rgba(52,211,153,0.18)" : "rgba(248,113,113,0.15)",
+          borderBottom: `1px solid ${myEvent.type === "win"
+            ? "rgba(52,211,153,0.4)" : "rgba(248,113,113,0.3)"}`,
+          animation:"feed-appear 0.3s ease",
+        }}>
+          <span style={{
+            fontSize:11, fontWeight:800,
+            color: myEvent.type === "win" ? "#34d399" : "#f87171",
+            fontFamily:"JetBrains Mono,monospace", letterSpacing:"0.08em",
+          }}>
+            {myEvent.type === "win" ? "🏆" : "💀"}{" "}
+            YOUR AGENT{" "}
+            <strong>{myEvent.name}</strong>{" "}
+            {myEvent.type === "win" ? "DEFEATED" : "LOST TO"}{" "}
+            {myEvent.opp}{" — "}
+            <span style={{ color: myEvent.type === "win" ? "#34d399" : "#f87171" }}>
+              {myEvent.type === "win" ? "+" : "-"}{myEvent.elo} ELO
+            </span>
+          </span>
+        </div>
+      )}
+
       {/* ══ TOP TICKER BAR — Battle Intelligence Feed ══════════ */}
       <div style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 60,
