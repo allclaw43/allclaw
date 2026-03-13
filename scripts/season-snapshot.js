@@ -29,6 +29,139 @@ const SEASON_THEMES = [
 const SEASON_NAMES = ['Genesis','Omniscient','Executor','Unbroken','Convergence'];
 const SEASON_DURATION_DAYS = 7;
 
+// ── Oracle auto-resolution logic ────────────────────────────────
+async function autoResolveOraclePredictions(client, season, daysLeft) {
+  // Find expired platform predictions that haven't been resolved yet
+  const { rows: expiredPreds } = await client.query(`
+    SELECT id, slug, question, vote_counts, options, resolve_type, category
+    FROM oracle_predictions
+    WHERE season_id = $1
+      AND status = 'open'
+      AND resolve_type = 'platform'
+      AND expires_at <= NOW()
+    ORDER BY id
+  `, [season.season_id]);
+
+  if (expiredPreds.length === 0) return;
+  console.log(`[Oracle] Auto-resolving ${expiredPreds.length} expired platform predictions...`);
+
+  for (const pred of expiredPreds) {
+    try {
+      const correctOption = await computeCorrectOption(client, pred, season);
+      if (correctOption === null) {
+        console.log(`[Oracle] Skipping "${pred.slug}" — cannot determine outcome yet`);
+        continue;
+      }
+
+      // Fetch votes
+      const { rows: votes } = await client.query(
+        `SELECT agent_id, chosen_option FROM oracle_votes WHERE prediction_id = $1 AND result IS NULL`,
+        [pred.id]
+      );
+
+      const WIN_PTS  = 500;
+      const LOSS_PTS = -100;
+      let winners = 0, losers = 0;
+
+      for (const v of votes) {
+        const isWinner = v.chosen_option === correctOption;
+        const pts = isWinner ? WIN_PTS : LOSS_PTS;
+        await client.query(
+          `UPDATE agents SET points = GREATEST(0, points + $1), season_points = GREATEST(0, season_points + $1) WHERE agent_id = $2`,
+          [pts, v.agent_id]
+        );
+        await client.query(
+          `UPDATE oracle_votes SET result = $1, pts_awarded = $2 WHERE prediction_id = $3 AND agent_id = $4`,
+          [isWinner ? 'correct' : 'wrong', pts, pred.id, v.agent_id]
+        );
+        if (isWinner) winners++; else losers++;
+
+        // Update oracle accuracy on agent
+        await client.query(`
+          UPDATE agents SET
+            oracle_total   = COALESCE(oracle_total,0) + 1,
+            oracle_correct = COALESCE(oracle_correct,0) + $1,
+            oracle_accuracy = CASE WHEN COALESCE(oracle_total,0)+1 > 0
+              THEN ROUND(((COALESCE(oracle_correct,0) + $1)::float / (COALESCE(oracle_total,0)+1)) * 100)
+              ELSE 0 END
+          WHERE agent_id = $2
+        `, [isWinner ? 1 : 0, v.agent_id]);
+      }
+
+      // Mark resolved
+      await client.query(`
+        UPDATE oracle_predictions
+        SET status = 'resolved', correct_option = $1, resolved_at = NOW(),
+            resolved_by = 'system', total_votes = $2, correct_votes = $3
+        WHERE id = $4
+      `, [correctOption, votes.length, winners, pred.id]);
+
+      console.log(`[Oracle] Resolved "${pred.slug}" -> ${correctOption} | +${winners} correct, -${losers} wrong`);
+    } catch (e) {
+      console.error(`[Oracle] Failed to resolve ${pred.slug}:`, e.message);
+    }
+  }
+}
+
+/**
+ * Determine the correct answer for a platform prediction by querying DB facts.
+ * Returns the option string ('YES'/'NO') or null if undetermined.
+ */
+async function computeCorrectOption(client, pred, season) {
+  const slug = pred.slug;
+
+  // s1-winner-region: champion from Asia?
+  if (slug.includes('winner-region') || slug.includes('s1-winner-region')) {
+    const { rows: [top] } = await client.query(`
+      SELECT a.country_code FROM agents a
+      ORDER BY a.season_points DESC, a.elo_rating DESC LIMIT 1
+    `);
+    if (!top) return 'NO';
+    const asiaCodes = ['CN','JP','KR','TW','HK','SG','TH','VN','MY','PH'];
+    return asiaCodes.includes((top.country_code || '').toUpperCase()) ? 'YES' : 'NO';
+  }
+
+  // s1-winner-division: from Iron or Bronze?
+  if (slug.includes('winner-division') || slug.includes('s1-winner-division')) {
+    const { rows: [top] } = await client.query(`
+      SELECT a.division FROM agents a
+      ORDER BY a.season_points DESC, a.elo_rating DESC LIMIT 1
+    `);
+    if (!top) return 'NO';
+    return ['Iron','Bronze'].includes(top.division) ? 'YES' : 'NO';
+  }
+
+  // s1-games-over-5000: total games > 5000?
+  if (slug.includes('games-over-5000') || slug.includes('s1-games-over-5000')) {
+    const { rows: [r] } = await client.query(`SELECT COUNT(*) AS cnt FROM games`);
+    return parseInt(r.cnt) > 5000 ? 'YES' : 'NO';
+  }
+
+  // s1-gpt-dominates: GPT-based model at top?
+  if (slug.includes('gpt-dominates') || slug.includes('s1-gpt-dominates')) {
+    const { rows: [top] } = await client.query(`
+      SELECT a.model FROM agents a WHERE a.is_bot = FALSE
+      ORDER BY a.season_points DESC, a.elo_rating DESC LIMIT 1
+    `);
+    if (!top) return 'NO';
+    return (top.model || '').toLowerCase().includes('gpt') ? 'YES' : 'NO';
+  }
+
+  // Generic: expired predictions with majority vote → resolve to majority
+  // (community-consensus fallback for predictions we can't auto-verify)
+  const voteMap = pred.vote_counts || {};
+  const entries = Object.entries(voteMap).map(([k,v]) => ({ opt: k, count: Number(v) }));
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => b.count - a.count);
+  // Only auto-resolve via majority if >70% consensus
+  const total = entries.reduce((s, e) => s + e.count, 0);
+  if (total > 0 && entries[0].count / total >= 0.7) {
+    return entries[0].opt;
+  }
+
+  return null; // cannot determine
+}
+
 async function endSeasonAndStartNext(client, season) {
   console.log(`[Rollover] Ending Season ${season.season_id}: ${season.name}`);
 
@@ -241,12 +374,19 @@ async function snapshot() {
       console.log(`  ${i+1}. ${c.country_code} ${c.country_name}: ${c.total_pts}pts, ${c.agent_count} agents, ELO ${c.avg_elo}`);
     });
 
-    // ── 5. Post warning if <24h left ────────────────────────────
-    if (hoursLeft <= 24) {
-      console.log(`[Season] ⚠️  ENDING IN ${hoursLeft} HOURS — final push!`);
+    // ── 5. Oracle auto-resolution (platform-type predictions) ───
+    try {
+      await autoResolveOraclePredictions(client, season, daysLeft);
+    } catch(e) {
+      console.error('[Oracle] Auto-resolve error:', e.message);
     }
 
-    console.log(`✅ Snapshot complete: ${agents.length} agents ranked in Season ${season.season_id}`);
+    // ── 6. Post warning if <24h left ────────────────────────────
+    if (hoursLeft <= 24) {
+      console.log(`[Season] WARNING: ENDING IN ${hoursLeft} HOURS -- final push!`);
+    }
+
+    console.log(`Snapshot complete: ${agents.length} agents ranked in Season ${season.season_id}`);
   } catch(e) {
     console.error('Snapshot error:', e.message);
     process.exit(1);
