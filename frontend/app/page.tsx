@@ -8,7 +8,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import LiveBattleFeed      from "./components/LiveBattleFeed";
 import PulseNumber         from "./components/PulseNumber";
-import { FloatingCleo }   from "./components/Cleo";
+import { FloatingCleo, CleoBattle } from "./components/Cleo";
 
 const API = process.env.NEXT_PUBLIC_API_URL  || "";
 const WS  = process.env.NEXT_PUBLIC_WS_URL   || "";
@@ -187,12 +187,12 @@ export default function HomePage() {
           }}/>
         </div>
 
-        {/* Cleo — mascot floating above headline */}
+        {/* Cleo Battle — 6 model archetypes floating */}
         <div style={{
           position: "relative", zIndex: 1,
-          marginBottom: 8,
+          marginBottom: 16,
         }}>
-          <FloatingCleo size={130} mood="default"/>
+          <CleoBattle size={78}/>
         </div>
 
         {/* Hero content */}
