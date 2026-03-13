@@ -1,5 +1,5 @@
 /**
- * AllClaw - Probe 注册 & 认证 API
+ * AllClaw - Probe Registration & Auth API
  */
 const crypto = require('crypto');
 const pool = require('../db/pool');
@@ -16,13 +16,12 @@ async function probeRoutes(fastify) {
   // ── POST /api/v1/probe/register ──────────────────────────────
   fastify.post('/api/v1/probe/register', async (req, reply) => {
     const { public_key, display_name, openclaw_info, platform, arch } = req.body || {};
-    if (!public_key) return reply.status(400).send({ error: '缺少 public_key' });
+    if (!public_key) return reply.status(400).send({ error: 'Missing public_key' });
 
-    // 验证公钥格式
     try {
       crypto.createPublicKey({ key: Buffer.from(public_key, 'base64'), format: 'der', type: 'spki' });
     } catch {
-      return reply.status(400).send({ error: 'public_key 格式无效（需要 Ed25519 spki base64）' });
+      return reply.status(400).send({ error: 'Invalid public_key format (expected Ed25519 spki base64)' });
     }
 
     const agent_id = genId('ag');
@@ -46,22 +45,22 @@ async function probeRoutes(fastify) {
       oc.capabilities || [], oc.extensions || [],
     ]);
 
-    fastify.log.info(`[register] 新 Agent：${agent_id} (${display_name})`);
+    fastify.log.info(`[register] New agent: ${agent_id} (${display_name})`);
 
     return reply.status(201).send({
       agent_id,
       secret_key,
-      message: '注册成功！访问 https://allclaw.io 开始游戏 🎉',
+      message: 'Registration successful! Visit https://allclaw.io to start competing.',
     });
   });
 
   // ── GET /api/v1/auth/challenge ───────────────────────────────
   fastify.get('/api/v1/auth/challenge', async (req, reply) => {
     const { agent_id } = req.query;
-    if (!agent_id) return reply.status(400).send({ error: '缺少 agent_id' });
+    if (!agent_id) return reply.status(400).send({ error: 'Missing agent_id' });
 
     const row = await pool.query('SELECT agent_id FROM agents WHERE agent_id=$1', [agent_id]);
-    if (!row.rows.length) return reply.status(404).send({ error: 'Agent 未注册，请先运行 allclaw-probe register' });
+    if (!row.rows.length) return reply.status(404).send({ error: 'Agent not found. Please run: allclaw-probe register' });
 
     return reply.send(await createChallenge(agent_id));
   });
@@ -70,19 +69,18 @@ async function probeRoutes(fastify) {
   fastify.post('/api/v1/auth/login', async (req, reply) => {
     const { agent_id, challenge_id, signature } = req.body || {};
     if (!agent_id || !challenge_id || !signature)
-      return reply.status(400).send({ error: '缺少 agent_id / challenge_id / signature' });
+      return reply.status(400).send({ error: 'Missing required fields: agent_id, challenge_id, signature' });
 
     const row = await pool.query('SELECT * FROM agents WHERE agent_id=$1', [agent_id]);
-    if (!row.rows.length) return reply.status(404).send({ error: 'Agent 不存在' });
+    if (!row.rows.length) return reply.status(404).send({ error: 'Agent not found' });
     const agent = row.rows[0];
 
     const ch = await consumeChallenge(challenge_id, agent_id);
     if (!ch.valid) return reply.status(401).send({ error: ch.error });
 
     if (!verifySignature(ch.nonce, signature, agent.public_key))
-      return reply.status(401).send({ error: '签名验证失败' });
+      return reply.status(401).send({ error: 'Signature verification failed' });
 
-    // 更新在线状态
     await pool.query('UPDATE agents SET last_seen=NOW(), probe_status=$1 WHERE agent_id=$2',
       ['online', agent_id]);
 
@@ -93,7 +91,7 @@ async function probeRoutes(fastify) {
       provider: agent.oc_provider,
     });
 
-    fastify.log.info(`[login] ${agent_id} (${agent.display_name}) 登录成功`);
+    fastify.log.info(`[login] ${agent_id} (${agent.display_name}) authenticated`);
 
     return reply.send({
       token,
@@ -113,7 +111,7 @@ async function probeRoutes(fastify) {
   // ── GET /api/v1/auth/me ──────────────────────────────────────
   fastify.get('/api/v1/auth/me', { preHandler: authMiddleware }, async (req, reply) => {
     const row = await pool.query('SELECT * FROM agents WHERE agent_id=$1', [req.agent.agent_id]);
-    if (!row.rows.length) return reply.status(404).send({ error: 'Agent 不存在' });
+    if (!row.rows.length) return reply.status(404).send({ error: 'Agent not found' });
     const a = row.rows[0];
     return reply.send({
       agent_id: a.agent_id, display_name: a.display_name,
@@ -127,7 +125,7 @@ async function probeRoutes(fastify) {
   });
 
   // ── GET /api/v1/agents ───────────────────────────────────────
-  // 公开展示墙
+  // Public agent registry wall
   fastify.get('/api/v1/agents', async (req, reply) => {
     const { limit = 50, offset = 0 } = req.query;
     const rows = await pool.query(`

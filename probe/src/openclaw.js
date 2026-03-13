@@ -1,6 +1,6 @@
 /**
- * AllClaw Probe - OpenClaw 配置读取模块
- * 从本机读取 OpenClaw 安装信息和 Agent 配置
+ * AllClaw Probe - OpenClaw config reader
+ * Read OpenClaw installation info and agent config from local machine
  */
 
 const fs = require('fs');
@@ -12,7 +12,7 @@ const HOME = os.homedir();
 const OPENCLAW_DIR = path.join(HOME, '.openclaw');
 
 /**
- * 检测 OpenClaw 是否已安装
+ * Detect OpenClaw installation
  */
 function detectOpenClaw() {
   const result = {
@@ -22,7 +22,7 @@ function detectOpenClaw() {
     config_dir: OPENCLAW_DIR,
   };
 
-  // 检测二进制
+  // Detect binary
   try {
     const binaryPath = execSync('which openclaw 2>/dev/null || where openclaw 2>nul', {
       encoding: 'utf8',
@@ -33,7 +33,7 @@ function detectOpenClaw() {
     }
   } catch (_) {}
 
-  // 检测版本
+  // Detect version
   try {
     const ver = execSync('openclaw --version 2>/dev/null', {
       encoding: 'utf8',
@@ -42,7 +42,7 @@ function detectOpenClaw() {
     result.version = ver.replace(/[^0-9.]/g, '') || ver;
   } catch (_) {}
 
-  // 检测配置目录
+  // Detect config directory
   if (fs.existsSync(OPENCLAW_DIR)) {
     result.installed = true;
   }
@@ -51,7 +51,7 @@ function detectOpenClaw() {
 }
 
 /**
- * 读取 OpenClaw 配置，提取 Agent 信息
+ * Read OpenClaw config and extract agent info
  */
 function readAgentInfo() {
   const info = {
@@ -62,7 +62,7 @@ function readAgentInfo() {
     extensions: [],
   };
 
-  // 尝试读取各种可能的配置文件
+  // Try various config file paths
   const configPaths = [
     path.join(OPENCLAW_DIR, 'config.json'),
     path.join(OPENCLAW_DIR, 'config.yaml'),
@@ -76,11 +76,11 @@ function readAgentInfo() {
         const raw = fs.readFileSync(cfgPath, 'utf8');
         if (cfgPath.endsWith('.json')) {
           const cfg = JSON.parse(raw);
-          // 尝试常见字段名
+          // Try common field names
           info.model = info.model || cfg.model || cfg.defaultModel || cfg.llm?.model;
           info.provider = info.provider || cfg.provider || cfg.llm?.provider;
         }
-        // .env 格式
+        // .env format
         if (cfgPath.endsWith('.env')) {
           const lines = raw.split('\n');
           for (const line of lines) {
@@ -97,7 +97,7 @@ function readAgentInfo() {
     }
   }
 
-  // 从环境变量推断 provider/model
+  // Infer provider/model from environment variables
   if (!info.model) {
     if (process.env.ANTHROPIC_API_KEY) {
       info.provider = info.provider || 'anthropic';
@@ -111,7 +111,7 @@ function readAgentInfo() {
     }
   }
 
-  // 读取已安装的扩展/Skills
+  // Read installed extensions/skills
   const extensionsDir = path.join(OPENCLAW_DIR, 'extensions');
   if (fs.existsSync(extensionsDir)) {
     try {
@@ -119,7 +119,7 @@ function readAgentInfo() {
         fs.statSync(path.join(extensionsDir, f)).isDirectory()
       );
       info.extensions = exts;
-      // 从扩展推断 capabilities
+      // Infer capabilities from extensions
       if (exts.some(e => e.includes('vision') || e.includes('image'))) info.capabilities.push('vision');
       if (exts.some(e => e.includes('code'))) info.capabilities.push('code');
       if (exts.some(e => e.includes('search') || e.includes('web'))) info.capabilities.push('search');
@@ -127,7 +127,7 @@ function readAgentInfo() {
     } catch (_) {}
   }
 
-  // 默认 capabilities
+  // Default capabilities
   if (info.capabilities.length === 0) {
     info.capabilities = ['text', 'reasoning'];
   }
@@ -136,7 +136,7 @@ function readAgentInfo() {
 }
 
 /**
- * 获取完整的本机 Agent 信息
+ * Get full local agent info
  */
 function getFullAgentInfo() {
   const openclaw = detectOpenClaw();

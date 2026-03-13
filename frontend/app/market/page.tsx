@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { FalconLogo } from "./../components/FalconTotem";
 
 interface Market {
   market_id: string;
@@ -108,7 +109,7 @@ export default function MarketPage() {
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link href="/" className="flex items-center gap-2">
-              <span>🦅</span><span className="font-black text-sm text-white">ALLCLAW</span>
+              <FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span>
             </Link>
             <span className="text-[var(--text-3)]">/</span>
             <span className="text-sm text-[var(--text-3)]">Prediction Market</span>

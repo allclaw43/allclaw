@@ -1,5 +1,5 @@
 /**
- * AllClaw - 游戏相关 API
+ * AllClaw - Game API Routes
  */
 
 const debateEngine = require('../games/debate/engine');
@@ -8,9 +8,9 @@ const pool = require('../db/pool');
 
 async function gameRoutes(fastify) {
 
-  // ── 辩论场 ────────────────────────────────────────────────────
+  // ── Debate Arena ─────────────────────────────────────────────
 
-  // 加入对战队列
+  // Join matchmaking queue
   fastify.post('/api/v1/games/debate/queue', { preHandler: authMiddleware }, async (req, reply) => {
     const { agent_id } = req.agent;
     const result = debateEngine.joinQueue(agent_id);
@@ -25,58 +25,57 @@ async function gameRoutes(fastify) {
       return reply.send({
         status: 'waiting',
         position: result.position,
-        message: '正在等待对手...',
+        message: 'Waiting for opponent...',
       });
     }
   });
 
-  // 获取房间状态
+  // Get room state
   fastify.get('/api/v1/games/debate/:roomId', async (req, reply) => {
     const room = debateEngine.getRoom(req.params.roomId);
-    if (!room) return reply.status(404).send({ error: '房间不存在' });
+    if (!room) return reply.status(404).send({ error: 'Room not found' });
     return reply.send(room);
   });
 
-  // 用户耳语
+  // Human whisper hint
   fastify.post('/api/v1/games/debate/:roomId/hint', async (req, reply) => {
     const { roomId } = req.params;
     const { user_id, target, hint } = req.body;
 
     if (!['pro', 'con'].includes(target)) {
-      return reply.status(400).send({ error: 'target 必须是 pro 或 con' });
+      return reply.status(400).send({ error: 'target must be "pro" or "con"' });
     }
     if (!hint || hint.trim().length < 5) {
-      return reply.status(400).send({ error: '耳语内容太短' });
+      return reply.status(400).send({ error: 'Hint too short (min 5 chars)' });
     }
 
     const ok = debateEngine.addUserHint(roomId, user_id, target, hint.trim());
-    if (!ok) return reply.status(400).send({ error: '你已经使用过耳语了' });
+    if (!ok) return reply.status(400).send({ error: 'You have already used your hint' });
 
-    return reply.send({ success: true, message: '耳语已发送，等待 AI 采纳' });
+    return reply.send({ success: true, message: 'Hint delivered — waiting for AI to incorporate' });
   });
 
-  // 用户投票
+  // Audience vote
   fastify.post('/api/v1/games/debate/:roomId/vote', async (req, reply) => {
     const { roomId } = req.params;
     const { user_id, side } = req.body;
 
     if (!['pro', 'con'].includes(side)) {
-      return reply.status(400).send({ error: 'side 必须是 pro 或 con' });
+      return reply.status(400).send({ error: 'side must be "pro" or "con"' });
     }
 
     const ok = debateEngine.vote(roomId, user_id, side);
-    if (!ok) return reply.status(400).send({ error: '投票失败（房间不在投票阶段）' });
+    if (!ok) return reply.status(400).send({ error: 'Vote failed (room not in voting phase)' });
 
     return reply.send({ success: true });
   });
 
-  // 获取进行中的辩论列表（供观战）
+  // Live debates (spectator)
   fastify.get('/api/v1/games/debate/live', async (req, reply) => {
-    // TODO: 从内存/Redis 获取进行中的房间
     return reply.send({ rooms: [], total: 0 });
   });
 
-  // ── 排行榜 ────────────────────────────────────────────────────
+  // ── Leaderboard ───────────────────────────────────────────────
 
   fastify.get('/api/v1/leaderboard', async (req, reply) => {
     const rows = await pool.query(`
@@ -93,5 +92,3 @@ async function gameRoutes(fastify) {
 }
 
 module.exports = { gameRoutes };
-
-// quiz 路由在主文件中注册后追加

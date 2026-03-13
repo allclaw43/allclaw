@@ -1,31 +1,44 @@
 /**
- * AllClaw - 智识竞技场引擎
- * 10题制，AI 抢答，限时 15 秒/题，人类可使用 1 次救援
+ * AllClaw - Knowledge Gauntlet Engine
+ * 10 questions, AI buzz-in, 15s per question, humans get 1 rescue
  */
 
 const crypto = require('crypto');
 
-// 题库（后续接入外部 API 或数据库）
+// Question bank (extend with DB/API integration later)
 const QUESTIONS = [
-  { q: "世界上面积最大的国家是哪个？", a: "俄罗斯", options: ["中国", "俄罗斯", "美国", "加拿大"], category: "地理" },
-  { q: "光在真空中的速度约为多少 km/s？", a: "300000", options: ["150000", "300000", "450000", "1000000"], category: "物理" },
-  { q: "DNA 的全称是什么？", a: "脱氧核糖核酸", options: ["核糖核酸", "脱氧核糖核酸", "腺嘌呤核苷酸", "鸟嘌呤核苷酸"], category: "生物" },
-  { q: "1 + 1 在二进制中等于什么？", a: "10", options: ["2", "10", "11", "01"], category: "计算机" },
-  { q: "莎士比亚是哪个国家的剧作家？", a: "英国", options: ["法国", "德国", "英国", "意大利"], category: "文学" },
-  { q: "哪个元素的化学符号是 Au？", a: "金", options: ["银", "铜", "金", "铂"], category: "化学" },
-  { q: "人体中最长的骨骼是？", a: "股骨", options: ["脊椎", "股骨", "胫骨", "肱骨"], category: "生物" },
-  { q: "互联网的前身 ARPANET 由哪个机构创建？", a: "美国国防部", options: ["NASA", "美国国防部", "MIT", "斯坦福大学"], category: "科技" },
-  { q: "图灵测试由谁提出？", a: "艾伦·图灵", options: ["冯·诺依曼", "艾伦·图灵", "克劳德·香农", "诺伯特·维纳"], category: "计算机" },
-  { q: "相对论 E=mc² 中的 c 代表什么？", a: "光速", options: ["电荷", "光速", "比热容", "碳"], category: "物理" },
-  { q: "全球最深的湖泊是？", a: "贝加尔湖", options: ["里海", "贝加尔湖", "坦噶尼喀湖", "苏必利尔湖"], category: "地理" },
-  { q: "Python 语言的创始人是？", a: "吉多·范罗苏姆", options: ["比尔·盖茨", "吉多·范罗苏姆", "林纳斯·托瓦兹", "詹姆斯·高斯林"], category: "计算机" },
-  { q: "人体内最多的元素（按质量）是？", a: "氧", options: ["碳", "氢", "氧", "氮"], category: "化学" },
-  { q: "第一台现代电子计算机 ENIAC 诞生于哪年？", a: "1946", options: ["1936", "1946", "1956", "1966"], category: "科技" },
-  { q: "月球离地球的平均距离约为多少公里？", a: "384400", options: ["284400", "384400", "484400", "584400"], category: "天文" },
+  { q: "Which country has the largest total area?",                      a: "Russia",          options: ["China","Russia","USA","Canada"],                                  category: "Geography" },
+  { q: "What is the speed of light in a vacuum (km/s)?",               a: "300000",           options: ["150000","300000","450000","1000000"],                             category: "Physics" },
+  { q: "What does DNA stand for?",                                      a: "Deoxyribonucleic Acid", options: ["Ribonucleic Acid","Deoxyribonucleic Acid","Adenine Nucleotide","Guanine Nucleotide"], category: "Biology" },
+  { q: "What is 1 + 1 in binary?",                                     a: "10",               options: ["2","10","11","01"],                                               category: "Computer Science" },
+  { q: "Which country was Shakespeare from?",                           a: "England",          options: ["France","Germany","England","Italy"],                             category: "Literature" },
+  { q: "What is the chemical symbol Au for?",                          a: "Gold",             options: ["Silver","Copper","Gold","Platinum"],                              category: "Chemistry" },
+  { q: "What is the longest bone in the human body?",                  a: "Femur",            options: ["Spine","Femur","Tibia","Humerus"],                                category: "Biology" },
+  { q: "Which organization created ARPANET, the precursor to the internet?", a: "US Department of Defense", options: ["NASA","US Department of Defense","MIT","Stanford University"], category: "Technology" },
+  { q: "Who proposed the Turing Test?",                                a: "Alan Turing",      options: ["John von Neumann","Alan Turing","Claude Shannon","Norbert Wiener"], category: "Computer Science" },
+  { q: "In E=mc², what does 'c' represent?",                           a: "Speed of light",   options: ["Electric charge","Speed of light","Specific heat","Carbon"],      category: "Physics" },
+  { q: "What is the world's deepest lake?",                            a: "Lake Baikal",      options: ["Caspian Sea","Lake Baikal","Lake Tanganyika","Lake Superior"],     category: "Geography" },
+  { q: "Who created the Python programming language?",                 a: "Guido van Rossum", options: ["Bill Gates","Guido van Rossum","Linus Torvalds","James Gosling"],  category: "Computer Science" },
+  { q: "What is the most abundant element in the human body by mass?", a: "Oxygen",           options: ["Carbon","Hydrogen","Oxygen","Nitrogen"],                          category: "Chemistry" },
+  { q: "In what year was ENIAC, the first modern electronic computer, completed?", a: "1946", options: ["1936","1946","1956","1966"],                                       category: "Technology" },
+  { q: "What is the average distance from Earth to the Moon (km)?",   a: "384400",           options: ["284400","384400","484400","584400"],                              category: "Astronomy" },
 ];
 
 const rooms = new Map();
 const waitingAgents = [];
+const connections = new Map();
+
+function registerConnection(agentId, ws) {
+  connections.set(agentId, ws);
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 function createRoom(agentIds) {
   const roomId = `quiz_${crypto.randomBytes(8).toString('hex')}`;
@@ -44,8 +57,8 @@ function createRoom(agentIds) {
     })),
     questions,
     current_q: 0,
-    answers: {},           // { agentId: answer }
-    user_rescues: {},      // { userId: true }
+    answers: {},
+    user_rescues: {},
     timer: null,
     created_at: Date.now(),
   };
@@ -53,17 +66,6 @@ function createRoom(agentIds) {
   rooms.set(roomId, room);
   return room;
 }
-
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-const connections = new Map();
-function registerConnection(agentId, ws) { connections.set(agentId, ws); }
 
 function broadcast(room, event) {
   const msg = JSON.stringify(event);
@@ -108,7 +110,6 @@ async function nextQuestion(room) {
     time_limit: 15000,
   });
 
-  // 请求每个 Agent 回答
   room.agents.forEach(a => {
     const ws = connections.get(a.agent_id);
     if (ws?.readyState === 1) {
@@ -124,32 +125,29 @@ async function nextQuestion(room) {
     }
   });
 
-  // 15秒后进入下一题
   room.timer = setTimeout(() => evaluateAnswers(room), 15000);
 }
 
 function handleAnswer(roomId, agentId, answer, timeMs) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing') return;
-  if (room.answers[agentId] !== undefined) return; // 已答过
+  if (room.answers[agentId] !== undefined) return; // already answered
 
   room.answers[agentId] = { answer, time_ms: timeMs || (Date.now() - room.q_start) };
 
-  // 所有 Agent 都答完，立即评分
   if (Object.keys(room.answers).length === room.agents.length) {
     clearTimeout(room.timer);
     evaluateAnswers(room);
   }
 }
 
-function handleUserRescue(roomId, userId, agentId, correctAnswer) {
+function handleUserRescue(roomId, userId, agentId) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'playing') return false;
-  if (room.user_rescues[userId]) return false; // 已用过救援
+  if (room.user_rescues[userId]) return false; // already used
 
   room.user_rescues[userId] = true;
 
-  // 强制给目标 Agent 正确答案
   if (!room.answers[agentId]) {
     const q = room.questions[room.current_q];
     room.answers[agentId] = { answer: q.a, time_ms: Date.now() - room.q_start, rescued: true };
@@ -159,7 +157,7 @@ function handleUserRescue(roomId, userId, agentId, correctAnswer) {
     type: 'quiz:rescue_used',
     user_id: userId,
     target_agent: agentId,
-    message: `观众 ${userId.slice(0, 8)} 使用了救援！`,
+    message: `Audience member ${userId.slice(0, 8)} used their rescue on this agent!`,
   });
 
   return true;
@@ -180,7 +178,7 @@ function evaluateAnswers(room) {
 
     results.push({
       agent_id: a.agent_id,
-      answer: ans?.answer || '未作答',
+      answer: ans?.answer || 'No answer',
       correct: isCorrect,
       points,
       time_ms: ans?.time_ms || 15000,
@@ -215,14 +213,18 @@ function endGame(room) {
     })),
     winner: sorted[0]?.agent_id,
   });
+
+  // TODO: persist ELO + points to database
 }
 
 function joinQueue(agentId) {
-  if (waitingAgents.includes(agentId)) return { matched: false, position: waitingAgents.indexOf(agentId) + 1 };
+  if (waitingAgents.includes(agentId)) {
+    return { matched: false, position: waitingAgents.indexOf(agentId) + 1 };
+  }
 
   waitingAgents.push(agentId);
 
-  // 凑够 2-4 人就开局
+  // Start with 2–4 players
   if (waitingAgents.length >= 2) {
     const players = waitingAgents.splice(0, Math.min(4, waitingAgents.length));
     const room = createRoom(players);
@@ -233,6 +235,8 @@ function joinQueue(agentId) {
   return { matched: false, position: waitingAgents.length };
 }
 
-function getRoom(roomId) { return rooms.get(roomId); }
+function getRoom(roomId) {
+  return rooms.get(roomId);
+}
 
 module.exports = { createRoom, startQuiz, handleAnswer, handleUserRescue, joinQueue, getRoom, registerConnection };

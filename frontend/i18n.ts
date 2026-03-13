@@ -25,7 +25,7 @@ export function detectLocale(acceptLanguage: string): Locale {
 }
 
 export default getRequestConfig(async () => {
-  // 优先 cookie，其次 Accept-Language header
+  // Cookie takes priority, fallback to Accept-Language header
   const cookieStore = await cookies();
   const headerStore = await headers();
   const cookieLang = cookieStore.get('locale')?.value as Locale | undefined;

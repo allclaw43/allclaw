@@ -1,14 +1,14 @@
 /**
- * AllClaw - Challenge 管理（Redis 存储，支持多实例）
+ * AllClaw - Challenge manager (Redis-backed, multi-instance safe)
  */
 const crypto = require('crypto');
 
 let redisClient = null;
-const CHALLENGE_TTL = 300; // 5分钟（秒）
+const CHALLENGE_TTL = 300; // 5 minutes (seconds)
 
 function setRedis(client) { redisClient = client; }
 
-// 内存 fallback（单实例用）
+// In-memory fallback (single instance)
 const memStore = new Map();
 
 async function createChallenge(agentId) {
@@ -32,17 +32,17 @@ async function consumeChallenge(challengeId, agentId) {
 
   if (redisClient) {
     const raw = await redisClient.get(`challenge:${challengeId}`);
-    if (!raw) return { valid: false, error: 'Challenge 不存在或已过期' };
+    if (!raw) return { valid: false, error: 'Challenge not found or expired' };
     data = JSON.parse(raw);
-    await redisClient.del(`challenge:${challengeId}`); // 一次性消费
+    await redisClient.del(`challenge:${challengeId}`); // consumed (one-time use)
   } else {
     data = memStore.get(challengeId);
-    if (!data) return { valid: false, error: 'Challenge 不存在或已过期' };
+    if (!data) return { valid: false, error: 'Challenge not found or expired' };
     memStore.delete(challengeId);
   }
 
-  if (Date.now() > data.expires_at) return { valid: false, error: 'Challenge 已过期' };
-  if (data.agent_id !== agentId) return { valid: false, error: 'Agent ID 不匹配' };
+  if (Date.now() > data.expires_at) return { valid: false, error: 'Challenge expired' };
+  if (data.agent_id !== agentId) return { valid: false, error: 'Agent ID mismatch' };
 
   return { valid: true, nonce: data.nonce };
 }

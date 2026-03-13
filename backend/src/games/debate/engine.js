@@ -1,32 +1,34 @@
 /**
- * AllClaw - AI 辩论场引擎
- * 负责：配对、发起辩论、收集 Agent 回复、广播状态
+ * AllClaw - Debate Arena Engine
+ * Handles: matchmaking, debate flow, agent responses, state broadcast
  */
 
 const crypto = require('crypto');
 
-// 辩论话题库
+// Debate topic library
 const TOPICS = [
-  "AI 将在 10 年内取代大多数白领工作",
-  "开源 AI 比闭源 AI 更有利于人类社会",
-  "社交媒体弊大于利",
-  "元宇宙是未来还是泡沫",
-  "碳中和应该优先于经济发展",
-  "人类应该移民火星",
-  "加密货币会取代法定货币",
-  "远程工作是未来的主流工作方式",
-  "通用人工智能（AGI）的出现是好事",
-  "互联网让人类更团结还是更分裂",
+  "AI will replace most white-collar jobs within 10 years",
+  "Open-source AI is more beneficial to humanity than closed-source AI",
+  "Social media does more harm than good",
+  "The Metaverse is the future, not a bubble",
+  "Carbon neutrality should take priority over economic growth",
+  "Humanity should colonize Mars",
+  "Cryptocurrency will replace fiat currency",
+  "Remote work is the dominant model of the future",
+  "The arrival of AGI is a net positive for humanity",
+  "The internet makes humanity more united than divided",
+  "Regulation of AI development should be globally mandated",
+  "Nuclear energy is essential to solving the climate crisis",
 ];
 
-// 辩论房间存储（替换为 Redis）
+// Room storage (replace with Redis in production)
 const rooms = new Map();
 
-// WebSocket 连接存储 { agentId → ws }
+// WebSocket connections { agentId → ws }
 const connections = new Map();
 
 /**
- * 创建辩论房间
+ * Create a new debate room
  */
 function createRoom(proAgentId, conAgentId) {
   const roomId = `debate_${crypto.randomBytes(8).toString('hex')}`;
@@ -36,7 +38,7 @@ function createRoom(proAgentId, conAgentId) {
     room_id: roomId,
     game_type: 'debate',
     topic,
-    status: 'intro',     // intro → round → voting → ended
+    status: 'intro',       // intro → round → voting → ended
     round: 0,
     max_rounds: 3,
     pro_agent: proAgentId,
@@ -44,7 +46,7 @@ function createRoom(proAgentId, conAgentId) {
     current_turn: 'pro',
     messages: [],
     votes: { pro: 0, con: 0 },
-    user_hints: [],       // 用户耳语
+    user_hints: [],
     winner: null,
     created_at: Date.now(),
     turn_deadline: null,
@@ -55,35 +57,31 @@ function createRoom(proAgentId, conAgentId) {
 }
 
 /**
- * 注册 WebSocket 连接
+ * Register a WebSocket connection for an agent
  */
 function registerConnection(agentId, ws) {
   connections.set(agentId, ws);
 }
 
 /**
- * 向房间内所有人广播
+ * Broadcast an event to all participants in the room
  */
 function broadcast(room, event) {
   const msg = JSON.stringify(event);
-
-  // 向两位 Agent 发送
   [room.pro_agent, room.con_agent].forEach(agentId => {
     const ws = connections.get(agentId);
     if (ws && ws.readyState === 1) ws.send(msg);
   });
-
-  // TODO: 向观众 WebSocket 广播
+  // TODO: broadcast to spectator WebSocket connections
 }
 
 /**
- * 开始辩论
+ * Start a debate
  */
 async function startDebate(roomId) {
   const room = rooms.get(roomId);
   if (!room) throw new Error('Room not found');
 
-  // 通知双方辩题和角色
   broadcast(room, {
     type: 'debate:start',
     room_id: roomId,
@@ -97,23 +95,20 @@ async function startDebate(roomId) {
 
   room.status = 'round';
   room.round = 1;
-
-  // 发送第一轮提示给正方
   await requestTurn(room);
 }
 
 /**
- * 请求当前轮次的 Agent 发言
+ * Request the current agent to speak
  */
 async function requestTurn(room) {
   const agentId = room.current_turn === 'pro' ? room.pro_agent : room.con_agent;
   const side = room.current_turn;
 
-  room.turn_deadline = Date.now() + 30000; // 30秒限时
+  room.turn_deadline = Date.now() + 30000; // 30s time limit
 
-  // 构造发给 Agent 的 prompt
   const history = room.messages.map(m =>
-    `[${m.side === 'pro' ? '正方' : '反方'} R${m.round}] ${m.content}`
+    `[${m.side === 'pro' ? 'PRO' : 'CON'} R${m.round}] ${m.content}`
   ).join('\n');
 
   const userHints = room.user_hints
@@ -124,9 +119,8 @@ async function requestTurn(room) {
     if (hint) hint.delivered = true;
   });
 
-  const prompt = side === 'pro'
-    ? `你是辩论正方，为"${room.topic}"持支持立场。\n\n当前是第 ${room.round} 轮（共 ${room.max_rounds} 轮）。\n\n${history ? `历史发言：\n${history}\n\n` : ''}${userHints.length ? `观众给你的提示（你可以选择是否采纳）：${userHints.join('；')}\n\n` : ''}请发表你的论点（100-200字，简洁有力）：`
-    : `你是辩论反方，为"${room.topic}"持反对立场。\n\n当前是第 ${room.round} 轮（共 ${room.max_rounds} 轮）。\n\n${history ? `历史发言：\n${history}\n\n` : ''}${userHints.length ? `观众给你的提示（你可以选择是否采纳）：${userHints.join('；')}\n\n` : ''}请发表你的反驳（100-200字，简洁有力）：`;
+  const roleLabel = side === 'pro' ? 'PRO (supporting)' : 'CON (opposing)';
+  const prompt = `You are arguing the ${roleLabel} side of: "${room.topic}".\n\nRound ${room.round} of ${room.max_rounds}.\n\n${history ? `Debate history:\n${history}\n\n` : ''}${userHints.length ? `Audience hint (you may use it): ${userHints.join('; ')}\n\n` : ''}State your argument concisely (100–200 words):`;
 
   const ws = connections.get(agentId);
   if (ws && ws.readyState === 1) {
@@ -139,47 +133,43 @@ async function requestTurn(room) {
       round: room.round,
     }));
   } else {
-    // Agent 离线，自动弃权
+    // Agent offline — auto-forfeit
     setTimeout(() => handleTimeout(room), 5000);
   }
 }
 
 /**
- * 处理 Agent 发言
+ * Handle an agent speech submission
  */
 async function handleAgentSpeech(roomId, agentId, content) {
   const room = rooms.get(roomId);
   if (!room || room.status !== 'round') return;
 
   const side = agentId === room.pro_agent ? 'pro' : 'con';
-  if (room.current_turn !== side) return; // 不是该 Agent 的回合
+  if (room.current_turn !== side) return;
 
   const message = {
     agent_id: agentId,
     side,
-    content: content.slice(0, 500), // 限制长度
+    content: content.slice(0, 500),
     round: room.round,
     timestamp: Date.now(),
   };
 
   room.messages.push(message);
 
-  // 广播给观众
   broadcast(room, {
     type: 'debate:message',
     room_id: roomId,
     message,
   });
 
-  // 切换发言方
   if (room.current_turn === 'pro') {
     room.current_turn = 'con';
     await requestTurn(room);
   } else {
-    // 本轮结束
     room.round++;
     if (room.round > room.max_rounds) {
-      // 进入投票
       await startVoting(room);
     } else {
       room.current_turn = 'pro';
@@ -189,13 +179,12 @@ async function handleAgentSpeech(roomId, agentId, content) {
 }
 
 /**
- * 处理用户耳语
+ * Record a user whisper hint
  */
 function addUserHint(roomId, userId, target, hint) {
   const room = rooms.get(roomId);
   if (!room) return false;
 
-  // 每个用户只能耳语一次
   const alreadyUsed = room.user_hints.some(h => h.user_id === userId);
   if (alreadyUsed) return false;
 
@@ -204,24 +193,21 @@ function addUserHint(roomId, userId, target, hint) {
 }
 
 /**
- * 开始投票阶段
+ * Begin voting phase
  */
 async function startVoting(room) {
   room.status = 'voting';
-
   broadcast(room, {
     type: 'debate:voting_start',
     room_id: room.room_id,
-    duration: 30000, // 30秒投票
+    duration: 30000,
     messages_summary: room.messages,
   });
-
-  // 30秒后结束
   setTimeout(() => endGame(room), 30000);
 }
 
 /**
- * 用户投票
+ * Audience vote
  */
 function vote(roomId, userId, side) {
   const room = rooms.get(roomId);
@@ -232,7 +218,7 @@ function vote(roomId, userId, side) {
 }
 
 /**
- * 结束游戏
+ * End the game and declare a winner
  */
 async function endGame(room) {
   room.status = 'ended';
@@ -246,27 +232,28 @@ async function endGame(room) {
     winner_agent: room.winner === 'pro' ? room.pro_agent : room.con_agent,
   });
 
-  // TODO: 更新数据库 ELO 评分
+  // TODO: update ELO ratings in database
 }
 
 /**
- * 超时处理
+ * Handle turn timeout — auto-forfeit
  */
 function handleTimeout(room) {
   const forfeitSide = room.current_turn;
-  const content = `[系统] ${forfeitSide === 'pro' ? '正方' : '反方'} Agent 未在规定时间内发言，本轮弃权。`;
-  handleAgentSpeech(room.room_id, forfeitSide === 'pro' ? room.pro_agent : room.con_agent, content);
+  const agentId = forfeitSide === 'pro' ? room.pro_agent : room.con_agent;
+  const content = `[SYSTEM] ${forfeitSide.toUpperCase()} agent failed to respond in time. Turn forfeited.`;
+  handleAgentSpeech(room.room_id, agentId, content);
 }
 
 /**
- * 获取房间状态
+ * Get room state
  */
 function getRoom(roomId) {
   return rooms.get(roomId);
 }
 
 /**
- * 匹配等待队列
+ * Matchmaking queue
  */
 const waitingQueue = [];
 

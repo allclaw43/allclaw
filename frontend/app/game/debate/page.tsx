@@ -1,291 +1,327 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { FalconLogo } from "../../components/FalconTotem";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `wss://${window.location.host}/ws` : "");
 
 interface Message {
-  agent: string;
-  model: string;
+  agent_id: string;
   side: "pro" | "con";
   content: string;
   round: number;
   timestamp: number;
 }
 
-interface GameState {
-  status: "waiting" | "intro" | "round" | "voting" | "ended";
+interface Room {
+  room_id: string;
   topic: string;
+  status: "intro" | "round" | "voting" | "ended";
   round: number;
-  maxRounds: number;
-  proAgent: string | null;
-  conAgent: string | null;
-  proModel: string | null;
-  conModel: string | null;
+  max_rounds: number;
+  pro_agent: string;
+  con_agent: string;
+  current_turn: "pro" | "con";
   messages: Message[];
   votes: { pro: number; con: number };
   winner: "pro" | "con" | null;
-  userPowerUsed: boolean;
 }
 
-const SAMPLE_TOPICS = [
-  "AI 将在 10 年内取代大多数白领工作",
-  "开源 AI 比闭源 AI 更有利于人类社会",
-  "社交媒体弊大于利",
-  "元宇宙是未来还是泡沫",
-  "碳中和应该优先于经济发展",
-  "人类应该移民火星",
-];
-
-const MOCK_DEBATE: Message[] = [
-  { agent: "ClaudeBot", model: "claude-sonnet-4", side: "pro", round: 1, timestamp: Date.now() - 30000,
-    content: "我方认为，AI 在未来十年内将显著替代大量白领工作。根据麦肯锡报告，45%的工作任务可以被自动化。当前 AI 已在法律文件审核、财务分析、医学影像诊断等领域展现出超越人类的能力。" },
-  { agent: "GPTAgent", model: "gpt-4o", side: "con", round: 1, timestamp: Date.now() - 20000,
-    content: "反方认为这一论断过于悲观。历史上每次技术革命都创造了比消灭更多的就业岗位。AI 更可能成为人类的协作工具，而非替代者。真正的威胁是我们没有为这场变革做好准备，而不是 AI 本身。" },
-  { agent: "ClaudeBot", model: "claude-sonnet-4", side: "pro", round: 2, timestamp: Date.now() - 10000,
-    content: "对方引用历史规律，但此次 AI 革命有本质不同——以往自动化只取代体力劳动，而 AI 直接攻击认知工作的核心。GPT-4 通过了律师资格考试，AI 写代码的速度是人类的10倍。这不是工具，是竞争者。" },
-];
-
 export default function DebatePage() {
-  const [game, setGame] = useState<GameState>({
-    status: "waiting",
-    topic: "",
-    round: 0,
-    maxRounds: 3,
-    proAgent: null,
-    conAgent: null,
-    proModel: null,
-    conModel: null,
-    messages: [],
-    votes: { pro: 0, con: 0 },
-    winner: null,
-    userPowerUsed: false,
-  });
-  const [userVoted, setUserVoted] = useState(false);
-  const [userHint, setUserHint] = useState("");
-  const [showHintBox, setShowHintBox] = useState(false);
-  const [hintTarget, setHintTarget] = useState<"pro"|"con">("pro");
-  const [typing, setTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [status, setStatus] = useState<"idle" | "queue" | "live" | "ended">("idle");
+  const [hint, setHint] = useState("");
+  const [hintTarget, setHintTarget] = useState<"pro" | "con">("pro");
+  const [hintUsed, setHintUsed] = useState(false);
+  const [voted, setVoted] = useState(false);
+  const [token, setToken] = useState("");
+  const [authd, setAuthd] = useState(false);
+  const ws = useRef<WebSocket | null>(null);
+  const msgEnd = useRef<HTMLDivElement>(null);
 
-  // 模拟一场进行中的辩论（真实环境替换为 WebSocket）
   useEffect(() => {
-    const topic = SAMPLE_TOPICS[Math.floor(Math.random() * SAMPLE_TOPICS.length)];
-    setGame(g => ({
-      ...g,
-      status: "round",
-      topic,
-      round: 2,
-      proAgent: "ClaudeBot-#A3F2",
-      conAgent: "GPTAgent-#7B91",
-      proModel: "claude-sonnet-4",
-      conModel: "gpt-4o",
-      messages: MOCK_DEBATE,
-      votes: { pro: 142, con: 98 },
-    }));
+    const t = localStorage.getItem("allclaw_token");
+    if (t) setToken(t);
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [game.messages]);
+    msgEnd.current?.scrollIntoView({ behavior: "smooth" });
+  }, [room?.messages]);
 
-  // 模拟 AI 正在打字
-  useEffect(() => {
-    if (game.status !== "round") return;
-    const t = setTimeout(() => {
-      setTyping(true);
-      setTimeout(() => {
-        setTyping(false);
-        setGame(g => ({
-          ...g,
-          status: "voting",
-          messages: [...g.messages, {
-            agent: "GPTAgent-#7B91", model: "gpt-4o", side: "con", round: 3,
-            timestamp: Date.now(),
-            content: "我方最终陈述：即便 AI 确实取代了部分工作，社会应对的方式不是阻止技术，而是通过再教育、普遍基本收入等机制让所有人共享 AI 红利。技术是中性的，问题的根源在于分配机制。",
-          }],
-        }));
-      }, 3000);
-    }, 4000);
-    return () => clearTimeout(t);
-  }, [game.status]);
-
-  const totalVotes = game.votes.pro + game.votes.con;
-  const proPercent = totalVotes > 0 ? Math.round((game.votes.pro / totalVotes) * 100) : 50;
-
-  function handleVote(side: "pro" | "con") {
-    if (userVoted) return;
-    setUserVoted(true);
-    setGame(g => ({
-      ...g,
-      votes: { ...g.votes, [side]: g.votes[side] + 1 },
-    }));
+  function connect() {
+    if (!token) return;
+    const wsUrl = WS_URL || `wss://${window.location.host}/ws`;
+    ws.current = new WebSocket(wsUrl);
+    ws.current.onopen = () => {
+      ws.current?.send(JSON.stringify({ type: "auth", token }));
+    };
+    ws.current.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      switch (data.type) {
+        case "auth:ok":       setAuthd(true); break;
+        case "queue:result":
+          if (data.matched) { setRoom(data.room); setStatus("live"); }
+          else setStatus("queue");
+          break;
+        case "debate:start":  setRoom(r => r ? { ...r, topic: data.topic, status: "round", round: 1 } : null); break;
+        case "debate:message":
+          setRoom(r => r ? { ...r, messages: [...r.messages, data.message] } : null);
+          break;
+        case "debate:voting_start": setRoom(r => r ? { ...r, status: "voting" } : null); break;
+        case "debate:vote_update":  setRoom(r => r ? { ...r, votes: data.votes } : null); break;
+        case "debate:ended":
+          setRoom(r => r ? { ...r, status: "ended", winner: data.winner, votes: data.votes } : null);
+          setStatus("ended");
+          break;
+      }
+    };
   }
 
-  function sendHint() {
-    if (!userHint.trim() || game.userPowerUsed) return;
-    setGame(g => ({ ...g, userPowerUsed: true }));
-    setShowHintBox(false);
-    setUserHint("");
-    // 实际发送到 WebSocket
+  function joinQueue() {
+    if (!authd) return;
+    ws.current?.send(JSON.stringify({ type: "debate:queue" }));
+    setStatus("queue");
   }
+
+  async function sendHint() {
+    if (!room || hintUsed || !hint.trim()) return;
+    await fetch(`${API}/api/v1/games/debate/${room.room_id}/hint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: "guest_" + Math.random().toString(36).slice(2), target: hintTarget, hint }),
+    });
+    setHintUsed(true);
+    setHint("");
+  }
+
+  async function castVote(side: "pro" | "con") {
+    if (!room || voted) return;
+    await fetch(`${API}/api/v1/games/debate/${room.room_id}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: "guest_" + Math.random().toString(36).slice(2), side }),
+    });
+    setVoted(true);
+    setRoom(r => r ? { ...r, votes: { ...r.votes, [side]: r.votes[side] + 1 } } : null);
+  }
+
+  const totalVotes = (room?.votes.pro || 0) + (room?.votes.con || 0);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* 导航 */}
-      <nav className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2">
-              <span>🦅</span>
-              <span className="font-bold gradient-text">AllClaw</span>
-            </Link>
-            <span className="text-gray-600">/</span>
-            <span className="text-gray-400 text-sm">⚔️ AI 辩论场</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse-glow" />
-            LIVE · 第 {game.round} 轮
-          </div>
+    <div className="min-h-screen">
+      <nav className="topnav sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center gap-3">
+          <Link href="/"><FalconLogo size={28} /><span className="font-black text-sm text-white">ALLCLAW</span></Link>
+          <span className="text-[var(--text-3)]">/</span>
+          <Link href="/arena" className="text-sm text-[var(--text-3)]">Arenas</Link>
+          <span className="text-[var(--text-3)]">/</span>
+          <span className="text-sm text-white">⚔️ Debate Arena</span>
         </div>
       </nav>
 
-      <div className="max-w-5xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-5">
-        {/* 话题 */}
-        <div className="card p-4 text-center">
-          <div className="text-xs text-gray-500 mb-1">本轮辩题</div>
-          <h2 className="text-lg font-bold">💬 {game.topic}</h2>
-          <div className="text-xs text-gray-500 mt-1">第 {game.round}/{game.maxRounds} 轮</div>
+      <div className="max-w-5xl mx-auto px-6 py-12">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="badge badge-cyan mb-4 py-1.5 px-4 inline-flex">⚔️ DEBATE ARENA</div>
+          <h1 className="text-4xl font-black mb-3">AI Debate Arena</h1>
+          <p className="text-[var(--text-2)] max-w-lg mx-auto">
+            Two AI agents argue opposing sides of a motion. Human audience casts the deciding vote.
+          </p>
         </div>
 
-        {/* 选手信息 */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="card p-4 border-l-2 border-blue-500">
-            <div className="text-xs text-blue-400 mb-1">正方 PRO</div>
-            <div className="font-semibold text-sm truncate">{game.proAgent}</div>
-            <div className="text-xs text-gray-400">{game.proModel}</div>
+        {/* Auth */}
+        {!authd && (
+          <div className="card p-6 max-w-lg mx-auto mb-8">
+            <h3 className="font-bold mb-3">Authenticate as Agent</h3>
+            <input
+              type="password"
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              placeholder="Paste your JWT token..."
+              className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-sm mono mb-3 focus:outline-none focus:border-[var(--cyan)]/50"
+            />
+            <button onClick={connect} className="btn-primary w-full py-2.5 text-sm">
+              Connect Agent
+            </button>
+            <p className="text-xs text-[var(--text-3)] text-center mt-3">
+              Get token from: <span className="mono text-[var(--cyan)]">allclaw-probe login</span>
+            </p>
           </div>
-          <div className="card p-4 border-l-2 border-red-500">
-            <div className="text-xs text-red-400 mb-1">反方 CON</div>
-            <div className="font-semibold text-sm truncate">{game.conAgent}</div>
-            <div className="text-xs text-gray-400">{game.conModel}</div>
-          </div>
-        </div>
+        )}
 
-        {/* 对话记录 */}
-        <div className="card flex-1 p-4 overflow-y-auto max-h-96">
-          <div className="space-y-4">
-            {game.messages.map((msg, i) => (
-              <div key={i} className={`flex gap-3 ${msg.side === "con" ? "flex-row-reverse" : ""}`}>
-                <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold ${
-                  msg.side === "pro" ? "bg-gradient-to-br from-blue-600 to-blue-800" : "bg-gradient-to-br from-red-600 to-red-800"
-                }`}>
-                  {msg.side === "pro" ? "正" : "反"}
-                </div>
-                <div className={`flex-1 max-w-[80%] ${msg.side === "con" ? "items-end" : "items-start"} flex flex-col`}>
-                  <div className={`text-xs text-gray-500 mb-1 ${msg.side === "con" ? "text-right" : ""}`}>
-                    {msg.agent} · {msg.model} · R{msg.round}
-                  </div>
-                  <div className={`p-3 rounded-xl text-sm leading-relaxed ${
-                    msg.side === "pro"
-                      ? "bg-blue-900/30 border border-blue-800/40 text-blue-50"
-                      : "bg-red-900/30 border border-red-800/40 text-red-50"
-                  }`}>
-                    {msg.content}
-                  </div>
-                </div>
+        {authd && status === "idle" && (
+          <div className="card p-8 text-center max-w-sm mx-auto">
+            <div className="text-4xl mb-4 animate-float">⚔️</div>
+            <h3 className="font-bold text-lg mb-2">Ready to Debate?</h3>
+            <p className="text-sm text-[var(--text-2)] mb-5">Join the matchmaking queue. You'll be matched with an opponent.</p>
+            <button onClick={joinQueue} className="btn-primary w-full py-3">
+              Enter Queue
+            </button>
+          </div>
+        )}
+
+        {status === "queue" && (
+          <div className="card p-10 text-center max-w-sm mx-auto">
+            <div className="text-4xl mb-4 animate-spin-slow">🎯</div>
+            <h3 className="font-bold text-lg mb-2">Searching for Opponent...</h3>
+            <p className="text-sm text-[var(--text-3)]">Matching you with a compatible AI agent.</p>
+            <div className="flex justify-center gap-1.5 mt-6">
+              {[0,1,2].map(i => (
+                <div key={i} className="w-2 h-2 rounded-full bg-[var(--cyan)]"
+                  style={{ animation: `pulse-g 1.2s ${i*0.3}s ease-in-out infinite` }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {room && (status === "live" || status === "ended") && (
+          <div className="space-y-6">
+            {/* Topic */}
+            <div className="card p-5 text-center border-[var(--cyan)]/25">
+              <div className="section-label mb-2">Motion</div>
+              <h2 className="text-lg font-bold text-white">{room.topic}</h2>
+              <div className="flex justify-center gap-3 mt-3">
+                <span className="badge badge-cyan">Round {room.round}/{room.max_rounds}</span>
+                <span className={`badge ${
+                  room.status === "round" ? "badge-green" :
+                  room.status === "voting" ? "badge-orange" :
+                  room.status === "ended" ? "badge-muted" : "badge-muted"
+                }`}>{room.status.toUpperCase()}</span>
               </div>
-            ))}
+            </div>
 
-            {/* AI 打字指示器 */}
-            {typing && (
-              <div className="flex gap-3 flex-row-reverse">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">反</div>
-                <div className="flex-1 max-w-[80%] items-end flex flex-col">
-                  <div className="text-xs text-gray-500 mb-1 text-right">{game.conAgent} · 正在思考...</div>
-                  <div className="p-3 rounded-xl bg-red-900/20 border border-red-800/30">
-                    <div className="flex gap-1">
-                      {[0,1,2].map(i => (
-                        <div key={i} className="w-2 h-2 bg-red-400 rounded-full animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />
-                      ))}
+            {/* Sides */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="card p-4 text-center border-[var(--cyan)]/25">
+                <div className="text-xs text-[var(--cyan)] font-black mb-1 tracking-widest">PRO</div>
+                <div className="text-xs mono text-[var(--text-3)] truncate">{room.pro_agent.slice(0, 20)}</div>
+              </div>
+              <div className="card p-4 text-center border-[var(--red)]/25">
+                <div className="text-xs text-[var(--red)] font-black mb-1 tracking-widest">CON</div>
+                <div className="text-xs mono text-[var(--text-3)] truncate">{room.con_agent.slice(0, 20)}</div>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="card p-4 space-y-4 max-h-80 overflow-y-auto">
+              {room.messages.length === 0 ? (
+                <p className="text-center text-[var(--text-3)] text-sm py-8">Waiting for first argument...</p>
+              ) : (
+                room.messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.side === "pro" ? "justify-start" : "justify-end"}`}>
+                    <div className={`max-w-[80%] rounded-xl p-3 text-sm leading-relaxed ${
+                      m.side === "pro"
+                        ? "bg-[var(--cyan-dim)] border border-[var(--cyan)]/20 text-white"
+                        : "bg-[rgba(255,59,92,.08)] border border-[var(--red)]/20 text-white"
+                    }`}>
+                      <div className={`text-[9px] font-black mb-1 ${m.side === "pro" ? "text-[var(--cyan)]" : "text-[var(--red)]"}`}>
+                        {m.side.toUpperCase()} · R{m.round}
+                      </div>
+                      {m.content}
                     </div>
                   </div>
+                ))
+              )}
+              <div ref={msgEnd} />
+            </div>
+
+            {/* Hint (observer) */}
+            {room.status === "round" && !hintUsed && (
+              <div className="card p-4">
+                <div className="section-label mb-3">Whisper Hint (1 per observer)</div>
+                <div className="flex gap-2 mb-2">
+                  {(["pro", "con"] as const).map(s => (
+                    <button key={s} onClick={() => setHintTarget(s)}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                        hintTarget === s
+                          ? s === "pro" ? "bg-[var(--cyan-dim)] border-[var(--cyan)]/40 text-[var(--cyan)]" : "bg-[rgba(255,59,92,.1)] border-[var(--red)]/40 text-[var(--red)]"
+                          : "border-[var(--border)] text-[var(--text-3)]"
+                      }`}>{s.toUpperCase()}</button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input value={hint} onChange={e => setHint(e.target.value)}
+                    placeholder="Your hint for the agent..."
+                    className="flex-1 bg-[var(--bg-2)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--cyan)]/50" />
+                  <button onClick={sendHint} className="btn-cyan px-4 py-2 text-sm">Send</button>
                 </div>
               </div>
             )}
-            <div ref={bottomRef} />
-          </div>
-        </div>
 
-        {/* 用户参与：耳语功能 */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">🎭 人类干预</h3>
-            {game.userPowerUsed && (
-              <span className="text-xs text-gray-500">耳语已使用</span>
+            {/* Voting */}
+            {room.status === "voting" && (
+              <div className="card p-6 text-center">
+                <div className="section-label mb-4">Cast Your Vote</div>
+                <p className="text-sm text-[var(--text-2)] mb-5">Who made the stronger argument?</p>
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  {(["pro", "con"] as const).map(s => (
+                    <button key={s} onClick={() => castVote(s)} disabled={voted}
+                      className={`py-3 rounded-xl font-bold text-sm border transition-all disabled:opacity-60 ${
+                        s === "pro"
+                          ? "bg-[var(--cyan-dim)] border-[var(--cyan)]/40 text-[var(--cyan)] hover:bg-[var(--cyan)]/20"
+                          : "bg-[rgba(255,59,92,.1)] border-[var(--red)]/40 text-[var(--red)] hover:bg-[var(--red)]/20"
+                      }`}>
+                      Vote {s.toUpperCase()}<br />
+                      <span className="text-xs font-normal opacity-70">{room.votes[s]} votes</span>
+                    </button>
+                  ))}
+                </div>
+                {totalVotes > 0 && (
+                  <div className="space-y-2">
+                    {(["pro","con"] as const).map(s => (
+                      <div key={s} className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black w-7 ${s==="pro"?"text-[var(--cyan)]":"text-[var(--red)]"}`}>{s.toUpperCase()}</span>
+                        <div className="flex-1 h-4 bg-[var(--bg-3)] rounded overflow-hidden">
+                          <div className="h-full transition-all"
+                            style={{ width:`${totalVotes ? (room.votes[s]/totalVotes*100) : 50}%`, background:s==="pro"?"var(--cyan)":"var(--red)" }} />
+                        </div>
+                        <span className="text-xs mono text-[var(--text-3)] w-8 text-right">{room.votes[s]}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Result */}
+            {room.status === "ended" && room.winner && (
+              <div className="card p-8 text-center border-[var(--green)]/25">
+                <div className="text-5xl mb-3">🏆</div>
+                <h3 className="text-2xl font-black mb-2">
+                  <span className={room.winner === "pro" ? "text-[var(--cyan)]" : "text-[var(--red)]"}>
+                    {room.winner.toUpperCase()}
+                  </span> wins!
+                </h3>
+                <p className="text-[var(--text-2)] text-sm mb-4">Final votes: PRO {room.votes.pro} — CON {room.votes.con}</p>
+                <Link href="/arena" className="btn-primary px-6 py-2.5 text-sm inline-flex">← Back to Arenas</Link>
+              </div>
             )}
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setHintTarget("pro"); setShowHintBox(!showHintBox); }}
-              disabled={game.userPowerUsed}
-              className="flex-1 py-2 rounded-lg border border-blue-700/50 text-blue-400 text-xs hover:bg-blue-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              🗣️ 给正方耳语
-            </button>
-            <button
-              onClick={() => { setHintTarget("con"); setShowHintBox(!showHintBox); }}
-              disabled={game.userPowerUsed}
-              className="flex-1 py-2 rounded-lg border border-red-700/50 text-red-400 text-xs hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              🗣️ 给反方耳语
-            </button>
-          </div>
-          {showHintBox && !game.userPowerUsed && (
-            <div className="mt-3 flex gap-2">
-              <input
-                value={userHint}
-                onChange={e => setUserHint(e.target.value)}
-                placeholder={`给${hintTarget === "pro" ? "正方" : "反方"}的悄悄话...（AI 决定用不用）`}
-                className="flex-1 bg-gray-900 border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600"
-              />
-              <button onClick={sendHint}
-                className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition-colors">
-                发送
-              </button>
-            </div>
-          )}
-          <p className="text-xs text-gray-600 mt-2">每位观众只有 1 次耳语机会，AI 会自主决定是否采纳</p>
-        </div>
+        )}
 
-        {/* 投票 */}
-        <div className="card p-4">
-          <h3 className="text-sm font-semibold mb-3">📊 观众投票</h3>
-          <div className="relative h-8 bg-gray-800 rounded-full overflow-hidden mb-3">
-            <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-600 to-blue-500 transition-all duration-500"
-              style={{ width: `${proPercent}%` }}
-            />
-            <div className="absolute inset-0 flex items-center justify-between px-3 text-xs font-bold">
-              <span className="text-white">正方 {proPercent}%</span>
-              <span className="text-white">{100 - proPercent}% 反方</span>
+        {/* Rules */}
+        {status === "idle" && (
+          <div className="mt-12 card p-6">
+            <div className="section-label mb-5">How It Works</div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              {[
+                { n:"1", t:"Random Motion",   d:"A debate topic is randomly selected and assigned." },
+                { n:"2", t:"3 Rounds",         d:"PRO and CON alternate arguments for 3 rounds." },
+                { n:"3", t:"Whisper Hints",    d:"Each observer can send one hint to an agent of their choice." },
+                { n:"4", t:"Audience Votes",   d:"Observers vote for the stronger side. Majority wins." },
+              ].map(s => (
+                <div key={s.n} className="flex gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--cyan-dim)] border border-[var(--cyan)]/25 flex items-center justify-center text-xs font-black text-[var(--cyan)] flex-shrink-0">{s.n}</div>
+                  <div>
+                    <div className="text-sm font-bold text-white mb-0.5">{s.t}</div>
+                    <div className="text-xs text-[var(--text-3)]">{s.d}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="text-xs text-gray-500 text-center mb-3">共 {totalVotes} 票</div>
-
-          {!userVoted ? (
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => handleVote("pro")}
-                className="py-2.5 rounded-xl border-2 border-blue-600 text-blue-400 hover:bg-blue-900/20 text-sm font-semibold transition-colors">
-                👍 支持正方
-              </button>
-              <button onClick={() => handleVote("con")}
-                className="py-2.5 rounded-xl border-2 border-red-600 text-red-400 hover:bg-red-900/20 text-sm font-semibold transition-colors">
-                👍 支持反方
-              </button>
-            </div>
-          ) : (
-            <div className="text-center text-sm text-gray-400">✅ 已投票，等待辩论结束...</div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

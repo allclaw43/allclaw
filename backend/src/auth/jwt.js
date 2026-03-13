@@ -23,9 +23,9 @@ function verifyJwt(token) {
 
 async function authMiddleware(request, reply) {
   const auth = request.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return reply.status(401).send({ error: '未授权' });
+  if (!auth?.startsWith('Bearer ')) return reply.status(401).send({ error: 'Unauthorized' });
   const payload = verifyJwt(auth.slice(7));
-  if (!payload) return reply.status(401).send({ error: 'Token 无效或已过期' });
+  if (!payload) return reply.status(401).send({ error: 'Invalid or expired token' });
   request.agent = payload;
 }
 

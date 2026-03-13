@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * AllClaw Probe - 主入口
- * 用法：
+ * AllClaw Probe - Entry Point
+ * Usage:
  *   allclaw-probe register [--name "MyBot"]
  *   allclaw-probe status
- *   allclaw-probe login          (生成登录签名，供浏览器使用)
- *   allclaw-probe sign <nonce>   (对 nonce 签名)
+ *   allclaw-probe login         (get JWT token for browser login)
+ *   allclaw-probe sign <nonce>  (sign a nonce with your private key)
  */
 
 const { register, status } = require('./register');
@@ -31,20 +31,17 @@ async function main() {
     }
 
     case 'sign': {
-      // allclaw-probe sign <nonce>
-      // 供平台在登录时调用，返回签名
       const nonce = args[1];
       if (!nonce) {
-        console.error('用法：allclaw-probe sign <nonce>');
+        console.error('Usage: allclaw-probe sign <nonce>');
         process.exit(1);
       }
       if (!isRegistered()) {
-        console.error('❌ 尚未注册，请先运行：allclaw-probe register');
+        console.error('Not registered yet. Run: allclaw-probe register');
         process.exit(1);
       }
       const creds = loadCredentials();
       const signature = sign(nonce);
-      // 输出 JSON，方便调用方解析
       console.log(JSON.stringify({
         agent_id: creds.agent_id,
         nonce,
@@ -55,26 +52,25 @@ async function main() {
     }
 
     case 'login': {
-      // 交互式登录流程：请求 challenge → 签名 → 输出 token
       if (!isRegistered()) {
-        console.error('❌ 尚未注册，请先运行：allclaw-probe register');
+        console.error('Not registered yet. Run: allclaw-probe register');
         process.exit(1);
       }
       const { request, ALLCLAW_API } = require('./register');
       const creds = loadCredentials();
 
-      console.log('\n🔐 正在获取登录 Challenge...');
+      console.log('\n🔐 Requesting login challenge...');
       const challengeRes = await request(`${ALLCLAW_API}/api/v1/auth/challenge?agent_id=${creds.agent_id}`);
 
       if (challengeRes.status !== 200) {
-        console.error('❌ 获取 Challenge 失败：', challengeRes.body);
+        console.error('Failed to get challenge:', challengeRes.body);
         process.exit(1);
       }
 
       const { challenge_id, nonce } = challengeRes.body;
       const signature = sign(nonce);
 
-      console.log('🔏 正在验证签名...');
+      console.log('🔏 Verifying signature...');
       const loginRes = await request(`${ALLCLAW_API}/api/v1/auth/login`, { method: 'POST' }, {
         agent_id: creds.agent_id,
         challenge_id,
@@ -82,25 +78,25 @@ async function main() {
       });
 
       if (loginRes.status !== 200) {
-        console.error('❌ 登录失败：', loginRes.body);
+        console.error('Login failed:', loginRes.body);
         process.exit(1);
       }
 
-      console.log('\n✅ 登录成功！');
-      console.log(`   JWT Token：${loginRes.body.token}`);
-      console.log('\n复制上方 Token 到浏览器 AllClaw 登录页面即可。\n');
+      console.log('\n✅ Login successful!');
+      console.log(`   JWT Token: ${loginRes.body.token}`);
+      console.log('\nPaste the token above into the AllClaw website to authenticate.\n');
       break;
     }
 
     default: {
       console.log(`
-用法：
-  allclaw-probe register [--name "我的Bot名称"]  注册 Agent
-  allclaw-probe status                           查看注册状态
-  allclaw-probe login                            获取登录 Token
-  allclaw-probe sign <nonce>                     对 nonce 签名
+Usage:
+  allclaw-probe register [--name "My Bot Name"]  Register your agent
+  allclaw-probe status                           Check registration status
+  allclaw-probe login                            Get JWT login token
+  allclaw-probe sign <nonce>                     Sign a nonce with your private key
 
-首次使用请运行：
+First time? Run:
   allclaw-probe register
       `);
     }
@@ -108,6 +104,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('❌ 发生错误：', err.message);
+  console.error('Error:', err.message);
   process.exit(1);
 });

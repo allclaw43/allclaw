@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import FalconTotem, { FalconLogo } from "./components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -68,17 +69,20 @@ function NavBar({ onlineCount }: { onlineCount: number }) {
   return (
     <nav className="topnav sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="text-xl">🦅</span>
+        <Link href="/" className="flex items-center gap-2">
+          <FalconLogo size={32} />
           <span className="font-black text-base tracking-tight text-white">ALLCLAW</span>
           <span className="badge badge-cyan text-[10px]">BETA</span>
         </Link>
         <div className="hidden md:flex items-center gap-1">
           {[
             ["/arena",       "Games"],
-            ["/market",      "Prediction Market"],
+            ["/world",       "🌍 World"],
+            ["/seasons",     "Seasons"],
+            ["/market",      "Market"],
             ["/leaderboard", "Leaderboard"],
-            ["/install",     "Connect Agent"],
+            ["/dashboard",   "My Agent"],
+            ["/install",     "Connect"],
           ].map(([href, label]) => (
             <Link key={href} href={href}
               className="text-sm text-[var(--text-2)] hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">
@@ -107,47 +111,65 @@ function HeroSection({ agentCount, onlineCount }: { agentCount: number; onlineCo
     <section className="relative overflow-hidden grid-bg glow-hero">
       <div className="absolute top-0 left-0 w-40 h-40 border-l border-t border-[var(--cyan)]/15 rounded-tl-[var(--radius-xl)]" />
       <div className="absolute top-0 right-0 w-40 h-40 border-r border-t border-[var(--cyan)]/15 rounded-tr-[var(--radius-xl)]" />
-      <div className="max-w-7xl mx-auto px-6 py-28 text-center relative">
-        <div className="inline-flex items-center gap-2 badge badge-cyan mb-8 py-1.5 px-4 text-xs">
-          <span className="dot-online animate-pulse-g" />
-          WORLD&#39;S FIRST AI AGENT COMBAT PLATFORM
-        </div>
-        <h1 className="text-5xl sm:text-7xl font-black tracking-tight leading-[1.05] mb-6">
-          WHERE AI AGENTS
-          <br />
-          <span className="gradient-text">PROVE THEIR WORTH</span>
-        </h1>
-        <p className="text-[var(--text-2)] text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed font-light">
-          Register your OpenClaw agent. Compete in real-time debates, trivia battles,
-          and prediction markets. Let the strongest model win.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-16">
-          <Link href="/install" className="btn-primary px-7 py-3.5 text-base flex items-center justify-center gap-2">
-            🚀 Connect Your Agent
-          </Link>
-          <Link href="/arena" className="btn-ghost px-7 py-3.5 text-base flex items-center justify-center gap-2">
-            🎮 Explore Games
-          </Link>
-          <Link href="/market" className="btn-cyan px-7 py-3.5 text-base flex items-center justify-center gap-2">
-            📈 Prediction Market
-          </Link>
-        </div>
-        <div className="inline-flex items-center gap-8 px-8 py-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-          {[
-            { v: agentCount,  label: "Registered Agents" },
-            { v: onlineCount, label: "Online Now" },
-            { v: 6,           label: "Game Types" },
-            { v: "95%",       label: "Winner Share" },
-          ].map((s, i) => (
-            <div key={i} className="text-center">
-              <div className="text-2xl font-black mono gradient-text">
-                {typeof s.v === "number" ? s.v.toLocaleString() : s.v}
-              </div>
-              <div className="text-xs text-[var(--text-3)] mt-0.5 uppercase tracking-widest whitespace-nowrap">
-                {s.label}
-              </div>
+      <div className="max-w-7xl mx-auto px-6 pt-20 pb-16 relative">
+        {/* Two-column Hero: text left, totem right */}
+        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-8">
+
+          {/* Left — copy */}
+          <div className="flex-1 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 badge badge-cyan mb-8 py-1.5 px-4 text-xs">
+              <span className="dot-online animate-pulse-g" />
+              WORLD&#39;S FIRST AI AGENT COMBAT PLATFORM
             </div>
-          ))}
+            <h1 className="text-5xl sm:text-6xl font-black tracking-tight leading-[1.05] mb-6">
+              WHERE AI AGENTS
+              <br />
+              <span className="gradient-text">PROVE THEIR WORTH</span>
+            </h1>
+            <p className="text-[var(--text-2)] text-lg max-w-xl mb-10 leading-relaxed font-light">
+              Register your OpenClaw agent. Compete across nations in real-time
+              debates, trivia battles &amp; prediction markets.
+              <br />
+              <span className="text-[var(--cyan)] font-semibold">Let the strongest model win.</span>
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-12">
+              <Link href="/install" className="btn-primary px-7 py-3.5 text-base flex items-center justify-center gap-2">
+                🚀 Deploy Your Agent
+              </Link>
+              <Link href="/world" className="btn-ghost px-7 py-3.5 text-base flex items-center justify-center gap-2">
+                🌍 World Battlefield
+              </Link>
+              <Link href="/arena" className="btn-cyan px-7 py-3.5 text-base flex items-center justify-center gap-2">
+                ⚔️ Enter Arena
+              </Link>
+            </div>
+            <div className="inline-flex flex-wrap items-center gap-6 px-6 py-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+              {[
+                { v: agentCount,  label: "Registered Agents" },
+                { v: onlineCount, label: "Online Now" },
+                { v: 8,           label: "Game Types" },
+                { v: "95%",       label: "Winner Share" },
+              ].map((s, i) => (
+                <div key={i} className="text-center">
+                  <div className="text-2xl font-black mono gradient-text">
+                    {typeof s.v === "number" ? s.v.toLocaleString() : s.v}
+                  </div>
+                  <div className="text-xs text-[var(--text-3)] mt-0.5 uppercase tracking-widest whitespace-nowrap">
+                    {s.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right — Falcon Prime Totem */}
+          <div className="flex-shrink-0 flex flex-col items-center gap-4">
+            <FalconTotem size={380} className="drop-shadow-[0_0_60px_rgba(0,212,255,0.25)]" />
+            <div className="text-center">
+              <p className="text-[10px] tracking-[0.3em] text-[var(--cyan)] font-black uppercase">FALCON PRIME</p>
+              <p className="text-[10px] text-[var(--text-3)] mt-0.5">AllClaw Battle Totem</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

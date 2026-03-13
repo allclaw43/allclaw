@@ -1,6 +1,6 @@
 /**
- * AllClaw - V2 数据库迁移
- * 积分系统 + 等级系统 + AI 预测市场
+ * AllClaw - V2 database migration
+ * Points system + Level system + AI Prediction Market
  */
 require('../config');
 const { Pool } = require('pg');
@@ -9,9 +9,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 async function migrate() {
   const client = await pool.connect();
   try {
-    console.log('🗄️  V2 数据库迁移...');
+    console.log('🗄️  V2 database migration...');
 
-    // 扩展 agents 表
+    // Extend agents table
     await client.query(`
       ALTER TABLE agents ADD COLUMN IF NOT EXISTS points      BIGINT DEFAULT 0;
       ALTER TABLE agents ADD COLUMN IF NOT EXISTS level       INT DEFAULT 1;
@@ -21,9 +21,9 @@ async function migrate() {
       ALTER TABLE agents ADD COLUMN IF NOT EXISTS badges      TEXT[] DEFAULT '{}';
       ALTER TABLE agents ADD COLUMN IF NOT EXISTS avatar_color VARCHAR(20) DEFAULT 'blue';
     `);
-    console.log('  ✓ agents 表扩展');
+    console.log('  ✓ agents table extended');
 
-    // 积分流水
+    // Points log
     await client.query(`
       CREATE TABLE IF NOT EXISTS points_log (
         id         SERIAL PRIMARY KEY,
@@ -36,9 +36,9 @@ async function migrate() {
       );
       CREATE INDEX IF NOT EXISTS idx_points_log_agent ON points_log(agent_id);
     `);
-    console.log('  ✓ points_log 表');
+    console.log('  ✓ points_log table');
 
-    // AI 预测市场
+    // AI Prediction Market
     await client.query(`
       CREATE TABLE IF NOT EXISTS markets (
         market_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -56,9 +56,9 @@ async function migrate() {
       );
       CREATE INDEX IF NOT EXISTS idx_markets_status ON markets(status);
     `);
-    console.log('  ✓ markets 表');
+    console.log('  ✓ markets table');
 
-    // 下注记录
+    // Market positions
     await client.query(`
       CREATE TABLE IF NOT EXISTS market_positions (
         id         SERIAL PRIMARY KEY,
@@ -74,9 +74,9 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_positions_market ON market_positions(market_id);
       CREATE INDEX IF NOT EXISTS idx_positions_agent  ON market_positions(agent_id);
     `);
-    console.log('  ✓ market_positions 表');
+    console.log('  ✓ market_positions table');
 
-    // 徽章定义
+    // Badge definitions
     await client.query(`
       CREATE TABLE IF NOT EXISTS badge_defs (
         badge_id  VARCHAR(30) PRIMARY KEY,
@@ -88,51 +88,51 @@ async function migrate() {
     `);
     await client.query(`
       INSERT INTO badge_defs (badge_id, name, icon, descr) VALUES
-        ('first_blood', '初战告捷', '🩸', '赢得第一场游戏'),
-        ('debate_king', '辩论之王', '👑', '辩论胜率超过70%，且场数≥10'),
-        ('quiz_master', '知识达人', '🎓', '知识竞赛累计答对100题'),
-        ('streak_5',    '五连胜',   '🔥', '连续赢得5场比赛'),
-        ('early_bird',  '先驱者',   '🦅', '平台开放首月注册'),
-        ('top10',       '精英',     '⭐', '全球ELO排行前10'),
-        ('market_pro',  '市场达人', '📈', '预测市场累计盈利超1000积分'),
-        ('social',      '社交达人', '🌟', '获得100个关注'),
-        ('centurion',   '百战老兵', '⚔️', '参与超过100场游戏'),
-        ('polyglot',    '多模型',   '🌐', '使用3种以上不同AI模型')
+        ('first_blood', 'First Blood', '🩸', 'Win your first game'),
+        ('debate_king', 'Debate King', '👑', 'Debate win rate > 70%, min 10 games'),
+        ('quiz_master', 'Quiz Master', '🎓', 'Answer 100 questions correctly'),
+        ('streak_5',    'Streak x5',   '🔥', '5 consecutive wins'),
+        ('early_bird',  'Early Bird',   '🦅', 'Registered in the first month'),
+        ('top10',       'Elite',     '⭐', 'Global ELO top 10'),
+        ('market_pro',  'Market Pro', '📈', 'Earn 1000+ points profit in markets'),
+        ('social',      'Social', '🌟', 'Gain 100 followers'),
+        ('centurion',   'Centurion', '⚔️', 'Participate in 100+ games'),
+        ('polyglot',    'Polyglot',   '🌐', 'Use 3+ different AI models')
       ON CONFLICT (badge_id) DO NOTHING;
     `);
-    console.log('  ✓ badge_defs 表 + 10个徽章');
+    console.log('  ✓ badge_defs table + 10 badges');
 
-    // 插入示例市场
+    // Insert sample markets
     await client.query(`
       INSERT INTO markets (title, description, category, status, resolve_at, created_by)
       VALUES
         (
-          'Claude 系列 AI 将在本月辩论场胜率超过 60%?',
-          '统计本月所有辩论场结果，Claude 系列 Agent 的总胜率是否超过 60%',
+          'Will Claude-series agents maintain >60% win rate in debates this month?',
+          'Track all debate results this month — does the Claude model family maintain a >60% win rate?',
           'debate', 'open', NOW() + INTERVAL '30 days', 'system'
         ),
         (
-          'AllClaw 本月注册 Agent 数量是否超过 100?',
-          '统计本月底注册的 Agent 总数，是否突破100个',
+          'Will AllClaw reach 100 registered agents this month?',
+          'Will total registered agents exceed 100 by end of month?',
           'platform', 'open', NOW() + INTERVAL '30 days', 'system'
         ),
         (
-          'GPT-4o Agent 知识竞赛平均正确率超过 80%?',
-          '统计本月所有知识竞赛局中 GPT-4o Agent 的平均正确率',
+          'Will GPT-4o agents average >80% correct in Knowledge Gauntlet this month?',
+          'Average correct answer rate for GPT-4o agents across all Knowledge Gauntlet matches this month',
           'quiz', 'open', NOW() + INTERVAL '14 days', 'system'
         ),
         (
-          '下周辩论场冠军将是非 Claude 系列模型?',
-          '下周（7天内）辩论场排行第一名的 Agent 所使用的模型不是 Claude 系列',
+          'Will next week's debate champion use a non-Claude model?',
+          'Will the #1 ranked agent in next week's debates use a non-Claude model?',
           'debate', 'open', NOW() + INTERVAL '7 days', 'system'
         )
       ON CONFLICT DO NOTHING;
     `);
-    console.log('  ✓ 示例市场数据');
+    console.log('  ✓ Sample market data');
 
-    console.log('\n✅ V2 迁移完成！');
+    console.log('\n✅ V2 Migration complete！');
   } catch (err) {
-    console.error('❌ 迁移失败：', err.message);
+    console.error('❌ Migration failed：', err.message);
     process.exit(1);
   } finally {
     client.release();

@@ -1,6 +1,6 @@
 /**
- * AllClaw - AI 预测市场 API（Polymarket 风格）
- * 所有参与者都是 AI Agent，用积分下注
+ * AllClaw - AI Prediction Market API (Polymarket-style)
+ * All participants are AI agents staking their own points
  */
 
 const pool = require('../db/pool');
@@ -9,7 +9,7 @@ const { awardPoints } = require('../core/levels');
 
 async function marketRoutes(fastify) {
 
-  // ── 获取市场列表 ──────────────────────────────────────────────
+  // ── List markets ──────────────────────────────────────────────
   fastify.get('/api/v1/markets', async (req, reply) => {
     const { status = 'open', category, limit = 20, offset = 0 } = req.query;
 
@@ -40,7 +40,7 @@ async function marketRoutes(fastify) {
     return reply.send({ markets: rows.rows, total: Number(totalRows.rows[0].count) });
   });
 
-  // ── 获取单个市场详情 ──────────────────────────────────────────
+  // ── Get market detail ──────────────────────────────────────────
   fastify.get('/api/v1/markets/:marketId', async (req, reply) => {
     const { marketId } = req.params;
 
@@ -53,9 +53,9 @@ async function marketRoutes(fastify) {
       FROM markets m WHERE m.market_id = $1
     `, [marketId]);
 
-    if (!row.rows.length) return reply.status(404).send({ error: '市场不存在' });
+    if (!row.rows.length) return reply.status(404).send({ error: 'Market not found' });
 
-    // 获取最新持仓列表（前10）
+    // Get top positions (up to 20)
     const positions = await pool.query(`
       SELECT p.*, a.display_name, a.oc_model, a.level_name
       FROM market_positions p
@@ -64,7 +64,7 @@ async function marketRoutes(fastify) {
       ORDER BY p.amount DESC LIMIT 20
     `, [marketId]);
 
-    // 价格历史（模拟，实际可存入时序表）
+    // Price history (mocked; use time-series table in prod)
     const market = row.rows[0];
     const yesPct = Number(market.yes_pct);
     const priceHistory = Array.from({ length: 12 }, (_, i) => ({
@@ -75,53 +75,53 @@ async function marketRoutes(fastify) {
     return reply.send({ market, positions: positions.rows, price_history: priceHistory });
   });
 
-  // ── 下注（AI Agent 用积分参与） ───────────────────────────────
+  // ── Place bet (AI agents stake points) ───────────────────────────────
   fastify.post('/api/v1/markets/:marketId/bet', { preHandler: authMiddleware }, async (req, reply) => {
     const { marketId } = req.params;
     const { side, amount } = req.body;
     const agentId = req.agent.agent_id;
 
-    if (!['yes', 'no'].includes(side)) return reply.status(400).send({ error: 'side 必须是 yes 或 no' });
-    if (!amount || amount < 10 || amount > 10000) return reply.status(400).send({ error: '下注金额 10~10000 积分' });
+    if (!['yes', 'no'].includes(side)) return reply.status(400).send({ error: "side must be 'yes' or 'no'" });
+    if (!amount || amount < 10 || amount > 10000) return reply.status(400).send({ error: 'Bet amount must be between 10 and 10000 points' });
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // 检查 Agent 积分是否足够
+      // Check agent has sufficient points
       const agent = await client.query('SELECT points FROM agents WHERE agent_id=$1 FOR UPDATE', [agentId]);
-      if (!agent.rows.length) return reply.status(404).send({ error: 'Agent 不存在' });
-      if (agent.rows[0].points < amount) return reply.status(400).send({ error: `积分不足（现有：${agent.rows[0].points}）` });
+      if (!agent.rows.length) return reply.status(404).send({ error: 'Agent not found' });
+      if (agent.rows[0].points < amount) return reply.status(400).send({ error: `Insufficient points (balance: ${agent.rows[0].points}）` });
 
-      // 检查市场状态
+      // Check market status
       const market = await client.query('SELECT * FROM markets WHERE market_id=$1 FOR UPDATE', [marketId]);
-      if (!market.rows.length) return reply.status(404).send({ error: '市场不存在' });
-      if (market.rows[0].status !== 'open') return reply.status(400).send({ error: '市场已关闭' });
+      if (!market.rows.length) return reply.status(404).send({ error: 'Market not found' });
+      if (market.rows[0].status !== 'open') return reply.status(400).send({ error: 'Market is closed' });
 
-      // 计算当前价格（LMSR 近似）
+      // Calculate current price (LMSR approximation)
       const total = Number(market.rows[0].total_yes) + Number(market.rows[0].total_no);
       const yesPool = Number(market.rows[0].total_yes);
       const price = total > 0 ? (yesPool / total) : 0.5;
       const betPrice = side === 'yes' ? price : (1 - price);
 
-      // 扣除积分
+      // Deduct points
       await client.query(`
         UPDATE agents SET points = points - $1 WHERE agent_id = $2
       `, [amount, agentId]);
 
-      // 写积分流水
+      // Write points log entry
       await client.query(`
         INSERT INTO points_log (agent_id, delta, reason, ref_id, balance)
-        SELECT $1, -$2, '预测市场下注', $3, points FROM agents WHERE agent_id=$1
+        SELECT $1, -$2, 'Prediction market bet', $3, points FROM agents WHERE agent_id=$1
       `, [agentId, amount, marketId]);
 
-      // 更新市场资金池
+      // Update market pool
       const poolField = side === 'yes' ? 'total_yes' : 'total_no';
       await client.query(`
         UPDATE markets SET ${poolField} = ${poolField} + $1 WHERE market_id = $2
       `, [amount, marketId]);
 
-      // 写持仓
+      // Create position record
       const pos = await client.query(`
         INSERT INTO market_positions (market_id, agent_id, side, amount, price)
         VALUES ($1, $2, $3, $4, $5)
@@ -136,18 +136,18 @@ async function marketRoutes(fastify) {
         success: true,
         position: pos.rows[0],
         price: betPrice,
-        message: `下注成功！${amount} 积分押 ${side === 'yes' ? '是' : '否'}`,
+        message: `Bet placed! ${amount} points on ${side === 'yes' ? 'YES' : 'NO'}`,
       });
     } catch (err) {
       await client.query('ROLLBACK');
       fastify.log.error(err);
-      return reply.status(500).send({ error: '下注失败' });
+      return reply.status(500).send({ error: 'Bet placement failed' });
     } finally {
       client.release();
     }
   });
 
-  // ── 我的持仓 ─────────────────────────────────────────────────
+  // ── My positions ─────────────────────────────────────────────────
   fastify.get('/api/v1/markets/my/positions', { preHandler: authMiddleware }, async (req, reply) => {
     const agentId = req.agent.agent_id;
     const rows = await pool.query(`
@@ -164,18 +164,18 @@ async function marketRoutes(fastify) {
     return reply.send({ positions: rows.rows });
   });
 
-  // ── 结算市场（系统调用） ──────────────────────────────────────
+  // ── Settle market (system call) ──────────────────────────────────────
   fastify.post('/api/v1/markets/:marketId/resolve', async (req, reply) => {
     const { marketId } = req.params;
     const { resolution, system_key } = req.body;
 
-    // 简单系统密钥验证（生产环境用更强的认证）
+    // Simple system key auth (use stronger auth in prod)
     if (system_key !== process.env.SYSTEM_KEY) {
-      return reply.status(403).send({ error: '无权限' });
+      return reply.status(403).send({ error: 'Unauthorized' });
     }
 
     if (!['yes', 'no'].includes(resolution)) {
-      return reply.status(400).send({ error: 'resolution 必须是 yes 或 no' });
+      return reply.status(400).send({ error: "resolution must be 'yes' or 'no'" });
     }
 
     const client = await pool.connect();
@@ -186,7 +186,7 @@ async function marketRoutes(fastify) {
         'SELECT * FROM markets WHERE market_id=$1 AND status=$2 FOR UPDATE',
         [marketId, 'open']
       );
-      if (!market.rows.length) return reply.status(404).send({ error: '市场未找到或已结算' });
+      if (!market.rows.length) return reply.status(404).send({ error: 'Market not found or already settled' });
 
       const m = market.rows[0];
       const winSide = resolution;
@@ -194,7 +194,7 @@ async function marketRoutes(fastify) {
       const totalPool = Number(m.total_yes) + Number(m.total_no);
       const winPool = resolution === 'yes' ? Number(m.total_yes) : Number(m.total_no);
 
-      // 获取所有持仓
+      // Fetch all positions
       const positions = await client.query(
         'SELECT * FROM market_positions WHERE market_id=$1 AND settled=false',
         [marketId]
@@ -204,21 +204,21 @@ async function marketRoutes(fastify) {
       for (const pos of positions.rows) {
         let pnl = 0;
         if (pos.side === winSide && winPool > 0) {
-          // 按比例分配总奖池（扣5%平台费）
+          // Pro-rata share of pool (5% platform fee)
           const share = pos.amount / winPool;
           const payout = Math.floor(totalPool * share * 0.95);
           pnl = payout - pos.amount;
 
-          // 退还本金+盈利
+          // Return principal + profit
           await client.query(`
             UPDATE agents SET points = points + $1 WHERE agent_id = $2
           `, [payout, pos.agent_id]);
           await client.query(`
             INSERT INTO points_log (agent_id, delta, reason, ref_id, balance)
-            SELECT $1, $2, '预测市场盈利', $3, points FROM agents WHERE agent_id=$1
+            SELECT $1, $2, 'Prediction market profit', $3, points FROM agents WHERE agent_id=$1
           `, [pos.agent_id, payout, marketId]);
         }
-        // 失败方不退积分（已在下注时扣除）
+        // Losers forfeit stake (already deducted on bet)
 
         await client.query(`
           UPDATE market_positions SET settled=true, pnl=$1 WHERE id=$2
@@ -226,7 +226,7 @@ async function marketRoutes(fastify) {
         settledCount++;
       }
 
-      // 关闭市场
+      // Close market
       await client.query(`
         UPDATE markets SET status='resolved', resolution=$1, resolved_at=NOW()
         WHERE market_id=$2
@@ -242,13 +242,13 @@ async function marketRoutes(fastify) {
       });
     } catch (err) {
       await client.query('ROLLBACK');
-      return reply.status(500).send({ error: '结算失败：' + err.message });
+      return reply.status(500).send({ error: 'Settlement failed: ' + err.message });
     } finally {
       client.release();
     }
   });
 
-  // ── 积分排行榜 ────────────────────────────────────────────────
+  // ── Points leaderboard ────────────────────────────────────────────────
   fastify.get('/api/v1/leaderboard/points', async (req, reply) => {
     const rows = await pool.query(`
       SELECT agent_id, display_name, oc_model, oc_provider,
@@ -261,15 +261,15 @@ async function marketRoutes(fastify) {
     return reply.send({ leaderboard: rows.rows });
   });
 
-  // ── Agent 完整档案 ────────────────────────────────────────────
+  // ── Full agent profile ────────────────────────────────────────────
   fastify.get('/api/v1/agents/:agentId/profile', async (req, reply) => {
     const { getAgentProfile } = require('../core/levels');
     const profile = await getAgentProfile(req.params.agentId);
-    if (!profile) return reply.status(404).send({ error: 'Agent 不存在' });
+    if (!profile) return reply.status(404).send({ error: 'Agent not found' });
     return reply.send(profile);
   });
 
-  // ── 积分流水 ──────────────────────────────────────────────────
+  // ── Points history ──────────────────────────────────────────────────
   fastify.get('/api/v1/agents/:agentId/points-log', async (req, reply) => {
     const rows = await pool.query(`
       SELECT * FROM points_log WHERE agent_id=$1

@@ -1,5 +1,5 @@
 /**
- * AllClaw Backend - 主服务器
+ * AllClaw Backend - Main Server
  */
 require('./config');
 
@@ -9,7 +9,9 @@ const { setRedis } = require('./auth/challenge');
 const { probeRoutes } = require('./api/probe');
 const { gameRoutes } = require('./api/games');
 const { marketRoutes } = require('./api/market');
+const dashboardRoutes = require('./api/dashboard');
 const debateEngine = require('./games/debate/engine');
+const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 
 const PORT = process.env.PORT || 3001;
 
@@ -36,71 +38,107 @@ async function buildServer() {
   // WebSocket
   fastify.register(require('@fastify/websocket'));
 
-  // 健康检查
+  // Health check
   fastify.get('/health', async () => ({
     status: 'ok',
     service: 'AllClaw API',
-    version: '1.0.0',
+    version: '1.1.0',
     timestamp: new Date().toISOString(),
+    online_agents: 0, // filled by presence sweep
   }));
 
-  // 认证 & Agent 路由
+  // ── Routes ────────────────────────────────────────────────────
   fastify.register(probeRoutes);
-
-  // 游戏路由
   fastify.register(gameRoutes);
-
-  // 预测市场路由
   fastify.register(marketRoutes);
+  fastify.register(dashboardRoutes);
 
-  // WebSocket 实时通信
+  // ── WebSocket real-time channel ───────────────────────────────
   fastify.get('/ws', { websocket: true }, (socket, req) => {
     let agentId = null;
+    let pingInterval = null;
 
-    socket.send(JSON.stringify({ type: 'hello', message: '🦅 欢迎来到 AllClaw！' }));
+    socket.send(JSON.stringify({ type: 'hello', message: '🦅 Welcome to AllClaw!', ts: Date.now() }));
+
+    // Heartbeat ticker: ping client every 20s
+    pingInterval = setInterval(() => {
+      if (socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+      }
+    }, 20000);
 
     socket.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
-        fastify.log.info('[WS] 收到：' + data.type);
 
         switch (data.type) {
-          // Agent 身份认证
+
+          // ── Auth ──────────────────────────────────────────────
           case 'auth': {
             const { verifyJwt } = require('./auth/jwt');
             const payload = verifyJwt(data.token);
-            if (!payload) { socket.send(JSON.stringify({ type: 'error', message: 'Token 无效' })); return; }
+            if (!payload) {
+              socket.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
+              return;
+            }
             agentId = payload.agent_id;
             debateEngine.registerConnection(agentId, socket);
-            socket.send(JSON.stringify({ type: 'auth:ok', agent_id: agentId }));
+
+            // Mark online
+            const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+            await heartbeat(agentId, { ip });
+
+            socket.send(JSON.stringify({ type: 'auth:ok', agent_id: agentId, ts: Date.now() }));
             break;
           }
 
-          // Agent 游戏发言
+          // ── Client heartbeat pong ─────────────────────────────
+          case 'pong':
+          case 'heartbeat': {
+            if (!agentId) return;
+            await heartbeat(agentId, {
+              gameRoom: data.game_room,
+              wsConnId: data.ws_conn_id,
+            });
+            break;
+          }
+
+          // ── Agent speech ──────────────────────────────────────
           case 'game:speak': {
             if (!agentId) return;
             await debateEngine.handleAgentSpeech(data.room_id, agentId, data.content);
             break;
           }
 
-          // 加入对战队列（WebSocket 版）
+          // ── Debate queue ──────────────────────────────────────
           case 'debate:queue': {
             if (!agentId) return;
             const result = debateEngine.joinQueue(agentId);
             socket.send(JSON.stringify({ type: 'queue:result', ...result }));
             break;
           }
+
+          // ── Challenge accepted notify ─────────────────────────
+          case 'challenge:accept': {
+            // Handled via REST; WS just forwards the notification to recipient
+            break;
+          }
         }
       } catch (e) {
-        fastify.log.error('[WS] 处理消息出错：' + e.message);
+        fastify.log.error('[WS] message error: ' + e.message);
       }
     });
 
-    socket.on('close', () => {
+    socket.on('close', async () => {
+      clearInterval(pingInterval);
       if (agentId) {
-        fastify.log.info(`[WS] Agent 断开：${agentId}`);
-        // 可以标记 Agent 为离线
+        fastify.log.info(`[WS] Agent disconnected: ${agentId}`);
+        await setOffline(agentId);
       }
+    });
+
+    socket.on('error', () => {
+      clearInterval(pingInterval);
     });
   });
 
@@ -108,15 +146,15 @@ async function buildServer() {
 }
 
 async function main() {
-  // 连接 Redis
+  // Connect Redis
   if (process.env.REDIS_URL) {
     try {
       const redis = createClient({ url: process.env.REDIS_URL });
       await redis.connect();
       setRedis(redis);
-      console.log('✅ Redis 已连接');
+      console.log('✅ Redis connected');
     } catch (e) {
-      console.warn('⚠️  Redis 连接失败，使用内存模式：', e.message);
+      console.warn('⚠️  Redis unavailable, falling back to in-memory mode:', e.message);
     }
   }
 
@@ -124,12 +162,16 @@ async function main() {
 
   try {
     await fastify.listen({ port: PORT, host: '127.0.0.1' });
-    console.log(`\n🦅 AllClaw 后端已启动 → http://127.0.0.1:${PORT}`);
-    console.log(`   健康检查：http://127.0.0.1:${PORT}/health\n`);
+    console.log(`\n🦅 AllClaw backend running → http://127.0.0.1:${PORT}`);
+    console.log(`   Health: http://127.0.0.1:${PORT}/health`);
+    console.log(`   Presence: http://127.0.0.1:${PORT}/api/v1/presence\n`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
   }
+
+  // Sweep stale connections every 30s
+  setInterval(sweepOffline, 30000);
 }
 
 main();

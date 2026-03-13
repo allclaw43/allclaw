@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { FalconLogo } from "../../components/FalconTotem";
 
 interface Agent { id: string; name: string; model: string; score: number; correct: number; }
 interface Question { text: string; options: string[]; category: string; timeLimit: number; }
@@ -13,8 +14,8 @@ const MOCK_AGENTS: Agent[] = [
 ];
 
 const MOCK_QUESTIONS: Question[] = [
-  { text: "图灵测试由谁提出？", options: ["冯·诺依曼", "艾伦·图灵", "克劳德·香农", "诺伯特·维纳"], category: "计算机", timeLimit: 15 },
-  { text: "相对论 E=mc² 中的 c 代表什么？", options: ["电荷", "光速", "比热容", "碳"], category: "物理", timeLimit: 15 },
+  { text: "Who proposed the Turing Test?", options: ["John von Neumann", "Alan Turing", "Claude Shannon", "Norbert Wiener"], category: "Computer Science", timeLimit: 15 },
+  { text: "In E=mc², what does 'c' represent?", options: ["Electric charge", "Speed of light", "Specific heat", "Carbon"], category: "Physics", timeLimit: 15 },
 ];
 
 export default function QuizPage() {
@@ -35,13 +36,13 @@ export default function QuizPage() {
       setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current!);
-          // AI 作答模拟
+          // Simulate AI responses
           setTimeout(() => {
-            setAnswers({ ag1: "艾伦·图灵", ag2: "艾伦·图灵", ag3: "冯·诺依曼" });
+            setAnswers({ ag1: "Alan Turing", ag2: "Alan Turing", ag3: "John von Neumann" });
             setResults([
-              { agentId: "ag1", answer: "艾伦·图灵", correct: true, points: 12, timeMs: 3200 },
-              { agentId: "ag2", answer: "艾伦·图灵", correct: true, points: 10, timeMs: 5100 },
-              { agentId: "ag3", answer: "冯·诺依曼", correct: false, points: 0, timeMs: 8900 },
+              { agentId: "ag1", answer: "Alan Turing", correct: true, points: 12, timeMs: 3200 },
+              { agentId: "ag2", answer: "Alan Turing", correct: true, points: 10, timeMs: 5100 },
+              { agentId: "ag3", answer: "John von Neumann", correct: false, points: 0, timeMs: 8900 },
             ]);
             setGamePhase("result");
           }, 300);
@@ -57,7 +58,7 @@ export default function QuizPage() {
     if (rescueUsed) return;
     setRescueUsed(true);
     setRescueTarget(agentId);
-    // 实际发送救援到服务器
+    // Send rescue to server
   }
 
   const timerPct = (timeLeft / 15) * 100;
@@ -70,10 +71,10 @@ export default function QuizPage() {
           <div className="flex items-center gap-2">
             <Link href="/"><span>🦅</span><span className="font-bold gradient-text ml-1">AllClaw</span></Link>
             <span className="text-gray-600">/</span>
-            <span className="text-gray-400 text-sm">🧠 智识竞技场</span>
+            <span className="text-gray-400 text-sm">🧠 Knowledge Gauntlet</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-gray-400">题目 {qIndex + 1} / 10</span>
+            <span className="text-gray-400">Q {qIndex + 1} / 10</span>
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse-glow" />
           </div>
         </div>
@@ -81,30 +82,30 @@ export default function QuizPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
 
-        {/* 分数板 */}
+        {/* Score board */}
         <div className="grid grid-cols-3 gap-3">
           {agents.map((a, i) => (
             <div key={a.id} className={`card p-3 text-center ${rescueTarget === a.id ? "border-yellow-600 glow-gold" : ""}`}>
               <div className="text-xs text-gray-400 truncate">{a.name}</div>
               <div className="text-xl font-black text-blue-400">{a.score}</div>
-              <div className="text-xs text-gray-500">{a.correct}题正确</div>
+              <div className="text-xs text-gray-500">{a.correct}QCorrect</div>
               {!rescueUsed && gamePhase === "question" && (
                 <button onClick={() => useRescue(a.id)}
                   className="mt-2 text-xs w-full py-1 rounded-lg border border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/20 transition-colors">
-                  🆘 救援
+                  🆘 Rescue
                 </button>
               )}
               {rescueTarget === a.id && (
-                <div className="mt-1 text-xs text-yellow-400">已救援！</div>
+                <div className="mt-1 text-xs text-yellow-400">Rescued!</div>
               )}
             </div>
           ))}
         </div>
 
-        {/* 倒计时 */}
+        {/* Countdown */}
         <div className="card p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400">🏃 限时作答</span>
+            <span className="text-xs text-gray-400">🏃 Time limit</span>
             <span className="text-xl font-black" style={{ color: timerColor }}>{timeLeft}s</span>
           </div>
           <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
@@ -113,7 +114,7 @@ export default function QuizPage() {
           </div>
         </div>
 
-        {/* 题目 */}
+        {/* Question */}
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded-full">{currentQ.category}</span>
@@ -122,7 +123,7 @@ export default function QuizPage() {
           <h2 className="text-lg font-bold mb-4">{currentQ.text}</h2>
           <div className="grid grid-cols-2 gap-3">
             {currentQ.options.map((opt, i) => {
-              const isCorrect = results && opt === "艾伦·图灵";
+              const isCorrect = results && opt === "Alan Turing";
               const hasAnswer = results !== null;
               return (
                 <div key={i} className={`p-3 rounded-xl border text-sm transition-colors ${
@@ -141,9 +142,9 @@ export default function QuizPage() {
           </div>
         </div>
 
-        {/* AI 作答状态 */}
+        {/* AI answer status */}
         <div className="card p-4">
-          <h3 className="text-sm font-semibold mb-3">🤖 AI 作答情况</h3>
+          <h3 className="text-sm font-semibold mb-3">🤖 AI Responses</h3>
           <div className="space-y-2">
             {agents.map(a => {
               const ans = answers[a.id];
@@ -174,11 +175,11 @@ export default function QuizPage() {
           </div>
         </div>
 
-        {/* 人类救援说明 */}
+        {/* Human Rescue info */}
         {!rescueUsed && gamePhase === "question" && (
           <div className="card p-4 border-yellow-900/40 bg-yellow-900/10">
             <p className="text-xs text-yellow-300">
-              🆘 <strong>人类救援</strong>：点击某个 AI 的「救援」按钮，将直接给它送上正确答案。每位观众只有 1 次机会！
+              🆘 <strong>Human Rescue</strong>: Click an AI's Rescue button to send them the correct answer. Each observer gets 1 rescue per game!
             </p>
           </div>
         )}

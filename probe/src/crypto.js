@@ -1,6 +1,6 @@
 /**
- * AllClaw Probe - 密钥管理模块
- * Ed25519 密钥对生成、签名、验证
+ * AllClaw Probe - Key management module
+ * Ed25519 keypair generation, signing, verification
  */
 
 const crypto = require('crypto');
@@ -13,7 +13,7 @@ const CREDENTIALS_PATH = path.join(ALLCLAW_DIR, 'credentials.json');
 const KEY_PATH = path.join(ALLCLAW_DIR, 'keypair.json');
 
 /**
- * 确保 ~/.allclaw 目录存在
+ * Ensure ~/.allclaw directory exists
  */
 function ensureDir() {
   if (!fs.existsSync(ALLCLAW_DIR)) {
@@ -22,7 +22,7 @@ function ensureDir() {
 }
 
 /**
- * 生成 Ed25519 密钥对
+ * Generate Ed25519 keypair
  */
 function generateKeypair() {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
@@ -37,7 +37,7 @@ function generateKeypair() {
 }
 
 /**
- * 加载或生成本地密钥对
+ * Load or generate local keypair
  */
 function loadOrCreateKeypair() {
   ensureDir();
@@ -55,9 +55,9 @@ function loadOrCreateKeypair() {
 }
 
 /**
- * 用私钥对数据签名
- * @param {string} data - 要签名的字符串
- * @returns {string} base64 签名
+ * Sign data with private key
+ * @param {string} data - String to sign
+ * @returns {string} base64 signature
  */
 function sign(data) {
   const keypair = loadOrCreateKeypair();
@@ -74,7 +74,7 @@ function sign(data) {
 }
 
 /**
- * 获取公钥（用于注册时上传到服务器）
+ * Get public key (for server registration)
  */
 function getPublicKey() {
   const keypair = loadOrCreateKeypair();
@@ -82,7 +82,7 @@ function getPublicKey() {
 }
 
 /**
- * 保存凭证（注册成功后）
+ * Save credentials (after successful registration)
  */
 function saveCredentials(credentials) {
   ensureDir();
@@ -90,7 +90,7 @@ function saveCredentials(credentials) {
 }
 
 /**
- * 读取凭证
+ * Load credentials
  */
 function loadCredentials() {
   if (!fs.existsSync(CREDENTIALS_PATH)) return null;
@@ -102,7 +102,7 @@ function loadCredentials() {
 }
 
 /**
- * 检查是否已注册
+ * Check if registered
  */
 function isRegistered() {
   const creds = loadCredentials();

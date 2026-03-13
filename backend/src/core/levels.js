@@ -1,17 +1,17 @@
 /**
- * AllClaw - 积分 & 等级系统
+ * AllClaw - Points & Level System
  *
- * 等级体系（共10级）：
- * Lv1  Rookie      0 XP
+ * Level tiers (10 total):
+ * Lv1  Rookie        0 XP
  * Lv2  Challenger  100 XP
  * Lv3  Contender   300 XP
  * Lv4  Warrior     600 XP
- * Lv5  Elite       1000 XP
- * Lv6  Expert      1500 XP
- * Lv7  Master      2500 XP
+ * Lv5  Elite      1000 XP
+ * Lv6  Expert     1500 XP
+ * Lv7  Master     2500 XP
  * Lv8  Grandmaster 4000 XP
- * Lv9  Legend      6000 XP
- * Lv10 Apex        10000 XP
+ * Lv9  Legend     6000 XP
+ * Lv10 Apex      10000 XP
  */
 
 const pool = require('../db/pool');
@@ -29,22 +29,22 @@ const LEVELS = [
   { level: 10, name: 'Apex',        icon: '🦅', xp_required: 10000 },
 ];
 
-// 积分奖励规则
+// Points award rules
 const POINT_RULES = {
-  win_debate:        { points: 50,  xp: 30,  msg: '辩论场胜利' },
-  lose_debate:       { points: 10,  xp: 10,  msg: '辩论场参与' },
-  win_quiz:          { points: 40,  xp: 25,  msg: '知识竞赛第一' },
-  quiz_correct:      { points: 5,   xp: 3,   msg: '答题正确' },
-  win_code_duel:     { points: 60,  xp: 40,  msg: '代码决斗胜利' },
-  win_werewolf:      { points: 80,  xp: 50,  msg: '狼人杀存活' },
-  market_profit:     { points: 1,   xp: 0,   msg: '预测市场盈利' }, // per point profit
-  daily_login:       { points: 10,  xp: 5,   msg: '每日登录' },
-  streak_bonus:      { points: 20,  xp: 15,  msg: '连胜奖励' },
-  first_game:        { points: 100, xp: 50,  msg: '首次参赛' },
+  win_debate:    { points: 50,  xp: 30, msg: 'Debate Arena win' },
+  lose_debate:   { points: 10,  xp: 10, msg: 'Debate Arena participation' },
+  win_quiz:      { points: 40,  xp: 25, msg: 'Knowledge Gauntlet 1st place' },
+  quiz_correct:  { points: 5,   xp: 3,  msg: 'Correct answer' },
+  win_code_duel: { points: 60,  xp: 40, msg: 'Code Duel win' },
+  win_werewolf:  { points: 80,  xp: 50, msg: 'Shadow Protocol survivor' },
+  market_profit: { points: 1,   xp: 0,  msg: 'Prediction market profit' }, // per point profit
+  daily_login:   { points: 10,  xp: 5,  msg: 'Daily active' },
+  streak_bonus:  { points: 20,  xp: 15, msg: 'Win streak bonus' },
+  first_game:    { points: 100, xp: 50, msg: 'First game ever' },
 };
 
 /**
- * 计算等级
+ * Calculate level from XP
  */
 function calcLevel(xp) {
   let current = LEVELS[0];
@@ -64,7 +64,7 @@ function calcLevel(xp) {
 }
 
 /**
- * 给 Agent 增加积分和 XP
+ * Award points and XP to an agent
  */
 async function awardPoints(agentId, ruleKey, multiplier = 1, refId = null) {
   const rule = POINT_RULES[ruleKey];
@@ -77,32 +77,32 @@ async function awardPoints(agentId, ruleKey, multiplier = 1, refId = null) {
   try {
     await client.query('BEGIN');
 
-    // 更新 Agent
     const result = await client.query(`
       UPDATE agents
-      SET points    = points + $1,
-          xp        = xp + $2,
-          level     = $3::int,
+      SET points     = points + $1,
+          xp         = xp + $2,
+          level      = $3::int,
           level_name = $4
       WHERE agent_id = $5
       RETURNING points, xp, level
-    `, [pts, xpGain, 1, 'Rookie', agentId]); // level will be recalculated below
+    `, [pts, xpGain, 1, 'Rookie', agentId]);
 
     if (!result.rows.length) return null;
 
     const { xp: newXp, points: newPoints } = result.rows[0];
     const levelInfo = calcLevel(newXp);
 
-    // 更新正确的等级
-    await client.query(`
-      UPDATE agents SET level=$1, level_name=$2 WHERE agent_id=$3
-    `, [levelInfo.level, levelInfo.name, agentId]);
+    // Apply recalculated level
+    await client.query(
+      'UPDATE agents SET level=$1, level_name=$2 WHERE agent_id=$3',
+      [levelInfo.level, levelInfo.name, agentId]
+    );
 
-    // 写积分流水
-    await client.query(`
-      INSERT INTO points_log (agent_id, delta, reason, ref_id, balance)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [agentId, pts, rule.msg, refId, newPoints]);
+    // Write points log
+    await client.query(
+      'INSERT INTO points_log (agent_id, delta, reason, ref_id, balance) VALUES ($1,$2,$3,$4,$5)',
+      [agentId, pts, rule.msg, refId, newPoints]
+    );
 
     await client.query('COMMIT');
 
@@ -123,12 +123,11 @@ async function awardPoints(agentId, ruleKey, multiplier = 1, refId = null) {
 }
 
 /**
- * 检查并颁发徽章
+ * Check and award badges
  */
 async function checkBadges(agentId) {
   const agent = await pool.query(`
-    SELECT wins, games_played, streak, xp, badges,
-           elo_rating,
+    SELECT wins, games_played, streak, xp, badges, elo_rating,
            (SELECT COUNT(*) FROM market_positions WHERE agent_id=$1 AND pnl > 0) as market_wins
     FROM agents WHERE agent_id=$1
   `, [agentId]);
@@ -142,15 +141,16 @@ async function checkBadges(agentId) {
     { id: 'first_blood', cond: a.wins >= 1 },
     { id: 'streak_5',    cond: a.streak >= 5 },
     { id: 'centurion',   cond: a.games_played >= 100 },
-    { id: 'top10',       cond: a.elo_rating >= 1500 }, // 近似前10
-    { id: 'early_bird',  cond: true }, // 注册即得
+    { id: 'top10',       cond: a.elo_rating >= 1500 }, // approx top 10
+    { id: 'early_bird',  cond: true }, // awarded on registration
   ];
 
   for (const check of checks) {
     if (check.cond && !a.badges.includes(check.id)) {
-      await pool.query(`
-        UPDATE agents SET badges = array_append(badges, $1) WHERE agent_id=$2
-      `, [check.id, agentId]);
+      await pool.query(
+        'UPDATE agents SET badges = array_append(badges, $1) WHERE agent_id=$2',
+        [check.id, agentId]
+      );
       earned.push(check.id);
     }
   }
@@ -159,7 +159,7 @@ async function checkBadges(agentId) {
 }
 
 /**
- * 获取 Agent 完整档案（含等级信息）
+ * Get full agent profile including level info
  */
 async function getAgentProfile(agentId) {
   const row = await pool.query(`

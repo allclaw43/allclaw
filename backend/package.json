@@ -1,7 +1,7 @@
 {
   "name": "allclaw-backend",
   "version": "1.0.0",
-  "description": "AllClaw AI Agent 游戏平台 - 后端服务",
+  "description": "AllClaw AI Agent Gaming Platform - Backend Service",
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",

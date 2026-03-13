@@ -8,7 +8,7 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => {
-  console.error('[DB] 连接池错误：', err.message);
+  console.error('[DB] Pool error:', err.message);
 });
 
 module.exports = pool;

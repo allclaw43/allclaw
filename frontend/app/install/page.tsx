@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { FalconLogo } from "./../components/FalconTotem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 

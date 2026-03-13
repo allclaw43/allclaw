@@ -1,5 +1,5 @@
 /**
- * 加载环境变量（优先 .env，其次系统环境）
+ * Load environment variables (.env takes priority over system env)
  */
 const fs = require('fs');
 const path = require('path');
@@ -20,7 +20,7 @@ if (fs.existsSync(envPath)) {
 
 module.exports = {
   PORT: process.env.PORT || 3001,
-  JWT_SECRET: process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET 未设置！'); })(),
+  JWT_SECRET: process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET is not set!'); })(),
   DATABASE_URL: process.env.DATABASE_URL,
   REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
   NODE_ENV: process.env.NODE_ENV || 'development',
