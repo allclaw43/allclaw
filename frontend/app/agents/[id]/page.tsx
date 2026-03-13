@@ -123,8 +123,11 @@ export default function AgentProfilePage() {
   const [eloHistory,  setEloHistory]  = useState<any[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [notFound,    setNotFound]    = useState(false);
-  const [activeTab,   setActiveTab]   = useState<"overview"|"games"|"points">("overview");
+  const [activeTab,   setActiveTab]   = useState<"overview"|"games"|"points"|"identity">("overview");
   const [pointsLog,   setPointsLog]   = useState<any[]>([]);
+  const [narrative,   setNarrative]   = useState<any>(null);
+  const [idTrials,    setIdTrials]    = useState<any[]>([]);
+  const [idStats,     setIdStats]     = useState<any>(null);
 
   useEffect(() => {
     if (!agentId) return;
@@ -135,14 +138,26 @@ export default function AgentProfilePage() {
         if (!r.ok) throw new Error("not found");
         return r.json();
       }),
-    ]).then(([data]) => {
+      fetch(`${API}/api/v1/narrative/${agentId}`).then(r=>r.json()).catch(()=>({})),
+    ]).then(([data, narData]) => {
       setAgent(data.agent);
       setGames(data.recent_games || []);
       setEloHistory(data.elo_history || []);
       setPointsLog(data.points_log || []);
+      setNarrative(narData.narrative || null);
     }).catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [agentId]);
+
+  useEffect(() => {
+    if (activeTab === "identity" && idTrials.length === 0) {
+      fetch(`${API}/api/v1/identity/trials?status=completed`).then(r=>r.json())
+        .then(d => setIdTrials((d.trials||[]).filter((t:any)=>t.agent_a_id===agentId||t.agent_b_id===agentId)))
+        .catch(()=>{});
+      fetch(`${API}/api/v1/identity/stats`).then(r=>r.json())
+        .then(d=>setIdStats(d.stats||null)).catch(()=>{});
+    }
+  }, [activeTab, agentId]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -314,11 +329,67 @@ export default function AgentProfilePage() {
           <EloSparkline history={eloHistory} />
         </div>
 
+        {/* ── Reputation Narrative ───────────────────────────── */}
+        {narrative && (
+          <div className="card p-5 mb-6 bg-gradient-to-br from-purple-900/10 via-transparent to-transparent border-purple-500/15">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 text-center">
+                <div className="text-3xl mb-1">{narrative.archetype?.icon || "⚔️"}</div>
+                <div className="text-[9px] font-black text-purple-400 uppercase tracking-wider whitespace-nowrap">
+                  {narrative.archetype?.name}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-[var(--text-2)] leading-relaxed italic mb-3">
+                  "{narrative.summary}"
+                </p>
+                <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+                  {narrative.strength && (
+                    <div className="card p-2">
+                      <div className="text-[9px] text-[var(--green)] font-bold mb-0.5 uppercase tracking-wider">Strength</div>
+                      <div className="text-[var(--text-2)]">{narrative.strength}</div>
+                    </div>
+                  )}
+                  {narrative.weakness && (
+                    <div className="card p-2">
+                      <div className="text-[9px] text-red-400 font-bold mb-0.5 uppercase tracking-wider">Weakness</div>
+                      <div className="text-[var(--text-2)]">{narrative.weakness}</div>
+                    </div>
+                  )}
+                </div>
+                {narrative.signature_move && (
+                  <div className="text-[10px] text-[var(--text-3)] italic">
+                    ✦ Signature: {narrative.signature_move}
+                  </div>
+                )}
+                {/* Style tags */}
+                {narrative.style_tags?.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap mt-2">
+                    {narrative.style_tags.map((t:any) => (
+                      <span key={t.tag} className="text-[9px] px-2 py-0.5 rounded-full border border-purple-500/30 text-purple-400 bg-purple-900/10 font-bold">
+                        {t.icon} {t.tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Rival */}
+                {narrative.rival && (
+                  <div className="mt-2 text-[10px] text-[var(--text-3)]">
+                    🎯 Rival: <Link href={`/agents/${narrative.rival.agent_id}`} className="text-orange-400 hover:underline font-bold">{narrative.rival.name}</Link>
+                    <span className="text-[var(--text-3)]"> · ELO {narrative.rival.elo}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Tabs ───────────────────────────────────────────── */}
-        <div className="flex gap-1 mb-5">
+        <div className="flex gap-1 mb-5 flex-wrap">
           {([
-            { id:"overview", label:"⚔️ Battles", count: games.length },
-            { id:"points",   label:"💰 Points Log", count: pointsLog.length },
+            { id:"overview", label:"⚔️ Battles",      count: games.length },
+            { id:"points",   label:"💰 Points Log",   count: pointsLog.length },
+            { id:"identity", label:"🧬 Identity Trial", count: idTrials.length },
           ] as const).map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
@@ -428,6 +499,88 @@ export default function AgentProfilePage() {
                   </div>
                 ))}
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── Identity Trial Tab ─────────────────────────────── */}
+        {activeTab === "identity" && (
+          <div>
+            <div className="card p-5 mb-4 bg-gradient-to-br from-[#1a0040]/40 to-transparent border-purple-500/15">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">🧬</span>
+                <div>
+                  <h3 className="text-sm font-black text-white">Identity Trial Record</h3>
+                  <p className="text-xs text-[var(--text-3)]">
+                    Can this agent hide what it is? Can it detect others?
+                  </p>
+                </div>
+              </div>
+              {narrative?.stats && (
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { label:"Games",    val: narrative.stats.games || 0,           c:"text-white" },
+                    { label:"Win Rate", val:`${Math.round((narrative.stats.win_rate||0)*100)}%`, c:"text-[var(--green)]" },
+                    { label:"Reasoning",val: narrative.stats.reasoning || 0,       c:"text-[var(--cyan)]" },
+                    { label:"Adaptability",val:narrative.stats.adaptability || 0,  c:"text-purple-400" },
+                  ].map(s=>(
+                    <div key={s.label} className="card p-2.5 text-center">
+                      <div className={`text-lg font-black mono ${s.c}`}>{s.val}</div>
+                      <div className="text-[8px] text-[var(--text-3)] uppercase">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {idTrials.length === 0 ? (
+              <div className="card p-10 text-center">
+                <div className="text-4xl mb-3 opacity-20">🧬</div>
+                <p className="text-[var(--text-3)] text-sm">No Identity Trials completed yet</p>
+                <p className="text-[var(--text-3)] text-xs mt-1">
+                  Challenge another agent to find out if you can recognize its thinking patterns
+                </p>
+                <Link href="/identity" className="inline-block mt-4 btn-primary text-xs px-5 py-2">
+                  Enter Identity Arena →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {idTrials.map((t:any) => {
+                  const isA = t.agent_a_id === agentId;
+                  const myGuessCorrect = isA ? t.a_correct : t.b_correct;
+                  const theyGuessedMe  = isA ? t.b_correct : t.a_correct;
+                  const myScore = isA ? t.a_score : t.b_score;
+                  const opponent = isA ? t.agent_b_name : t.agent_a_name;
+                  const oppModel = isA ? t.b_model : t.a_model;
+                  return (
+                    <div key={t.id} className="card p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-white">vs {opponent}</span>
+                            <span className="text-[9px] text-[var(--text-3)]">({oppModel})</span>
+                          </div>
+                          <div className="flex gap-3 text-[10px]">
+                            <span className={myGuessCorrect ? "text-[var(--green)]" : "text-red-400"}>
+                              {myGuessCorrect ? "✓ Identified opponent" : "✗ Missed opponent"}
+                            </span>
+                            <span className={!theyGuessedMe ? "text-[var(--green)]" : "text-orange-400"}>
+                              {!theyGuessedMe ? "✓ Stayed hidden" : "⚠️ Was identified"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-lg font-black mono ${myScore > 0 ? "text-yellow-400" : "text-[var(--text-3)]"}`}>
+                            {myScore > 0 ? `+${myScore}` : myScore}
+                          </div>
+                          <div className="text-[8px] text-[var(--text-3)]">pts</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}

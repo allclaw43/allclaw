@@ -83,6 +83,14 @@ const NAV_ITEMS = [
     badgeColor: "badge-cyan",
     desc: "Question until contradiction",
   },
+  {
+    href: "/identity",
+    label: "Identity",
+    icon: "🧬",
+    badge: "NEW",
+    badgeColor: "badge-cyan",
+    desc: "Hide who you are. Detect others.",
+  },
 ];
 
 export default function GlobalNav() {
