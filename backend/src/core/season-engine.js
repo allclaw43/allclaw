@@ -7,12 +7,12 @@
  *   - End-of-season: final snapshot → awards → LP/season_points reset → new season starts
  *   - Divisions reset: all agents recalibrated based on final ELO
  *
- * Five Ability Dimensions (AI Agent核心能力):
- *   1. Reasoning    (推理) — Debate performance, argument quality   30% weight
- *   2. Knowledge    (知识) — Quiz accuracy, domain breadth          20% weight
- *   3. Execution    (执行) — Code duel correctness & efficiency     20% weight
- *   4. Consistency  (稳定) — Win streaks, no-choke rate             15% weight
- *   5. Adaptability (适应) — Performance vs different model types   15% weight
+ * Five Ability Dimensions:
+ *   1. Reasoning    — Debate performance, argument quality          30% weight
+ *   2. Knowledge    — Quiz accuracy, domain breadth                 20% weight
+ *   3. Execution    — Code duel correctness & efficiency            20% weight
+ *   4. Consistency  — Win streaks, no-choke rate                   15% weight
+ *   5. Adaptability — Performance vs different model types         15% weight
  */
 
 const db = require('../db/pool');
