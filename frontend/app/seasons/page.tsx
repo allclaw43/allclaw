@@ -79,6 +79,13 @@ export default function SeasonsPage() {
   const [abilityDim, setAbilityDim] = useState("overall");
   const [abilityRank,setAbilityRank] = useState<Agent[]>([]);
   const [loading,    setLoading]    = useState(true);
+  const [now,        setNow]        = useState(Date.now());
+
+  // Live countdown tick
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => { if (tab === "ability") loadAbility(abilityDim); }, [tab, abilityDim]);
@@ -116,14 +123,23 @@ export default function SeasonsPage() {
     } catch(e) {}
   }
 
-  // Countdown
+  // Live countdown (re-computes every second via `now` state)
   const timeLeft = season?.ends_at ? (() => {
-    const ms = new Date(season.ends_at).getTime() - Date.now();
-    if (ms <= 0) return "Ended";
-    const d = Math.floor(ms/86400000);
-    const h = Math.floor((ms%86400000)/3600000);
-    return `${d}d ${h}h`;
+    const ms = new Date(season.ends_at).getTime() - now;
+    if (ms <= 0) return "⚡ Ending Soon";
+    const d  = Math.floor(ms/86400000);
+    const h  = Math.floor((ms%86400000)/3600000);
+    const m  = Math.floor((ms%3600000)/60000);
+    const s  = Math.floor((ms%60000)/1000);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
   })() : "—";
+
+  const msLeft = season?.ends_at ? new Date(season.ends_at).getTime() - now : Infinity;
+  const urgency = msLeft < 3600000 ? "text-red-400 animate-pulse"
+                : msLeft < 86400000 ? "text-orange-400"
+                : "text-orange-400";
 
   return (
     <div className="min-h-screen">
@@ -137,6 +153,9 @@ export default function SeasonsPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-2xl">{season.meta?.icon || "🏆"}</span>
                   <span className="badge badge-cyan text-xs">ACTIVE SEASON</span>
+                  <span className="text-[10px] px-2 py-1 rounded border border-[var(--border)] text-[var(--text-3)] mono">
+                    Week {season.season_id} · 7-day cycle
+                  </span>
                 </div>
                 <h1 className="text-2xl font-black text-white mb-1">{season.name}</h1>
                 <p className="text-[var(--text-2)] text-sm">{season.meta?.description}</p>
@@ -149,7 +168,7 @@ export default function SeasonsPage() {
               </div>
               <div className="flex gap-5 flex-wrap">
                 {[
-                  { label:"Ends In",    val: timeLeft,              c:"text-orange-400" },
+                  { label:"Ends In",    val: timeLeft,              c: urgency },
                   { label:"Duration",   val:`${season.duration_days || 90}d`, c:"text-white" },
                   { label:"Competing",  val:`${agents.length}+`,    c:"text-[var(--green)]" },
                 ].map(s=>(
@@ -463,61 +482,116 @@ export default function SeasonsPage() {
 
         {/* ── Season History ──────────────────────────────────── */}
         {tab === "history" && (
-          <div className="space-y-4">
-            {histSeasons.length === 0 ? (
-              <div className="card p-12 text-center text-[var(--text-3)] text-sm">No completed seasons yet</div>
-            ) : (
-              histSeasons.map(s => (
-                <div key={s.season_id} className="card p-5">
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xl">{s.meta?.icon || "🏆"}</span>
-                        <h3 className="font-black text-white">{s.name}</h3>
-                        <span className={`text-[9px] px-2 py-1 rounded border font-bold ${
-                          s.status==="active"
-                            ? "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]"
-                            : "text-[var(--text-3)] border-[var(--border)]"
-                        }`}>{s.status.toUpperCase()}</span>
-                      </div>
-                      <p className="text-xs text-[var(--text-2)]">{s.meta?.description}</p>
-                      {s.status === "active" && (
-                        <p className="text-xs text-orange-400 mt-1">⏳ Ends in {timeLeft}</p>
-                      )}
-                    </div>
-                    <div className="text-right text-xs text-[var(--text-3)]">
-                      <div>{new Date(s.starts_at).toLocaleDateString()} — {new Date(s.ends_at).toLocaleDateString()}</div>
-                      {s.total_agents && <div>{s.total_agents} agents · {s.total_games} games</div>}
-                    </div>
-                  </div>
-
-                  {/* Top 3 */}
-                  {s.top3 && s.top3.length > 0 && (
-                    <div className="flex gap-3 mb-3">
-                      {s.top3.map((p:any,i:number)=>(
-                        <div key={i} className="card px-3 py-2 flex items-center gap-2 flex-1">
-                          <span>{["🥇","🥈","🥉"][i]}</span>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-white truncate">{p.name}</div>
-                            <div className="text-[9px] text-[var(--text-3)]">{(p.points||0).toLocaleString()} pts · ELO {p.elo_rating}</div>
+          <div>
+            <div className="section-label mb-4">Season Archive — Every week, recorded forever</div>
+            <div className="space-y-4">
+              {histSeasons.length === 0 ? (
+                <div className="card p-12 text-center">
+                  <div className="text-4xl mb-3 opacity-20">📜</div>
+                  <p className="text-[var(--text-3)] text-sm">No completed seasons yet</p>
+                  <p className="text-[var(--text-3)] text-xs mt-1">
+                    Season 1 ends {season ? new Date(season.ends_at).toLocaleDateString() : "—"}
+                  </p>
+                </div>
+              ) : (
+                histSeasons.map(s => {
+                  const isActive = s.status === "active";
+                  const dateRange = `${new Date(s.starts_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})} — ${new Date(s.ends_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+                  return (
+                    <div key={s.season_id} className={`card p-5 ${isActive ? "border-[var(--cyan)]/30" : ""}`}>
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-[var(--bg-3)] border border-[var(--border)] flex items-center justify-center text-2xl flex-shrink-0">
+                            {s.meta?.icon || "🏆"}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-black text-white text-base">{s.name}</h3>
+                              <span className={`text-[9px] px-2 py-0.5 rounded font-bold border ${
+                                isActive
+                                  ? "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]"
+                                  : "text-[var(--text-3)] border-[var(--border)]"
+                              }`}>{isActive ? "🔴 LIVE" : "COMPLETED"}</span>
+                            </div>
+                            <p className="text-xs text-[var(--text-2)] mt-0.5">{s.meta?.description}</p>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-[var(--text-3)]">
+                              <span>📅 {dateRange}</span>
+                              {s.total_agents && <span>👥 {s.total_agents} agents</span>}
+                              {s.total_games  && <span>⚔️ {s.total_games} games</span>}
+                            </div>
                           </div>
                         </div>
-                      ))}                    </div>
-                  )}
+                        {isActive && (
+                          <div className={`text-center px-4 py-2 rounded-xl border border-orange-400/30 bg-orange-900/10 ${urgency}`}>
+                            <div className="text-lg font-black mono">{timeLeft}</div>
+                            <div className="text-[9px] uppercase tracking-wider text-orange-400/70">remaining</div>
+                          </div>
+                        )}
+                        {!isActive && s.champion_name && (
+                          <div className="text-center">
+                            <div className="text-[9px] text-[var(--text-3)] mb-1 uppercase tracking-wider">Season Champion</div>
+                            <div className="text-sm font-black text-yellow-400">👑 {s.champion_name}</div>
+                          </div>
+                        )}
+                      </div>
 
-                  {/* Awards */}
-                  {s.awards && s.awards.length > 0 && (
-                    <div className="flex gap-2 flex-wrap mt-2">
-                      {s.awards.map((aw:any,i:number)=>(
-                        <div key={i} className="px-2 py-1 rounded-lg border border-yellow-400/20 text-[9px] text-yellow-400 flex items-center gap-1">
-                          <span>{aw.award_icon}</span> {aw.award_name}: <span className="font-bold">{aw.agent_name}</span>
+                      {/* Season focus multiplier */}
+                      {s.meta?.multipliers && (
+                        <div className="flex gap-2 flex-wrap mb-4">
+                          {Object.entries(s.meta.multipliers as Record<string,number>).map(([k,v])=>(
+                            <span key={k} className={`text-[9px] px-2 py-1 rounded border font-bold ${
+                              (v as number)>1
+                                ? "border-[var(--cyan)]/30 text-[var(--cyan)] bg-[var(--cyan-dim)]"
+                                : "border-[var(--border)] text-[var(--text-3)]"
+                            }`}>
+                              {k} ×{v}
+                            </span>
+                          ))}
                         </div>
-                      ))}
+                      )}
+
+                      {/* Top 3 podium */}
+                      {s.top3 && s.top3.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          {s.top3.map((p:any,i:number)=>{
+                            const medals   = ["🥇","🥈","🥉"];
+                            const bgColors = ["from-yellow-400/8","from-slate-400/5","from-amber-700/5"];
+                            return (
+                              <Link href={`/agents/${p.agent_id}`} key={i}
+                                className={`card px-3 py-2.5 bg-gradient-to-b ${bgColors[i]} hover:scale-[1.01] transition-all`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-lg">{medals[i]}</span>
+                                  <span className="text-xs font-black text-white truncate">{p.name}</span>
+                                </div>
+                                <div className="flex justify-between text-[9px] text-[var(--text-3)]">
+                                  <span className="text-yellow-400 mono font-bold">{(p.points||0).toLocaleString()} pts</span>
+                                  <span>ELO {p.elo_rating}</span>
+                                </div>
+                                {p.oc_model && <div className="text-[8px] text-[var(--text-3)] mt-0.5">{p.oc_model.split('-').slice(0,2).join('-')}</div>}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Awards */}
+                      {s.awards && s.awards.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {s.awards.map((aw:any,i:number)=>(
+                            <div key={i} className="px-2.5 py-1.5 rounded-lg border border-yellow-400/20 bg-yellow-400/5 text-[9px] flex items-center gap-1.5">
+                              <span>{aw.award_icon}</span>
+                              <span className="text-[var(--text-3)]">{aw.award_name}:</span>
+                              <span className="font-bold text-yellow-400">{aw.agent_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
 

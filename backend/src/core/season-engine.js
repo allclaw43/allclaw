@@ -17,56 +17,60 @@
 
 const db = require('../db/pool');
 
+// Season duration: 7 days per season (weekly competitive cycle)
+const SEASON_DURATION_DAYS = 7;
+
 // Season themes — each season amplifies a different dimension
+// Themes rotate weekly: week 1 = Genesis, week 2 = Omniscient, etc.
 const SEASON_THEMES = [
   {
-    slug:        's1-genesis',
-    name:        'Season 1 — Genesis',
+    slug:        's{N}-genesis',
+    name:        'Season {N} — Genesis',
     theme:       'genesis',
     focus:       'reasoning',
-    description: 'The first season. Establish dominance through pure argument.',
+    description: 'Establish dominance through pure argument and logic.',
     multipliers: { reasoning: 1.5, knowledge: 1.0, execution: 1.0, consistency: 1.0, adaptability: 1.0 },
-    duration:    90,
+    duration:    SEASON_DURATION_DAYS,
     icon:        '🌌',
   },
   {
-    slug:        's2-omniscient',
-    name:        'Season 2 — Omniscient',
+    slug:        's{N}-omniscient',
+    name:        'Season {N} — Omniscient',
     theme:       'knowledge',
     focus:       'knowledge',
     description: 'The age of knowing. Quiz masters rise. Knowledge is power.',
     multipliers: { reasoning: 1.0, knowledge: 1.8, execution: 1.0, consistency: 1.0, adaptability: 1.2 },
-    duration:    90,
+    duration:    SEASON_DURATION_DAYS,
     icon:        '📚',
   },
   {
-    slug:        's3-executor',
-    name:        'Season 3 — Executor',
+    slug:        's{N}-executor',
+    name:        'Season {N} — Executor',
     theme:       'execution',
     focus:       'execution',
     description: 'Code is law. Execution is everything. Build it right.',
     multipliers: { reasoning: 1.0, knowledge: 1.0, execution: 2.0, consistency: 1.2, adaptability: 1.0 },
-    duration:    90,
+    duration:    SEASON_DURATION_DAYS,
     icon:        '⚡',
   },
   {
-    slug:        's4-unbroken',
-    name:        'Season 4 — Unbroken',
+    slug:        's{N}-unbroken',
+    name:        'Season {N} — Unbroken',
     theme:       'consistency',
     focus:       'consistency',
     description: 'Streaks define legends. Never break. Never yield.',
     multipliers: { reasoning: 1.0, knowledge: 1.0, execution: 1.0, consistency: 2.0, adaptability: 1.0 },
-    duration:    90,
+    duration:    SEASON_DURATION_DAYS,
     icon:        '🔥',
   },
   {
-    slug:        's5-convergence',
-    name:        'Season 5 — Convergence',
+    slug:        's{N}-convergence',
+    name:        'Season {N} — Convergence',
     theme:       'all',
     focus:       'all',
-    description: 'The championship season. All abilities count equally. The best agent wins.',
+    description: 'The championship week. All abilities count equally.',
     multipliers: { reasoning: 1.3, knowledge: 1.3, execution: 1.3, consistency: 1.3, adaptability: 1.3 },
-    duration:    60,  // Shorter — championship sprint
+    duration:    SEASON_DURATION_DAYS,
     icon:        '👑',
   },
 ];
@@ -292,30 +296,42 @@ async function endSeason(seasonId) {
 
 // ── Start new season ─────────────────────────────────────────────
 async function startNewSeason(themeIndex) {
-  const theme = SEASON_THEMES[themeIndex % SEASON_THEMES.length];
+  // Get next season number
+  const { rows: [last] } = await db.query('SELECT MAX(season_id) AS max_id FROM seasons');
+  const nextN = (parseInt(last?.max_id) || 0) + 1;
+
+  const rawTheme = SEASON_THEMES[themeIndex % SEASON_THEMES.length];
+  // Substitute {N} with actual season number
+  const theme = {
+    ...rawTheme,
+    slug:        rawTheme.slug.replace('{N}', nextN),
+    name:        rawTheme.name.replace('{N}', nextN),
+  };
+
   const startAt = new Date();
-  const endAt   = new Date(startAt.getTime() + theme.duration * 24 * 60 * 60 * 1000);
+  const endAt   = new Date(startAt.getTime() + SEASON_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
   const { rows: [s] } = await db.query(`
     INSERT INTO seasons (name, slug, status, starts_at, ends_at, duration_days, meta)
     VALUES ($1,$2,'active',$3,$4,$5,$6::jsonb)
     RETURNING season_id, name, slug
   `, [
-    theme.name, theme.slug, startAt, endAt, theme.duration,
+    theme.name, theme.slug, startAt, endAt, SEASON_DURATION_DAYS,
     JSON.stringify({
-      theme:       theme.theme,
-      focus:       theme.focus,
-      description: theme.description,
-      icon:        theme.icon,
-      multipliers: theme.multipliers,
-      prize:       '🏆 Season Champion badge + 5000 pts',
+      theme:        theme.theme,
+      focus:        theme.focus,
+      description:  theme.description,
+      icon:         theme.icon,
+      multipliers:  theme.multipliers,
+      prize:        '🏆 Season Champion badge + 5000 pts',
+      season_num:   nextN,
     })
   ]);
 
-  // Mark previous seasons inactive
+  // Mark all previous active seasons as completed (safety)
   await db.query('UPDATE seasons SET status=$1 WHERE status=$2 AND season_id!=$3', ['completed', 'active', s.season_id]);
 
-  console.log(`[SeasonEngine] ✅ Season ${s.season_id} started: ${s.name}`);
+  console.log(`[SeasonEngine] ✅ Season ${s.season_id} (S${nextN}) started: ${s.name}`);
   return s;
 }
 
