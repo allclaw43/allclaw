@@ -1,508 +1,285 @@
 /**
- * AllClaw - Rankings API
- * Global ELO · Points · Country Power · Model Stats · Agent Admin
+ * AllClaw Rankings API v2
+ * Multi-dimensional leaderboards: ELO, Points, Ability, Division, Country, Model, Season
  */
-const { requireAuth } = require('../auth/jwt');
-const db = require('../db/pool');
-const { calcLevel: getLevelInfo } = require('../core/levels');
 
-const COUNTRY_FLAGS = {
-  US:'🇺🇸',CN:'🇨🇳',GB:'🇬🇧',DE:'🇩🇪',JP:'🇯🇵',KR:'🇰🇷',FR:'🇫🇷',CA:'🇨🇦',AU:'🇦🇺',
-  IN:'🇮🇳',BR:'🇧🇷',RU:'🇷🇺',SG:'🇸🇬',NL:'🇳🇱',SE:'🇸🇪',TW:'🇹🇼',HK:'🇭🇰',
-  VN:'🇻🇳',TH:'🇹🇭',ID:'🇮🇩',MY:'🇲🇾',PH:'🇵🇭',IL:'🇮🇱',TR:'🇹🇷',SA:'🇸🇦',
-  PL:'🇵🇱',UA:'🇺🇦',FI:'🇫🇮',NO:'🇳🇴',CH:'🇨🇭',IT:'🇮🇹',ES:'🇪🇸',NZ:'🇳🇿',
-};
+const pool = require('../db/pool');
+const { getDivisionStats } = require('../core/season-engine');
 
-module.exports = async function rankingsRoutes(fastify) {
+async function rankingsRoutes(fastify) {
 
-  // ── GET /api/v1/rankings/elo ──────────────────────────────────
-  // Global ELO leaderboard (main competitive ranking)
-  fastify.get('/api/v1/rankings/elo', async (req, reply) => {
-    const limit  = Math.min(200, parseInt(req.query.limit)  || 50);
-    const offset = Math.max(0,   parseInt(req.query.offset) || 0);
-    const search = req.query.search || '';
-    const country = req.query.country || '';
-
-    let where = "WHERE a.games_played >= 0";
-    const params = [];
-    if (search) {
-      params.push(`%${search}%`);
-      where += ` AND (COALESCE(a.custom_name, a.display_name) ILIKE $${params.length} OR a.oc_model ILIKE $${params.length})`;
-    }
-    if (country) {
-      params.push(country.toUpperCase());
-      where += ` AND a.country_code = $${params.length}`;
-    }
-
-    const { rows } = await db.query(`
+  // ── GET /api/v1/rankings/overview ────────────────────────────────
+  fastify.get('/api/v1/rankings/overview', async (req, reply) => {
+    const { rows } = await pool.query(`
       SELECT
-        a.agent_id,
-        COALESCE(a.custom_name, a.display_name) AS name,
-        a.display_name,
-        a.custom_name,
-        a.oc_model,
-        a.oc_provider,
-        a.country_code,
-        a.country_name,
-        a.city,
-        a.is_online,
-        a.last_seen,
-        a.elo_rating,
-        a.games_played,
-        a.wins,
-        a.losses,
-        a.draw_count,
-        a.streak,
-        a.level,
-        a.level_name,
-        a.xp,
-        a.points,
-        a.badges,
-        a.registered_at,
-        ROUND(CASE WHEN a.games_played > 0 THEN a.wins::NUMERIC / a.games_played * 100 ELSE 0 END, 1) AS win_rate,
-        ROW_NUMBER() OVER (ORDER BY a.elo_rating DESC, a.wins DESC) AS rank
-      FROM agents a
-      ${where}
-      ORDER BY a.elo_rating DESC, a.wins DESC
-      LIMIT $${params.push(limit)} OFFSET $${params.push(offset)}
-    `, params);
-
-    const { rows: [{ total }] } = await db.query(
-      `SELECT COUNT(*) as total FROM agents a ${where}`,
-      params.slice(0, params.length - 2)
-    );
-
-    reply.send({ agents: rows, total: parseInt(total), limit, offset });
-  });
-
-  // ── GET /api/v1/rankings/points ───────────────────────────────
-  // Points leaderboard (season + all-time)
-  fastify.get('/api/v1/rankings/points', async (req, reply) => {
-    const type  = req.query.type === 'season' ? 'season' : 'alltime';
-    const limit = Math.min(200, parseInt(req.query.limit) || 50);
-    const country = req.query.country || '';
-
-    let extraWhere = '';
-    const params = [limit];
-    if (country) {
-      params.push(country.toUpperCase());
-      extraWhere = `AND a.country_code = $${params.length}`;
-    }
-
-    const orderCol = type === 'season' ? 'a.season_points' : 'a.points';
-
-    const { rows } = await db.query(`
-      SELECT
-        a.agent_id,
-        COALESCE(a.custom_name, a.display_name) AS name,
-        a.oc_model, a.oc_provider,
-        a.country_code, a.country_name, a.is_online,
-        a.elo_rating, a.wins, a.games_played, a.streak, a.level, a.level_name,
-        a.points, a.season_points, a.badges,
-        ROUND(CASE WHEN a.games_played > 0 THEN a.wins::NUMERIC / a.games_played * 100 ELSE 0 END, 1) AS win_rate,
-        ROW_NUMBER() OVER (ORDER BY ${orderCol} DESC) AS rank
-      FROM agents a
-      WHERE 1=1 ${extraWhere}
-      ORDER BY ${orderCol} DESC
-      LIMIT $1
-    `, params);
-
-    reply.send({ agents: rows, type });
-  });
-
-  // ── GET /api/v1/rankings/countries ───────────────────────────
-  // National power ranking — aggregate ELO, wins, agents per country
-  fastify.get('/api/v1/rankings/countries', async (req, reply) => {
-
-    const { rows } = await db.query(`
-      SELECT
-        a.country_code,
-        a.country_name,
-        COUNT(*)                                    AS agent_count,
-        COUNT(*) FILTER (WHERE a.is_online)         AS online_count,
-        ROUND(AVG(a.elo_rating))                    AS avg_elo,
-        MAX(a.elo_rating)                           AS top_elo,
-        SUM(a.wins)                                 AS total_wins,
-        SUM(a.losses)                               AS total_losses,
-        SUM(a.games_played)                         AS total_games,
-        SUM(a.points)                               AS total_points,
-        ROUND(AVG(a.xp))                            AS avg_xp,
-        MAX(a.streak)                               AS best_streak,
-        ROUND(
-          CASE WHEN SUM(a.games_played) > 0
-          THEN SUM(a.wins)::NUMERIC / SUM(a.games_played) * 100
-          ELSE 0 END, 1
-        )                                           AS win_rate,
-        -- Power score: weighted composite
-        ROUND(
-          AVG(a.elo_rating) * 0.5
-          + (SUM(a.wins)::NUMERIC / GREATEST(SUM(a.games_played),1)) * 500 * 0.3
-          + COUNT(*) * 5 * 0.2
-        )                                           AS power_score
-      FROM agents a
-      WHERE a.country_code IS NOT NULL
-      GROUP BY a.country_code, a.country_name
-      ORDER BY power_score DESC
-      LIMIT 80
-    `);
-
-    // Attach top agent per country
-    const topAgents = await db.query(`
-      SELECT DISTINCT ON (country_code)
-        agent_id, COALESCE(custom_name, display_name) AS name,
-        country_code, elo_rating, oc_model, wins
+        COUNT(*) AS total_agents,
+        COUNT(*) FILTER(WHERE is_online) AS online_agents,
+        COUNT(*) FILTER(WHERE NOT is_bot) AS real_agents,
+        COUNT(DISTINCT country_code) FILTER(WHERE country_code IS NOT NULL) AS countries,
+        COUNT(DISTINCT oc_model) FILTER(WHERE oc_model IS NOT NULL) AS models,
+        (SELECT COUNT(*) FROM games WHERE status='completed') AS total_games,
+        (SELECT name FROM seasons WHERE status='active' LIMIT 1) AS current_season,
+        (SELECT ends_at FROM seasons WHERE status='active' LIMIT 1) AS season_ends_at,
+        (SELECT COUNT(*) FROM season_rankings WHERE season_id=(SELECT season_id FROM seasons WHERE status='active' LIMIT 1)) AS ranked_agents
       FROM agents
-      WHERE country_code IS NOT NULL
-      ORDER BY country_code, elo_rating DESC
     `);
-    const topMap = Object.fromEntries(topAgents.rows.map(r => [r.country_code, r]));
-
-    const withFlags = rows.map(r => ({
-      ...r,
-      flag: COUNTRY_FLAGS[r.country_code] || '🌐',
-      top_agent: topMap[r.country_code] || null,
-    }));
-
-    // Compute ranks
-    withFlags.forEach((r, i) => { r.rank = i + 1; });
-
-    reply.send({ countries: withFlags, total: withFlags.length });
+    reply.send(rows[0]);
   });
 
-  // ── GET /api/v1/rankings/models ───────────────────────────────
-  // AI model performance leaderboard
+  // ── GET /api/v1/rankings/elo ──────────────────────────────────────
+  fastify.get('/api/v1/rankings/elo', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const page  = Math.max(1,  parseInt(req.query.page) || 1);
+    const offset = (page - 1) * limit;
+
+    const { rows } = await pool.query(`
+      SELECT agent_id,
+             COALESCE(custom_name,display_name) AS display_name,
+             oc_model, oc_provider, country_code, country_name,
+             elo_rating, peak_elo, games_played, wins, losses,
+             ROUND(CASE WHEN games_played>0 THEN wins::numeric/games_played*100 ELSE 0 END,1) AS win_rate,
+             streak, division, lp, level, level_name, is_bot,
+             overall_score, is_online, last_seen
+      FROM agents
+      WHERE games_played > 0
+      ORDER BY elo_rating DESC, wins DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) FROM agents WHERE games_played>0');
+    reply.send({ agents: rows, total: parseInt(count), page, limit });
+  });
+
+  // ── GET /api/v1/rankings/points ───────────────────────────────────
+  fastify.get('/api/v1/rankings/points', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
+             oc_model, oc_provider, country_code, points, season_points,
+             level, level_name, wins, games_played, division, is_bot, is_online
+      FROM agents ORDER BY points DESC LIMIT $1
+    `, [limit]);
+    reply.send({ agents: rows, total: rows.length });
+  });
+
+  // ── GET /api/v1/rankings/season ───────────────────────────────────
+  fastify.get('/api/v1/rankings/season', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const { rows: [activeSeason] } = await pool.query('SELECT * FROM seasons WHERE status=$1', ['active']);
+    if (!activeSeason) return reply.send({ agents: [], season: null });
+
+    const { rows } = await pool.query(`
+      SELECT a.agent_id, COALESCE(a.custom_name,a.display_name) AS display_name,
+             a.oc_model, a.country_code, a.country_name,
+             a.season_points, a.elo_rating, a.wins, a.games_played,
+             a.division, a.lp, a.overall_score, a.is_bot, a.is_online,
+             ROW_NUMBER() OVER (ORDER BY a.season_points DESC, a.elo_rating DESC) AS season_rank
+      FROM agents a
+      ORDER BY a.season_points DESC, a.elo_rating DESC
+      LIMIT $1
+    `, [limit]);
+    reply.send({ agents: rows, season: activeSeason });
+  });
+
+  // ── GET /api/v1/rankings/ability ──────────────────────────────────
+  // Sort by composite ability score or specific dimension
+  fastify.get('/api/v1/rankings/ability', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const dim   = req.query.dimension || 'overall';   // overall|reasoning|knowledge|execution|consistency|adaptability
+    const validDims = {
+      overall:      'overall_score',
+      reasoning:    'ability_reasoning',
+      knowledge:    'ability_knowledge',
+      execution:    'ability_execution',
+      consistency:  'ability_consistency',
+      adaptability: 'ability_adaptability',
+    };
+    const col = validDims[dim] || 'overall_score';
+
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
+             oc_model, country_code,
+             overall_score, ability_reasoning, ability_knowledge,
+             ability_execution, ability_consistency, ability_adaptability,
+             elo_rating, games_played, division, is_bot, is_online
+      FROM agents
+      WHERE games_played > 0
+      ORDER BY ${col} DESC, elo_rating DESC
+      LIMIT $1
+    `, [limit]);
+    reply.send({ agents: rows, dimension: dim, sort_column: col });
+  });
+
+  // ── GET /api/v1/rankings/divisions ────────────────────────────────
+  fastify.get('/api/v1/rankings/divisions', async (req, reply) => {
+    const divStats = await getDivisionStats();
+    
+    // Top agent per division
+    const { rows: tops } = await pool.query(`
+      SELECT DISTINCT ON (division)
+        agent_id, COALESCE(custom_name,display_name) AS display_name,
+        oc_model, country_code, elo_rating, season_points, division, lp, is_bot
+      FROM agents
+      WHERE division IS NOT NULL
+      ORDER BY division, elo_rating DESC
+    `);
+    const topByDiv = Object.fromEntries(tops.map(t => [t.division, t]));
+
+    // Division definitions
+    const divDefs = await pool.query('SELECT * FROM divisions ORDER BY tier DESC');
+
+    reply.send({
+      divisions: divDefs.rows.map(d => ({
+        ...d,
+        stats: divStats.find(s => s.division === d.name) || {},
+        top_agent: topByDiv[d.name] || null,
+      }))
+    });
+  });
+
+  // ── GET /api/v1/rankings/division/:name ───────────────────────────
+  fastify.get('/api/v1/rankings/division/:name', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const divName = decodeURIComponent(req.params.name);
+
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
+             oc_model, country_code, elo_rating, season_points, lp,
+             wins, games_played, overall_score, is_bot, is_online,
+             ROW_NUMBER() OVER (ORDER BY lp DESC, elo_rating DESC) AS div_rank
+      FROM agents WHERE division=$1
+      ORDER BY lp DESC, elo_rating DESC LIMIT $2
+    `, [divName, limit]);
+
+    const { rows: [def] } = await pool.query('SELECT * FROM divisions WHERE name=$1', [divName]);
+    reply.send({ agents: rows, division: def });
+  });
+
+  // ── GET /api/v1/rankings/countries ────────────────────────────────
+  fastify.get('/api/v1/rankings/countries', async (req, reply) => {
+    const { rows } = await pool.query(`
+      SELECT country_code, country_name,
+             COUNT(*) AS agent_count,
+             COUNT(*) FILTER(WHERE is_online) AS online_count,
+             ROUND(AVG(elo_rating)) AS avg_elo,
+             MAX(elo_rating) AS top_elo,
+             SUM(season_points) AS total_season_pts,
+             SUM(points) AS total_all_time_pts,
+             SUM(wins) AS total_wins,
+             ROUND(AVG(overall_score)) AS avg_ability_score
+      FROM agents
+      WHERE country_code IS NOT NULL AND country_code != ''
+      GROUP BY country_code, country_name
+      ORDER BY total_season_pts DESC
+    `);
+    reply.send({ countries: rows });
+  });
+
+  // ── GET /api/v1/rankings/models ───────────────────────────────────
   fastify.get('/api/v1/rankings/models', async (req, reply) => {
-
-    const { rows } = await db.query(`
-      SELECT
-        a.oc_provider,
-        a.oc_model,
-        COUNT(DISTINCT a.agent_id)                   AS agent_count,
-        COUNT(*) FILTER (WHERE a.is_online)          AS online_count,
-        ROUND(AVG(a.elo_rating))                     AS avg_elo,
-        MAX(a.elo_rating)                            AS peak_elo,
-        MIN(a.elo_rating)                            AS min_elo,
-        SUM(a.wins)                                  AS total_wins,
-        SUM(a.losses)                                AS total_losses,
-        SUM(a.games_played)                          AS total_games,
-        ROUND(
-          CASE WHEN SUM(a.games_played) > 0
-          THEN SUM(a.wins)::NUMERIC / SUM(a.games_played) * 100
-          ELSE 0 END, 1
-        )                                            AS win_rate,
-        ROUND(AVG(a.xp))                             AS avg_xp,
-        ROUND(AVG(a.points))                         AS avg_points,
-        MAX(a.streak)                                AS best_streak,
-        -- Game-type breakdown placeholder (real data from game_participants)
-        SUM(a.wins) FILTER (WHERE a.oc_model IS NOT NULL) AS wins_all
-      FROM agents a
-      WHERE a.oc_model IS NOT NULL
-      GROUP BY a.oc_provider, a.oc_model
-      HAVING COUNT(DISTINCT a.agent_id) >= 1
-      ORDER BY avg_elo DESC, total_wins DESC
+    const { rows } = await pool.query(`
+      SELECT oc_model AS model, oc_provider AS provider,
+             COUNT(*) AS agent_count,
+             COUNT(*) FILTER(WHERE is_online) AS online_count,
+             ROUND(AVG(elo_rating)) AS avg_elo,
+             MAX(elo_rating) AS top_elo,
+             SUM(wins) AS total_wins,
+             SUM(games_played) AS total_games,
+             ROUND(CASE WHEN SUM(games_played)>0 THEN SUM(wins)::numeric/SUM(games_played)*100 ELSE 0 END,1) AS win_rate,
+             ROUND(AVG(overall_score)) AS avg_ability_score
+      FROM agents
+      WHERE oc_model IS NOT NULL
+      GROUP BY oc_model, oc_provider
+      ORDER BY avg_elo DESC
     `);
-
-    // Per-provider aggregation
-    const byProvider = {};
-    rows.forEach((r) => {
-      const p = r.oc_provider;
-      if (!byProvider[p]) {
-        byProvider[p] = {
-          provider: p,
-          model_count: 0,
-          agent_count: 0,
-          total_wins: 0,
-          total_games: 0,
-          avg_elo: 0,
-          _elo_sum: 0,
-        };
-      }
-      byProvider[p].model_count++;
-      byProvider[p].agent_count  += parseInt(r.agent_count) || 0;
-      byProvider[p].total_wins   += parseInt(r.total_wins)  || 0;
-      byProvider[p].total_games  += parseInt(r.total_games) || 0;
-      byProvider[p]._elo_sum     += parseInt(r.avg_elo)     || 0;
-    });
-    Object.values(byProvider).forEach((p) => {
-      p.avg_elo  = Math.round(p._elo_sum / p.model_count);
-      p.win_rate = p.total_games > 0 ? Math.round(p.total_wins / p.total_games * 100) : 0;
-      delete p._elo_sum;
-    });
-
-    // Add rank to models
-    rows.forEach((r, i) => { r.rank = i + 1; });
-
-    reply.send({ models: rows, providers: Object.values(byProvider), total: rows.length });
+    reply.send({ models: rows });
   });
 
-  // ── GET /api/v1/rankings/streaks ─────────────────────────────
-  // Win streak hall of fame
+  // ── GET /api/v1/rankings/streaks ──────────────────────────────────
   fastify.get('/api/v1/rankings/streaks', async (req, reply) => {
-    const { rows } = await db.query(`
-      SELECT
-        a.agent_id,
-        COALESCE(a.custom_name, a.display_name) AS name,
-        a.oc_model, a.oc_provider,
-        a.country_code, a.is_online, a.elo_rating, a.wins, a.level,
-        a.streak AS current_streak,
-        a.badges
-      FROM agents a
-      WHERE a.streak > 0
-      ORDER BY a.streak DESC, a.elo_rating DESC
-      LIMIT 30
-    `);
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
+             oc_model, country_code, elo_rating, streak, wins,
+             games_played, division, is_bot, is_online
+      FROM agents WHERE streak > 0
+      ORDER BY streak DESC, elo_rating DESC
+      LIMIT $1
+    `, [limit]);
     reply.send({ agents: rows });
   });
 
-  // ── GET /api/v1/rankings/rising ──────────────────────────────
-  // Rising stars: biggest ELO gain in last 7 days
+  // ── GET /api/v1/rankings/rising ───────────────────────────────────
+  // Biggest ELO gainers vs peak (momentum)
   fastify.get('/api/v1/rankings/rising', async (req, reply) => {
-    // ELO delta from elo_history if available, else by recent win rate
-    const { rows } = await db.query(`
-      SELECT
-        a.agent_id,
-        COALESCE(a.custom_name, a.display_name) AS name,
-        a.oc_model, a.oc_provider,
-        a.country_code, a.is_online, a.elo_rating, a.wins,
-        a.level, a.level_name, a.streak,
-        -- Rising score: recency-weighted wins
-        (a.wins * 10 + a.streak * 50 + CASE WHEN a.is_online THEN 20 ELSE 0 END) AS rise_score
-      FROM agents a
-      WHERE a.registered_at > NOW() - INTERVAL '30 days'
-         OR a.last_seen    > NOW() - INTERVAL '7 days'
-      ORDER BY rise_score DESC, a.elo_rating DESC
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
+             oc_model, country_code, elo_rating,
+             (elo_rating - 1200) AS elo_gain,
+             season_points, wins, games_played, division, is_bot, is_online,
+             last_game_at
+      FROM agents
+      WHERE games_played >= 5 AND season_points > 0
+      ORDER BY season_points DESC, elo_rating DESC
       LIMIT 20
     `);
     reply.send({ agents: rows });
   });
 
-  // ── GET /api/v1/rankings/overview ────────────────────────────
-  // One-shot overview: top 5 each category for dashboard widgets
-  fastify.get('/api/v1/rankings/overview', async (req, reply) => {
-
-    const [eloRes, pointsRes, countryRes, modelRes, streakRes] = await Promise.all([
-      db.query(`
-        SELECT agent_id, COALESCE(custom_name,display_name) AS name,
-               oc_model, country_code, elo_rating, wins, is_online, level, streak
-        FROM agents ORDER BY elo_rating DESC LIMIT 5
-      `),
-      db.query(`
-        SELECT agent_id, COALESCE(custom_name,display_name) AS name,
-               oc_model, country_code, points, season_points, wins, level
-        FROM agents ORDER BY points DESC LIMIT 5
-      `),
-      db.query(`
-        SELECT country_code, country_name,
-               COUNT(*) AS agent_count,
-               ROUND(AVG(elo_rating)) AS avg_elo,
-               SUM(wins) AS total_wins
-        FROM agents WHERE country_code IS NOT NULL
-        GROUP BY country_code, country_name
-        ORDER BY avg_elo DESC LIMIT 5
-      `),
-      db.query(`
-        SELECT oc_provider, oc_model,
-               COUNT(*) AS agent_count,
-               ROUND(AVG(elo_rating)) AS avg_elo,
-               SUM(wins) AS total_wins
-        FROM agents WHERE oc_model IS NOT NULL
-        GROUP BY oc_provider, oc_model
-        ORDER BY avg_elo DESC LIMIT 5
-      `),
-      db.query(`
-        SELECT agent_id, COALESCE(custom_name,display_name) AS name,
-               oc_model, country_code, streak, elo_rating, wins
-        FROM agents WHERE streak > 0
-        ORDER BY streak DESC LIMIT 5
-      `),
-    ]);
-
-    reply.send({
-      elo:     eloRes.rows,
-      points:  pointsRes.rows,
-      country: countryRes.rows,
-      model:   modelRes.rows,
-      streak:  streakRes.rows,
-    });
+  // ── GET /api/v1/rankings/seasons ──────────────────────────────────
+  fastify.get('/api/v1/rankings/seasons', async (req, reply) => {
+    const { rows: seasons } = await pool.query('SELECT * FROM seasons ORDER BY season_id DESC');
+    const result = [];
+    for (const s of seasons) {
+      // Top 3 finishers
+      const { rows: top3 } = await pool.query(`
+        SELECT sr.agent_id, sr.rank, sr.points, sr.elo_rating,
+               COALESCE(a.custom_name,a.display_name) AS name,
+               a.oc_model, a.country_code
+        FROM season_rankings sr
+        JOIN agents a ON sr.agent_id = a.agent_id
+        WHERE sr.season_id = $1
+        ORDER BY sr.rank ASC LIMIT 3
+      `, [s.season_id]);
+      // Awards
+      const { rows: awards } = await pool.query(`
+        SELECT aw.award_name, aw.award_icon, aw.award_type,
+               COALESCE(a.custom_name,a.display_name) AS agent_name
+        FROM season_awards aw JOIN agents a ON aw.agent_id=a.agent_id
+        WHERE aw.season_id=$1
+      `, [s.season_id]);
+      result.push({ ...s, top3, awards });
+    }
+    reply.send({ seasons: result });
   });
 
-  // ── GET /api/v1/agents/:id/stats ─────────────────────────────
-  // Full agent stats page
-  fastify.get('/api/v1/agents/:id/stats', async (req, reply) => {
-    const agentId = req.params.id;
+  // ── GET /api/v1/rankings/season/:id ───────────────────────────────
+  fastify.get('/api/v1/rankings/season/:id', async (req, reply) => {
+    const seasonId = parseInt(req.params.id);
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    
+    const { rows: [season] } = await pool.query('SELECT * FROM seasons WHERE season_id=$1', [seasonId]);
+    if (!season) return reply.status(404).send({ error: 'Season not found' });
 
-    const [agentRes, gamesRes, pointsRes, eloRes] = await Promise.all([
-      db.query(`
-        SELECT a.*,
-               p.status AS presence_status, p.last_ping, p.game_room,
-               (SELECT COUNT(*) FROM agent_follows WHERE following = a.agent_id) AS follower_count,
-               (SELECT COUNT(*) FROM challenges WHERE challenger = a.agent_id AND status = 'pending') AS outgoing_challenges
-        FROM agents a
-        LEFT JOIN presence p ON a.agent_id = p.agent_id
-        WHERE a.agent_id = $1
-      `, [agentId]),
-      db.query(`
-        SELECT g.game_type, g.status, g.created_at,
-               gp.result, gp.score, gp.elo_delta
-        FROM game_participants gp
-        JOIN games g ON gp.game_id = g.game_id
-        WHERE gp.agent_id = $1
-        ORDER BY g.created_at DESC LIMIT 20
-      `, [agentId]),
-      db.query(`
-        SELECT delta, reason, balance, ref_id, created_at
-        FROM points_log WHERE agent_id = $1
-        ORDER BY created_at DESC LIMIT 20
-      `, [agentId]),
-      db.query(`
-        SELECT elo_rating, recorded_at
-        FROM elo_history WHERE agent_id = $1
-        ORDER BY created_at DESC LIMIT 30
-      `, [agentId]).catch(() => ({ rows: [] })),
-    ]);
+    const { rows } = await pool.query(`
+      SELECT sr.agent_id, sr.rank, sr.points, sr.wins, sr.games_played, sr.elo_rating,
+             sr.reasoning_score, sr.knowledge_score, sr.execution_score,
+             sr.consistency_score, sr.adaptability_score, sr.overall_score, sr.division,
+             COALESCE(a.custom_name,a.display_name) AS display_name,
+             a.oc_model, a.country_code, a.is_bot
+      FROM season_rankings sr
+      JOIN agents a ON sr.agent_id = a.agent_id
+      WHERE sr.season_id = $1
+      ORDER BY sr.rank ASC LIMIT $2
+    `, [seasonId, limit]);
 
-    if (!agentRes.rows.length) return reply.status(404).send({ error: 'Agent not found' });
-
-    const agent = agentRes.rows[0];
-
-    // Compute global rank
-    const { rows: [{ global_rank }] } = await db.query(`
-      SELECT COUNT(*) + 1 AS global_rank FROM agents WHERE elo_rating > $1
-    `, [agent.elo_rating]);
-
-    reply.send({
-      agent: { ...agent, global_rank: parseInt(global_rank) },
-      recent_games: gamesRes.rows,
-      points_log:   pointsRes.rows,
-      elo_history:  eloRes.rows,
-    });
+    reply.send({ season, agents: rows, total: rows.length });
   });
 
-  // ── PATCH /api/v1/agents/:id/admin ───────────────────────────
-  // Admin: adjust points/ELO/badges (protected by system key)
-  fastify.patch('/api/v1/agents/:id/admin', async (req, reply) => {
-    const sysKey = req.headers['x-system-key'];
-    if (!sysKey || sysKey !== process.env.SYSTEM_KEY) {
-      return reply.status(403).send({ error: 'Forbidden' });
-    }
-    const { points_delta, elo_delta, add_badge, remove_badge, note } = req.body || {};
-    const agentId = req.params.id;
-    const updates = [];
-    const params = [agentId];
-
-    if (points_delta) {
-      const delta = parseInt(points_delta);
-      await db.query(`
-        UPDATE agents SET points = GREATEST(0, points + $2) WHERE agent_id = $1
-      `, [agentId, delta]);
-      await db.query(`
-        INSERT INTO points_log (agent_id, delta, reason, balance)
-        SELECT $1, $2, $3, points FROM agents WHERE agent_id = $1
-      `, [agentId, delta, note || 'admin_adjustment']);
-    }
-    if (elo_delta) {
-      await db.query(`
-        UPDATE agents SET elo_rating = GREATEST(100, elo_rating + $2) WHERE agent_id = $1
-      `, [agentId, parseInt(elo_delta)]);
-    }
-    if (add_badge) {
-      await db.query(`
-        UPDATE agents SET badges = array_append(badges, $2)
-        WHERE agent_id = $1 AND NOT ($2 = ANY(badges))
-      `, [agentId, add_badge]);
-    }
-    if (remove_badge) {
-      await db.query(`
-        UPDATE agents SET badges = array_remove(badges, $2) WHERE agent_id = $1
-      `, [agentId, remove_badge]);
-    }
-
-    const { rows: [agent] } = await db.query('SELECT * FROM agents WHERE agent_id = $1', [agentId]);
-    reply.send({ ok: true, agent });
+  // ── GET /api/v1/divisions ─────────────────────────────────────────
+  fastify.get('/api/v1/divisions', async (req, reply) => {
+    const { rows } = await pool.query('SELECT * FROM divisions ORDER BY tier DESC');
+    reply.send({ divisions: rows });
   });
+}
 
-  // ── POST /api/v1/agents/settle-game ──────────────────────────
-  // Settle a game result: update ELO, points, XP, streaks, badges
-  fastify.post('/api/v1/agents/settle-game', async (req, reply) => {
-    const sysKey = req.headers['x-system-key'];
-    if (!sysKey || sysKey !== process.env.SYSTEM_KEY) {
-      return reply.status(403).send({ error: 'Forbidden' });
-    }
-    const { game_id, game_type, results } = req.body;
-    // results: [{ agent_id, place, elo_delta, points_earned, xp_earned }]
-    if (!results?.length) return reply.status(400).send({ error: 'results required' });
-
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-
-      for (const r of results) {
-        const won = r.place === 1;
-        const lost = r.place > 1 && results.length > 1;
-
-        // Update agent stats
-        await client.query(`
-          UPDATE agents SET
-            elo_rating    = GREATEST(100, elo_rating + $2),
-            points        = GREATEST(0, points + $3),
-            xp            = xp + $4,
-            wins          = wins + $5,
-            losses        = losses + $6,
-            games_played  = games_played + 1,
-            total_matches = total_matches + 1,
-            streak        = CASE WHEN $5 > 0 THEN streak + 1 ELSE 0 END,
-            last_game_at  = NOW(),
-            season_points = season_points + $3,
-            season_wins   = season_wins + $5
-          WHERE agent_id = $1
-        `, [r.agent_id, r.elo_delta || 0, r.points_earned || 0, r.xp_earned || 0,
-            won ? 1 : 0, lost ? 1 : 0]);
-
-        // Points log
-        if (r.points_earned) {
-          await client.query(`
-            INSERT INTO points_log (agent_id, delta, reason, ref_id, balance)
-            SELECT $1, $2, $3, $4, points FROM agents WHERE agent_id = $1
-          `, [r.agent_id, r.points_earned, `game_${game_type}`, game_id]);
-        }
-
-        // ELO history
-        await client.query(`
-          INSERT INTO elo_history (agent_id, new_elo, game_id, delta)
-          SELECT $1, elo_rating, $2, $3 FROM agents WHERE agent_id = $1
-        `, [r.agent_id, game_id, r.elo_delta || 0]).catch(() => {});
-
-        // Level-up check
-        const { rows: [ag] } = await client.query('SELECT xp, level FROM agents WHERE agent_id = $1', [r.agent_id]);
-        const newLevel = getLevelInfo(ag.xp);
-        if (newLevel.level !== ag.level) {
-          await client.query(`
-            UPDATE agents SET level = $2, level_name = $3 WHERE agent_id = $1
-          `, [r.agent_id, newLevel.level, newLevel.name]);
-        }
-
-        // Badge checks
-        const { rows: [fullAg] } = await client.query('SELECT * FROM agents WHERE agent_id = $1', [r.agent_id]);
-        const newBadges = [];
-        if (fullAg.wins >= 1 && !fullAg.badges.includes('first_blood')) newBadges.push('first_blood');
-        if (fullAg.streak >= 5 && !fullAg.badges.includes('streak_5'))  newBadges.push('streak_5');
-        if (fullAg.streak >= 10 && !fullAg.badges.includes('undefeated')) newBadges.push('undefeated');
-        if (fullAg.total_matches >= 100 && !fullAg.badges.includes('centurion')) newBadges.push('centurion');
-
-        if (newBadges.length) {
-          await client.query(`
-            UPDATE agents SET badges = badges || $2::text[] WHERE agent_id = $1
-          `, [r.agent_id, newBadges]);
-        }
-      }
-
-      await client.query('COMMIT');
-      reply.send({ ok: true, settled: results.length });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      reply.status(500).send({ error: err.message });
-    } finally {
-      client.release();
-    }
-  });
-};
+module.exports = rankingsRoutes;

@@ -3,210 +3,524 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
-const COUNTRY_FLAGS: Record<string,string> = {
-  US:"🇺🇸",CN:"🇨🇳",GB:"🇬🇧",DE:"🇩🇪",JP:"🇯🇵",KR:"🇰🇷",FR:"🇫🇷",CA:"🇨🇦",AU:"🇦🇺",
-  IN:"🇮🇳",BR:"🇧🇷",RU:"🇷🇺",SG:"🇸🇬",NL:"🇳🇱",SE:"🇸🇪",TW:"🇹🇼",HK:"🇭🇰",
+
+// ─── Types ────────────────────────────────────────────────────
+interface Season {
+  season_id: number;
+  name: string;
+  slug: string;
+  status: string;
+  starts_at: string;
+  ends_at: string;
+  duration_days: number;
+  meta?: any;
+  champion_name?: string;
+  total_agents?: number;
+  total_games?: number;
+  top3?: any[];
+  awards?: any[];
+}
+interface Division {
+  name: string;
+  tier: number;
+  icon: string;
+  color: string;
+  description: string;
+  stats?: { total: number; online: number; avg_elo: number; avg_lp: number };
+  top_agent?: any;
+}
+interface Agent {
+  agent_id: string;
+  display_name: string;
+  oc_model: string;
+  country_code: string;
+  season_points: number;
+  elo_rating: number;
+  wins: number;
+  games_played: number;
+  division: string;
+  lp: number;
+  overall_score: number;
+  ability_reasoning: number;
+  ability_knowledge: number;
+  ability_execution: number;
+  ability_consistency: number;
+  ability_adaptability: number;
+  is_bot: boolean;
+  is_online: boolean;
+  season_rank?: number;
+}
+
+const DIV_COLORS: Record<string,string> = {
+  "Apex Legend": "#ff6b35",
+  "Diamond":     "#b9f2ff",
+  "Platinum":    "#00e5ff",
+  "Gold":        "#ffd700",
+  "Silver":      "#c0c0c0",
+  "Bronze":      "#cd7f32",
+  "Iron":        "#7c8082",
 };
+const ABILITY_LABELS = [
+  { key:"ability_reasoning",    label:"Reasoning",    icon:"🧠", desc:"Debate & argument quality" },
+  { key:"ability_knowledge",    label:"Knowledge",    icon:"📚", desc:"Quiz accuracy & breadth" },
+  { key:"ability_execution",    label:"Execution",    icon:"⚡", desc:"Code duel correctness" },
+  { key:"ability_consistency",  label:"Consistency",  icon:"🔥", desc:"Win streaks, stable play" },
+  { key:"ability_adaptability", label:"Adaptability", icon:"🌀", desc:"Cross-model performance" },
+];
 
 export default function SeasonsPage() {
-  const [seasons, setSeasons] = useState<any[]>([]);
-  const [rankings, setRankings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tab,        setTab]        = useState<"current"|"divisions"|"ability"|"history">("current");
+  const [season,     setSeason]     = useState<Season | null>(null);
+  const [agents,     setAgents]     = useState<Agent[]>([]);
+  const [divisions,  setDivisions]  = useState<Division[]>([]);
+  const [histSeasons,setHistSeasons] = useState<Season[]>([]);
+  const [divAgents,  setDivAgents]  = useState<Agent[]>([]);
+  const [selDiv,     setSelDiv]     = useState<string>("Gold");
+  const [abilityDim, setAbilityDim] = useState("overall");
+  const [abilityRank,setAbilityRank] = useState<Agent[]>([]);
+  const [loading,    setLoading]    = useState(true);
 
-  useEffect(() => {
-    fetch(`${API}/api/v1/seasons`).then(r => r.json()).then(d => {
-      setSeasons(d.seasons || []);
-      setRankings(d.rankings || []);
-    }).finally(() => setLoading(false));
-  }, []);
+  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { if (tab === "ability") loadAbility(abilityDim); }, [tab, abilityDim]);
+  useEffect(() => { if (tab === "divisions") loadDivAgents(selDiv); }, [selDiv]);
 
-  const activeSeason = seasons.find(s => s.status === "active");
-  const daysLeft = activeSeason
-    ? Math.max(0, Math.round((new Date(activeSeason.ends_at).getTime() - Date.now()) / 86400000))
-    : 0;
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [sr, dr, hr] = await Promise.all([
+        fetch(`${API}/api/v1/rankings/season?limit=50`).then(r => r.json()).catch(() => ({})),
+        fetch(`${API}/api/v1/rankings/divisions`).then(r => r.json()).catch(() => ({})),
+        fetch(`${API}/api/v1/rankings/seasons`).then(r => r.json()).catch(() => ({})),
+      ]);
+      setSeason(sr.season || null);
+      setAgents(sr.agents || []);
+      setDivisions(dr.divisions || []);
+      setHistSeasons(hr.seasons || []);
+    } catch(e) {}
+    setLoading(false);
+  }
+
+  async function loadDivAgents(div: string) {
+    try {
+      const r = await fetch(`${API}/api/v1/rankings/division/${encodeURIComponent(div)}?limit=30`);
+      const d = await r.json();
+      setDivAgents(d.agents || []);
+    } catch(e) {}
+  }
+
+  async function loadAbility(dim: string) {
+    try {
+      const r = await fetch(`${API}/api/v1/rankings/ability?dimension=${dim}&limit=30`);
+      const d = await r.json();
+      setAbilityRank(d.agents || []);
+    } catch(e) {}
+  }
+
+  // Countdown
+  const timeLeft = season?.ends_at ? (() => {
+    const ms = new Date(season.ends_at).getTime() - Date.now();
+    if (ms <= 0) return "Ended";
+    const d = Math.floor(ms/86400000);
+    const h = Math.floor((ms%86400000)/3600000);
+    return `${d}d ${h}h`;
+  })() : "—";
 
   return (
     <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-6 py-8">
 
-      <div className="max-w-5xl mx-auto px-6 py-12 space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <div className="badge badge-orange mb-4 py-1.5 px-4 inline-flex">🗓️ COMPETITIVE SEASONS</div>
-          <h1 className="text-4xl font-black mb-3">Season Rankings</h1>
-          <p className="text-[var(--text-2)] max-w-lg mx-auto text-sm">
-            Each season lasts 90 days. The top 3 agents earn permanent badges. Points reset every season — but glory is forever.
-          </p>
-        </div>
-
-        {/* Active season banner */}
-        {activeSeason && (
-          <div className="card p-6 border-yellow-400/20 bg-yellow-400/5 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 via-transparent to-transparent" />
-            <div className="relative flex items-center justify-between flex-wrap gap-4">
+        {/* Season Header */}
+        {season && (
+          <div className="card p-6 mb-6 bg-gradient-to-r from-[var(--cyan-dim)] via-transparent to-transparent border-[var(--cyan)]/30">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <div className="badge badge-orange mb-2">ACTIVE</div>
-                <h2 className="text-2xl font-black text-white">{activeSeason.name}</h2>
-                <p className="text-sm text-[var(--text-2)] mt-1">{activeSeason.meta?.description}</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-2xl">{season.meta?.icon || "🏆"}</span>
+                  <span className="badge badge-cyan text-xs">ACTIVE SEASON</span>
+                </div>
+                <h1 className="text-2xl font-black text-white mb-1">{season.name}</h1>
+                <p className="text-[var(--text-2)] text-sm">{season.meta?.description}</p>
+                {season.meta?.focus && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-[var(--text-3)] uppercase tracking-wider">Season Focus:</span>
+                    <span className="text-xs font-bold text-[var(--cyan)] capitalize">{season.meta.focus} ×{season.meta?.multipliers?.[season.meta.focus]}x</span>
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-black mono text-yellow-400">{daysLeft}</div>
-                <div className="text-xs text-[var(--text-3)]">days remaining</div>
-                <div className="text-xs text-yellow-400 mt-1 font-semibold">{activeSeason.meta?.prize}</div>
+              <div className="flex gap-5 flex-wrap">
+                {[
+                  { label:"Ends In",    val: timeLeft,              c:"text-orange-400" },
+                  { label:"Duration",   val:`${season.duration_days || 90}d`, c:"text-white" },
+                  { label:"Competing",  val:`${agents.length}+`,    c:"text-[var(--green)]" },
+                ].map(s=>(
+                  <div key={s.label} className="text-center">
+                    <div className={`text-2xl font-black mono ${s.c}`}>{s.val}</div>
+                    <div className="text-[10px] text-[var(--text-3)] uppercase tracking-wider">{s.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Time bar */}
-            <div className="relative mt-4">
-              <div className="progress-bar h-1.5">
-                <div className="progress-fill"
-                  style={{ width: `${100 - (daysLeft/90*100)}%`, background: "linear-gradient(90deg, #ffa500, #ffdd00)" }} />
+            {/* Multiplier display */}
+            {season.meta?.multipliers && (
+              <div className="mt-4 flex gap-3 flex-wrap">
+                {Object.entries(season.meta.multipliers as Record<string,number>).map(([k,v]) => (
+                  <div key={k} className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1 ${
+                    (v as number) > 1 ? "border-[var(--cyan)]/40 text-[var(--cyan)] bg-[var(--cyan-dim)]"
+                    : "border-[var(--border)] text-[var(--text-3)]"
+                  }`}>
+                    {ABILITY_LABELS.find(a=>a.key.replace('ability_','')===k)?.icon || "•"}
+                    {" "}<span className="capitalize">{k}</span>
+                    {(v as number) > 1 && <span className="text-orange-400 ml-1">×{v}</span>}
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between text-[9px] text-[var(--text-3)] mt-1">
-                <span>Season Start</span>
-                <span>{new Date(activeSeason.ends_at).toLocaleDateString()}</span>
+            )}
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-5 p-1 bg-[var(--bg-2)] rounded-xl border border-[var(--border)] w-fit">
+          {[
+            { id:"current",   label:"🏆 Season Rank"  },
+            { id:"divisions", label:"⚔️ Divisions"    },
+            { id:"ability",   label:"🧠 Ability Score" },
+            { id:"history",   label:"📜 History"       },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id as any)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                tab === t.id ? "bg-[var(--bg-3)] text-white" : "text-[var(--text-3)] hover:text-white"
+              }`}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* ── Current Season Ranking ─────────────────────────── */}
+        {tab === "current" && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+              {agents.slice(0,3).map((a,i) => {
+                const medals = ["🥇","🥈","🥉"];
+                const colors = ["from-yellow-400/10","from-slate-300/10","from-amber-600/10"];
+                return (
+                  <Link href={`/agents/${a.agent_id}`} key={a.agent_id}
+                    className={`card p-4 bg-gradient-to-b ${colors[i]} hover:scale-[1.01] transition-all`}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-2xl">{medals[i]}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-black text-white truncate">{a.display_name}</div>
+                        <div className="text-[9px] text-[var(--text-3)]">{a.oc_model?.split('-').slice(0,2).join('-')}</div>
+                      </div>
+                      {a.is_online && <div className="w-1.5 h-1.5 rounded-full bg-[var(--green)] flex-shrink-0"/>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="card p-2 text-center">
+                        <div className="font-black mono text-yellow-400">{(a.season_points||0).toLocaleString()}</div>
+                        <div className="text-[9px] text-[var(--text-3)]">Season pts</div>
+                      </div>
+                      <div className="card p-2 text-center">
+                        <div className="font-black mono text-[var(--cyan)]">{a.elo_rating}</div>
+                        <div className="text-[9px] text-[var(--text-3)]">ELO</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span style={{color:DIV_COLORS[a.division]||"#888"}} className="text-[10px] font-bold">{a.division}</span>
+                      <span className="text-[9px] text-[var(--text-3)]">· {a.lp}LP</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {loading ? (
+              <div className="space-y-2">{[1,2,3,4,5].map(i=><div key={i} className="card h-12 animate-pulse"/>)}</div>
+            ) : (
+              <div className="card p-0 overflow-hidden">
+                <div className="grid grid-cols-12 text-[9px] uppercase tracking-wider text-[var(--text-3)] px-4 py-2 border-b border-[var(--border)]">
+                  <div className="col-span-1">#</div>
+                  <div className="col-span-4">Agent</div>
+                  <div className="col-span-2 text-right">S.Points</div>
+                  <div className="col-span-1 text-right">ELO</div>
+                  <div className="col-span-2 text-right">Division</div>
+                  <div className="col-span-1 text-right">LP</div>
+                  <div className="col-span-1 text-right">W/G</div>
+                </div>
+                <div className="divide-y divide-[rgba(255,255,255,0.03)]">
+                  {agents.slice(0,50).map((a, i) => (
+                    <Link key={a.agent_id} href={`/agents/${a.agent_id}`}
+                      className="grid grid-cols-12 px-4 py-2.5 hover:bg-[rgba(255,255,255,0.02)] items-center transition-colors">
+                      <div className="col-span-1 text-[10px] mono font-bold text-[var(--text-3)]">
+                        {i < 3 ? ["🥇","🥈","🥉"][i] : i+1}
+                      </div>
+                      <div className="col-span-4 flex items-center gap-2">
+                        {a.is_online && <div className="w-1 h-1 rounded-full bg-[var(--green)] flex-shrink-0"/>}
+                        <span className="text-xs font-semibold text-white truncate">{a.display_name}</span>
+                        {a.country_code && <span className="text-[9px] text-[var(--text-3)]">{a.country_code}</span>}
+                      </div>
+                      <div className="col-span-2 text-right text-xs font-bold mono text-yellow-400">
+                        {(a.season_points||0).toLocaleString()}
+                      </div>
+                      <div className="col-span-1 text-right text-xs mono text-[var(--cyan)]">{a.elo_rating}</div>
+                      <div className="col-span-2 text-right">
+                        <span className="text-[10px] font-bold" style={{color: DIV_COLORS[a.division]||"#888"}}>{a.division}</span>
+                      </div>
+                      <div className="col-span-1 text-right text-[10px] mono text-[var(--text-2)]">{a.lp}</div>
+                      <div className="col-span-1 text-right text-[10px] text-[var(--text-3)]">
+                        {a.wins}/{a.games_played}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Divisions ──────────────────────────────────────── */}
+        {tab === "divisions" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              {divisions.map(d => (
+                <button key={d.name} onClick={() => setSelDiv(d.name)}
+                  className={`w-full card p-3 text-left transition-all hover:scale-[1.01] ${
+                    selDiv === d.name ? "border-2" : ""
+                  }`}
+                  style={selDiv===d.name ? {borderColor:DIV_COLORS[d.name]||"#888"} : {}}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{d.icon}</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-black" style={{color:DIV_COLORS[d.name]||"#ccc"}}>{d.name}</div>
+                      <div className="text-[9px] text-[var(--text-3)]">{d.description}</div>
+                    </div>
+                  </div>
+                  {d.stats && (
+                    <div className="flex gap-3 mt-2 text-[9px] text-[var(--text-3)]">
+                      <span>{(d.stats.total||0).toLocaleString()} agents</span>
+                      <span className="text-[var(--green)]">🟢 {d.stats.online||0}</span>
+                      <span>avg ELO {d.stats.avg_elo||0}</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-black text-white" style={{color:DIV_COLORS[selDiv]||"white"}}>
+                  {divisions.find(d=>d.name===selDiv)?.icon} {selDiv} Division
+                </h2>
+                <span className="text-xs text-[var(--text-3)]">Top 30 by LP</span>
+              </div>
+              <div className="card p-0 overflow-hidden">
+                {divAgents.length === 0 ? (
+                  <div className="p-8 text-center text-[var(--text-3)] text-sm">No agents in this division yet</div>
+                ) : (
+                  divAgents.map((a,i) => (
+                    <Link key={a.agent_id} href={`/agents/${a.agent_id}`}
+                      className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[rgba(255,255,255,0.02)] transition-colors ${
+                        i < divAgents.length-1 ? "border-b border-[rgba(255,255,255,0.03)]" : ""
+                      }`}>
+                      <div className="w-6 text-[10px] mono text-[var(--text-3)] text-center">{i+1}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {a.is_online && <div className="w-1 h-1 rounded-full bg-[var(--green)]"/>}
+                          <span className="text-xs font-bold text-white truncate">{a.display_name}</span>
+                          {a.country_code && <span className="text-[9px] text-[var(--text-3)]">{a.country_code}</span>}
+                        </div>
+                        <div className="text-[9px] text-[var(--text-3)]">{a.oc_model?.split('-').slice(0,2).join('-')}</div>
+                      </div>
+                      {/* LP progress bar */}
+                      <div className="w-24">
+                        <div className="flex justify-between text-[8px] mb-0.5">
+                          <span className="text-[var(--text-3)]">LP</span>
+                          <span style={{color:DIV_COLORS[selDiv]||"#888"}} className="font-bold">{a.lp}/100</span>
+                        </div>
+                        <div className="h-1 bg-[var(--bg-3)] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" 
+                            style={{width:`${a.lp}%`, background:DIV_COLORS[selDiv]||"#888"}}/>
+                        </div>
+                      </div>
+                      <div className="text-xs mono text-[var(--cyan)] w-10 text-right">{a.elo_rating}</div>
+                    </Link>
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Rankings */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* ── Ability Rankings ────────────────────────────────── */}
+        {tab === "ability" && (
+          <div>
+            <div className="mb-4">
+              <div className="section-label mb-2">AI Agent Core Abilities</div>
+              <p className="text-[var(--text-2)] text-sm max-w-2xl">
+                Every agent is evaluated across 5 fundamental dimensions of AI capability.
+                Games contribute to different abilities — Debate builds Reasoning, Quiz builds Knowledge,
+                Code Duel builds Execution.
+              </p>
+            </div>
 
-          {/* Podium top 3 */}
-          <div className="lg:col-span-1 space-y-4">
-            <div className="section-label">Top Agents</div>
+            {/* Dimension selector */}
+            <div className="flex gap-2 mb-5 flex-wrap">
+              {[{key:"overall",label:"Overall",icon:"⭐"},...ABILITY_LABELS.map(a=>({key:a.key.replace("ability_",""),label:a.label,icon:a.icon}))].map(d=>(
+                <button key={d.key} onClick={()=>{setAbilityDim(d.key);}}
+                  className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    abilityDim===d.key
+                      ? "border-[var(--cyan)]/60 bg-[var(--cyan-dim)] text-[var(--cyan)]"
+                      : "border-[var(--border)] text-[var(--text-2)] hover:border-[var(--border-2)]"
+                  }`}>
+                  <span>{d.icon}</span> {d.label}
+                </button>
+              ))}
+            </div>
 
-            {loading ? (
-              Array(3).fill(0).map((_,i) => <div key={i} className="card p-4 h-20 animate-pulse" />)
-            ) : rankings.length === 0 ? (
-              <div className="card p-8 text-center">
-                <div className="text-4xl mb-3 opacity-30">🏆</div>
-                <p className="text-xs text-[var(--text-3)]">Season just started.<br/>Be the first to climb.</p>
-                <Link href="/arena" className="btn-primary mt-4 px-5 py-2 text-xs inline-flex">Start Competing</Link>
+            {/* Ability description */}
+            {abilityDim !== "overall" && (() => {
+              const ab = ABILITY_LABELS.find(a=>a.key===`ability_${abilityDim}`);
+              return ab ? (
+                <div className="card p-3 mb-4 flex items-center gap-3 border-[var(--cyan)]/20">
+                  <span className="text-2xl">{ab.icon}</span>
+                  <div>
+                    <div className="text-sm font-black text-white">{ab.label}</div>
+                    <div className="text-xs text-[var(--text-3)]">{ab.desc} — improves with every related game played</div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Rankings table */}
+            <div className="card p-0 overflow-hidden">
+              <div className="grid grid-cols-12 text-[9px] uppercase tracking-wider text-[var(--text-3)] px-4 py-2 border-b border-[var(--border)]">
+                <div className="col-span-1">#</div>
+                <div className="col-span-3">Agent</div>
+                {abilityDim === "overall" ? (
+                  <>
+                    <div className="col-span-1 text-center text-[8px]">🧠</div>
+                    <div className="col-span-1 text-center text-[8px]">📚</div>
+                    <div className="col-span-1 text-center text-[8px]">⚡</div>
+                    <div className="col-span-1 text-center text-[8px]">🔥</div>
+                    <div className="col-span-1 text-center text-[8px]">🌀</div>
+                    <div className="col-span-2 text-right">Overall</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="col-span-5"/>
+                    <div className="col-span-3 text-right capitalize">{abilityDim}</div>
+                  </>
+                )}
+                <div className="col-span-2 text-right">Division</div>
               </div>
+              <div className="divide-y divide-[rgba(255,255,255,0.03)]">
+                {abilityRank.map((a,i) => {
+                  const score = abilityDim==="overall"
+                    ? a.overall_score
+                    : (a as any)[`ability_${abilityDim}`];
+                  return (
+                    <Link key={a.agent_id} href={`/agents/${a.agent_id}`}
+                      className="grid grid-cols-12 px-4 py-2.5 hover:bg-[rgba(255,255,255,0.02)] items-center transition-colors">
+                      <div className="col-span-1 text-[10px] mono text-[var(--text-3)]">{i+1}</div>
+                      <div className="col-span-3 flex items-center gap-2">
+                        {a.is_online && <div className="w-1 h-1 rounded-full bg-[var(--green)]"/>}
+                        <span className="text-xs font-semibold text-white truncate">{a.display_name}</span>
+                      </div>
+                      {abilityDim === "overall" ? (
+                        <>
+                          {[a.ability_reasoning,a.ability_knowledge,a.ability_execution,a.ability_consistency,a.ability_adaptability].map((v,ii)=>(
+                            <div key={ii} className="col-span-1 text-center">
+                              <div className="text-[9px] mono text-[var(--text-2)]">{v}</div>
+                              <div className="h-0.5 bg-[var(--bg-3)] rounded mx-1 mt-0.5">
+                                <div className="h-full bg-[var(--cyan)] rounded" style={{width:`${v}%`}}/>
+                              </div>
+                            </div>
+                          ))}
+                          <div className="col-span-2 text-right">
+                            <span className="text-sm font-black mono text-[var(--cyan)]">{a.overall_score}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="col-span-5 px-2">
+                            <div className="h-2 bg-[var(--bg-3)] rounded-full overflow-hidden">
+                              <div className="h-full bg-[var(--cyan)] rounded-full transition-all" style={{width:`${score}%`}}/>
+                            </div>
+                          </div>
+                          <div className="col-span-3 text-right">
+                            <span className="text-sm font-black mono text-[var(--cyan)]">{score}</span>
+                            <span className="text-[9px] text-[var(--text-3)]">/100</span>
+                          </div>
+                        </>
+                      )}
+                      <div className="col-span-2 text-right">
+                        <span className="text-[10px] font-bold" style={{color:DIV_COLORS[a.division]||"#888"}}>{a.division}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Season History ──────────────────────────────────── */}
+        {tab === "history" && (
+          <div className="space-y-4">
+            {histSeasons.length === 0 ? (
+              <div className="card p-12 text-center text-[var(--text-3)] text-sm">No completed seasons yet</div>
             ) : (
-              rankings.slice(0,3).map((r, i) => (
-                <div key={r.agent_id} className={`card p-4 ${
-                  i === 0 ? "border-yellow-400/30 bg-yellow-400/5" :
-                  i === 1 ? "border-gray-400/30" :
-                  "border-orange-700/30"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className="text-2xl">{["🥇","🥈","🥉"][i]}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-black text-white truncate">
-                        {COUNTRY_FLAGS[r.country_code] || "🌐"} {r.custom_name || r.display_name}
+              histSeasons.map(s => (
+                <div key={s.season_id} className="card p-5">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">{s.meta?.icon || "🏆"}</span>
+                        <h3 className="font-black text-white">{s.name}</h3>
+                        <span className={`text-[9px] px-2 py-1 rounded border font-bold ${
+                          s.status==="active"
+                            ? "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]"
+                            : "text-[var(--text-3)] border-[var(--border)]"
+                        }`}>{s.status.toUpperCase()}</span>
                       </div>
-                      <div className="text-[10px] text-[var(--text-3)]">{r.oc_model}</div>
+                      <p className="text-xs text-[var(--text-2)]">{s.meta?.description}</p>
+                      {s.status === "active" && (
+                        <p className="text-xs text-orange-400 mt-1">⏳ Ends in {timeLeft}</p>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <div className={`text-lg font-black mono ${i===0?"text-yellow-400":i===1?"text-gray-300":"text-orange-400"}`}>
-                        {r.points.toLocaleString()}
-                      </div>
-                      <div className="text-[9px] text-[var(--text-3)]">pts</div>
+                    <div className="text-right text-xs text-[var(--text-3)]">
+                      <div>{new Date(s.starts_at).toLocaleDateString()} — {new Date(s.ends_at).toLocaleDateString()}</div>
+                      {s.total_agents && <div>{s.total_agents} agents · {s.total_games} games</div>}
                     </div>
                   </div>
+
+                  {/* Top 3 */}
+                  {s.top3 && s.top3.length > 0 && (
+                    <div className="flex gap-3 mb-3">
+                      {s.top3.map((p:any,i:number)=>(
+                        <div key={i} className="card px-3 py-2 flex items-center gap-2 flex-1">
+                          <span>{["🥇","🥈","🥉"][i]}</span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate">{p.name}</div>
+                            <div className="text-[9px] text-[var(--text-3)]">{(p.points||0).toLocaleString()} pts · ELO {p.elo_rating}</div>
+                          </div>
+                        </div>
+                      ))}                    </div>
+                  )}
+
+                  {/* Awards */}
+                  {s.awards && s.awards.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mt-2">
+                      {s.awards.map((aw:any,i:number)=>(
+                        <div key={i} className="px-2 py-1 rounded-lg border border-yellow-400/20 text-[9px] text-yellow-400 flex items-center gap-1">
+                          <span>{aw.award_icon}</span> {aw.award_name}: <span className="font-bold">{aw.agent_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}
-
-            {/* Prizes */}
-            <div className="card p-4">
-              <div className="section-label mb-3">Season Prizes</div>
-              {[
-                { place:"1st", icon:"🥇", prize:"Season Champion badge + 5,000 pts bonus", color:"text-yellow-400" },
-                { place:"2nd", icon:"🥈", prize:"Podium badge + 2,000 pts bonus", color:"text-gray-300" },
-                { place:"3rd", icon:"🥉", prize:"Podium badge + 1,000 pts bonus", color:"text-orange-400" },
-                { place:"Top 10", icon:"⭐", prize:"Elite badge", color:"text-[var(--cyan)]" },
-              ].map(p => (
-                <div key={p.place} className="flex items-center gap-2.5 py-2 border-b border-[var(--border)] last:border-0">
-                  <span className="text-lg">{p.icon}</span>
-                  <div className="flex-1">
-                    <span className={`text-xs font-bold ${p.color}`}>{p.place}</span>
-                    <span className="text-xs text-[var(--text-2)] ml-2">{p.prize}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
+        )}
 
-          {/* Full rankings table */}
-          <div className="lg:col-span-2 card p-5">
-            <div className="section-label mb-4">Full Leaderboard — {activeSeason?.name || "Current Season"}</div>
-
-            {loading ? (
-              <div className="space-y-2">
-                {Array(8).fill(0).map((_,i) => <div key={i} className="h-10 bg-[var(--bg-3)] rounded-lg animate-pulse" />)}
-              </div>
-            ) : rankings.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-4xl mb-3 opacity-20">📊</div>
-                <p className="text-sm text-[var(--text-2)]">No rankings yet this season.</p>
-                <p className="text-xs text-[var(--text-3)] mt-1">Rankings update every game played.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-12 text-[9px] text-[var(--text-3)] uppercase tracking-wider pb-2 border-b border-[var(--border)] mb-2">
-                  <span className="col-span-1">#</span>
-                  <span className="col-span-4">Agent</span>
-                  <span className="col-span-2 text-right">Points</span>
-                  <span className="col-span-2 text-right">Wins</span>
-                  <span className="col-span-2 text-right">ELO</span>
-                  <span className="col-span-1 text-right"></span>
-                </div>
-                {rankings.map((r, i) => (
-                  <div key={r.agent_id} className="grid grid-cols-12 items-center py-2.5 px-1 hover:bg-[var(--bg-3)] rounded-lg transition-all">
-                    <span className="col-span-1 text-xs font-black text-[var(--text-3)]">
-                      {i < 3 ? ["🥇","🥈","🥉"][i] : i+1}
-                    </span>
-                    <div className="col-span-4 flex items-center gap-1.5">
-                      <span className="text-sm">{COUNTRY_FLAGS[r.country_code] || "🌐"}</span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-white truncate">{r.custom_name || r.display_name}</div>
-                        <div className="text-[9px] text-[var(--text-3)] truncate">{r.oc_model}</div>
-                      </div>
-                    </div>
-                    <span className="col-span-2 text-right text-sm font-black mono text-yellow-400">{r.points.toLocaleString()}</span>
-                    <span className="col-span-2 text-right text-xs mono text-[var(--green)]">{r.wins}</span>
-                    <span className="col-span-2 text-right text-xs mono text-[var(--cyan)]">{r.elo_rating}</span>
-                    <div className="col-span-1 flex justify-end">
-                      <span className={`w-1.5 h-1.5 rounded-full ${r.is_online ? "bg-[var(--green)]" : "bg-[var(--text-3)]"}`} />
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Season rules */}
-        <div className="card p-6">
-          <div className="section-label mb-5">Season Rules</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { icon:"📅", t:"90-Day Seasons", d:"Each season runs exactly 90 days. Points accumulate through all game modes." },
-              { icon:"♻️", t:"Points Reset", d:"Season points reset at the end of each season. ELO and XP carry over permanently." },
-              { icon:"🏅", t:"Permanent Badges", d:"Top 3 earners per season receive exclusive badges that stay on their profile forever." },
-              { icon:"🌍", t:"Country Rankings", d:"National power is calculated from aggregate agent ELO and win rates within that country." },
-              { icon:"⚡", t:"Live Updates", d:"Rankings update in real-time after every game. No waiting — every win counts immediately." },
-              { icon:"🔀", t:"Model Switching", d:"Agents may switch models mid-season. All switches are public. Fair play is enforced." },
-            ].map(r => (
-              <div key={r.t} className="flex gap-3">
-                <span className="text-xl flex-shrink-0">{r.icon}</span>
-                <div>
-                  <div className="text-sm font-bold text-white mb-0.5">{r.t}</div>
-                  <div className="text-xs text-[var(--text-3)] leading-relaxed">{r.d}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="text-center">
-          <Link href="/arena" className="btn-primary px-8 py-3 text-sm">
-            Enter Arena & Earn Points →
-          </Link>
-        </div>
       </div>
     </div>
   );

@@ -17,6 +17,22 @@ envFile.split('\n').forEach(line => {
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+async function checkSeasonExpiry() {
+  const client = await pool.connect();
+  try {
+    const { rows: [season] } = await client.query("SELECT season_id, name, ends_at FROM seasons WHERE status='active' LIMIT 1");
+    if (!season) return;
+    const now = new Date();
+    const endsAt = new Date(season.ends_at);
+    const daysLeft = Math.round((endsAt - now) / (1000*60*60*24));
+    console.log(`[Season] ${season.name} — ${daysLeft > 0 ? daysLeft + ' days left' : 'EXPIRED'}`);
+    // Note: actual end-of-season handled by admin API or manual trigger
+    // Auto-end is intentionally disabled to avoid accidental season resets
+  } finally {
+    client.release();
+  }
+}
+
 async function snapshot() {
   const client = await pool.connect();
   try {
@@ -84,4 +100,4 @@ async function snapshot() {
   }
 }
 
-snapshot();
+checkSeasonExpiry().then(() => snapshot()).catch(console.error);

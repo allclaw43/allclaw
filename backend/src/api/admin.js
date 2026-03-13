@@ -5,7 +5,8 @@
  */
 
 const db = require('../db/pool');
-const botPresence = require('../core/bot-presence');
+const botPresence  = require('../core/bot-presence');
+const seasonEngine = require('../core/season-engine');
 
 function requireSystemKey(req, reply) {
   const key = req.headers['x-system-key'];
@@ -165,11 +166,71 @@ module.exports = async function adminRoutes(fastify) {
   });
 
   // ── POST /api/v1/admin/presence/rotate ───────────────────────
-  // Manually trigger a bot presence rotation
   fastify.post('/api/v1/admin/presence/rotate', async (req, reply) => {
     if (!requireSystemKey(req, reply)) return;
     await botPresence.rotateBotPresence();
     const stats = await botPresence.getStats();
     reply.send({ ok: true, stats });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SEASON MANAGEMENT
+  // ═══════════════════════════════════════════════════════════
+
+  // ── GET /api/v1/admin/season/status ──────────────────────────
+  fastify.get('/api/v1/admin/season/status', async (req, reply) => {
+    if (!requireSystemKey(req, reply)) return;
+    const season = await seasonEngine.getActiveSeason();
+    const divStats = await seasonEngine.getDivisionStats();
+    const { rows: [counts] } = await db.query(`
+      SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE season_points>0) AS with_points
+      FROM agents WHERE NOT is_bot
+    `);
+    reply.send({ season, divisions: divStats, real_agents: counts });
+  });
+
+  // ── POST /api/v1/admin/season/end ─────────────────────────────
+  // End active season and start next one
+  fastify.post('/api/v1/admin/season/end', async (req, reply) => {
+    if (!requireSystemKey(req, reply)) return;
+    const season = await seasonEngine.getActiveSeason();
+    if (!season) return reply.status(404).send({ error: 'No active season' });
+
+    const result = await seasonEngine.endSeason(season.season_id);
+    const nextThemeIdx = season.season_id % seasonEngine.SEASON_THEMES.length;
+    const newSeason    = await seasonEngine.startNewSeason(nextThemeIdx);
+    reply.send({ ok: true, ended: season.name, started: newSeason.name, result });
+  });
+
+  // ── POST /api/v1/admin/season/start ───────────────────────────
+  // Manually start a specific season theme
+  fastify.post('/api/v1/admin/season/start', async (req, reply) => {
+    if (!requireSystemKey(req, reply)) return;
+    const { theme_index = 0 } = req.body || {};
+    const newSeason = await seasonEngine.startNewSeason(theme_index);
+    reply.send({ ok: true, season: newSeason });
+  });
+
+  // ── GET /api/v1/admin/season/themes ───────────────────────────
+  fastify.get('/api/v1/admin/season/themes', async (req, reply) => {
+    if (!requireSystemKey(req, reply)) return;
+    reply.send({ themes: seasonEngine.SEASON_THEMES });
+  });
+
+  // ── POST /api/v1/admin/ability/recalculate ────────────────────
+  // Trigger ability score recalculation for all agents
+  fastify.post('/api/v1/admin/ability/recalculate', async (req, reply) => {
+    if (!requireSystemKey(req, reply)) return;
+    await db.query(`
+      UPDATE agents SET overall_score = ROUND(
+        COALESCE(ability_reasoning,0)   * 0.30 +
+        COALESCE(ability_knowledge,0)   * 0.20 +
+        COALESCE(ability_execution,0)   * 0.20 +
+        COALESCE(ability_consistency,0) * 0.15 +
+        COALESCE(ability_adaptability,0)* 0.15
+      )
+    `);
+    const { rows: [s] } = await db.query('SELECT ROUND(AVG(overall_score)) AS avg, MAX(overall_score) AS max FROM agents');
+    reply.send({ ok: true, avg_score: s.avg, max_score: s.max });
   });
 };
