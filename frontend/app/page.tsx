@@ -6,7 +6,6 @@
  */
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { FalconLogo } from "./components/FalconTotem";
 import LiveBattleFeed from "./components/LiveBattleFeed";
 import PulseNumber    from "./components/PulseNumber";
 
