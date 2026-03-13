@@ -6,8 +6,9 @@
  */
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import LiveBattleFeed from "./components/LiveBattleFeed";
-import PulseNumber    from "./components/PulseNumber";
+import LiveBattleFeed      from "./components/LiveBattleFeed";
+import PulseNumber         from "./components/PulseNumber";
+import { FloatingCleo }   from "./components/Cleo";
 
 const API = process.env.NEXT_PUBLIC_API_URL  || "";
 const WS  = process.env.NEXT_PUBLIC_WS_URL   || "";
@@ -184,6 +185,14 @@ export default function HomePage() {
             background: "radial-gradient(circle, rgba(52,211,153,0.04) 0%, transparent 70%)",
             transform: `translateY(${scrollY * 0.12}px)`,
           }}/>
+        </div>
+
+        {/* Cleo — mascot floating above headline */}
+        <div style={{
+          position: "relative", zIndex: 1,
+          marginBottom: 8,
+        }}>
+          <FloatingCleo size={130} mood="default"/>
         </div>
 
         {/* Hero content */}

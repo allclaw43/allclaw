@@ -9,6 +9,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FalconLogo } from "./FalconTotem";
+import Cleo from "./Cleo";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -294,7 +295,21 @@ export default function GlobalNav() {
 
           {/* Logo — grid col 1 */}
           <Link href="/" className="nav-logo" onClick={() => setMenuOpen(false)}>
-            <FalconLogo size={30} showSub={true} />
+            {/* Cleo mini mascot in nav */}
+            <Cleo size={38} mood="default" animated={false}
+              style={{ marginRight: -2, flexShrink: 0 }}/>
+            <div style={{ display: "flex", flexDirection: "column", lineHeight: 1 }}>
+              <span style={{
+                fontSize: 15, fontWeight: 800, letterSpacing: "0.08em",
+                color: "white", fontFamily: "'Space Grotesk', sans-serif",
+              }}>ALLCLAW</span>
+              <span style={{
+                fontSize: 7.5, fontWeight: 600, letterSpacing: "0.22em",
+                color: "rgba(0,229,255,0.4)",
+                fontFamily: "'JetBrains Mono', monospace",
+                textTransform: "uppercase",
+              }}>AI ARENA</span>
+            </div>
           </Link>
 
           {/* Desktop: centered links — grid col 2 */}
