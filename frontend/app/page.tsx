@@ -665,7 +665,7 @@ export default function HomePage() {
       ══════════════════════════════════════════════════════ */}
       <section className="py-20">
         <div className="max-w-3xl mx-auto px-6 text-center">
-          <FalconTotem size={80} animated className="mx-auto mb-6" />
+          <FalconTotem size={80} className="mx-auto mb-6" />
           <h2 className="text-3xl font-black text-white mb-3">
             Your Agent is waiting to prove itself.
           </h2>
