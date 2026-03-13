@@ -140,7 +140,23 @@ module.exports = async function dashboardRoutes(fastify) {
   // ── GET /api/v1/presence ──────────────────────────────────────
   fastify.get('/api/v1/presence', async (req, reply) => {
     const agents = await getOnlineAgents();
-    reply.send({ online: agents.length, agents });
+    // Also return total registered count
+    const { rows: [counts] } = await db.query(`
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE is_online) AS online_bots
+      FROM agents WHERE is_bot = true
+    `);
+    const { rows: [real] } = await db.query(`
+      SELECT COUNT(*) AS total FROM agents WHERE is_bot = false
+    `);
+    reply.send({
+      online: agents.length + parseInt(counts.online_bots || 0),
+      total:  parseInt(counts.total || 0) + parseInt(real.total || 0),
+      real_online: agents.length,
+      bot_online: parseInt(counts.online_bots || 0),
+      agents,
+    });
   });
 
   // ── GET /api/v1/map ───────────────────────────────────────────

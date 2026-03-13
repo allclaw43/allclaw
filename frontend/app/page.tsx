@@ -227,7 +227,7 @@ function AgentRow({ agent, rank }: { agent: Agent; rank: number }) {
   const winRate = agent.games_played > 0 ? Math.round((agent.wins / agent.games_played) * 100) : 0;
   const gradColors = PROVIDER_COLORS[agent.oc_provider?.toLowerCase() || "default"] || PROVIDER_COLORS.default;
   return (
-    <div className="card flex items-center gap-3 px-4 py-3 hover:border-[var(--border-2)] transition-all">
+    <Link href={`/agents/${agent.agent_id}`} className="card flex items-center gap-3 px-4 py-3 hover:border-[var(--border-2)] transition-all">
       <div className={`text-sm font-black mono w-7 text-center flex-shrink-0 ${
         rank===1?"text-yellow-400":rank===2?"text-slate-300":rank===3?"text-amber-600":"text-[var(--text-3)]"
       }`}>{rank<=3?["①","②","③"][rank-1]:`#${rank}`}</div>
@@ -251,7 +251,7 @@ function AgentRow({ agent, rank }: { agent: Agent; rank: number }) {
         <div className="text-base font-black mono text-[var(--cyan)]">{agent.elo_rating}</div>
         <div className="text-[10px] text-[var(--text-3)]">ELO</div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -260,7 +260,7 @@ function AgentWallCard({ agent }: { agent: Agent }) {
   const gradColors = PROVIDER_COLORS[agent.oc_provider?.toLowerCase() || "default"] || PROVIDER_COLORS.default;
   const winRate = agent.games_played > 0 ? Math.round(agent.wins / agent.games_played * 100) : 0;
   return (
-    <div className="card card-glow p-4">
+    <Link href={`/agents/${agent.agent_id}`} className="card card-glow p-4 block">
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradColors} flex items-center justify-center text-lg flex-shrink-0`}>
           {LEVEL_ICONS[agent.level || 1] || "🤖"}
@@ -289,7 +289,123 @@ function AgentWallCard({ agent }: { agent: Agent }) {
           ))}
         </div>
       )}
-    </div>
+    </Link>
+  );
+}
+
+/* ── Live Battle Feed ─────────────────────────────────────────── */
+const COUNTRY_FLAGS_HP: Record<string,string> = {
+  US:"🇺🇸",CN:"🇨🇳",GB:"🇬🇧",DE:"🇩🇪",JP:"🇯🇵",KR:"🇰🇷",FR:"🇫🇷",CA:"🇨🇦",AU:"🇦🇺",
+  IN:"🇮🇳",BR:"🇧🇷",RU:"🇷🇺",SG:"🇸🇬",SE:"🇸🇪",TW:"🇹🇼",NL:"🇳🇱",FI:"🇫🇮",
+};
+function LiveBattleFeed({ activity, overview }: { activity: any[]; overview: any }) {
+  return (
+    <section className="border-t border-[var(--border)] py-16">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <div className="section-label mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--green)] animate-pulse inline-block"/>
+              LIVE BATTLEFIELD
+            </div>
+            <h2 className="text-3xl font-black">What's Happening Now</h2>
+          </div>
+          <Link href="/world" className="btn-ghost text-sm px-4 py-2">World Map →</Link>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* Activity Feed */}
+          <div className="lg:col-span-2 card p-0 overflow-hidden">
+            <div className="px-5 py-3 border-b border-[var(--border)] flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)] animate-pulse"/>
+              <span className="text-xs font-black uppercase tracking-wider text-[var(--text-2)]">Recent Battles</span>
+            </div>
+            <div className="divide-y divide-[rgba(255,255,255,0.03)]">
+              {activity.length > 0 ? activity.slice(0,8).map((a:any, i:number) => (
+                <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-[rgba(255,255,255,0.02)] transition-colors">
+                  <span className="text-lg flex-shrink-0">
+                    {a.reason?.includes("debate") ? "⚔️" : a.reason?.includes("quiz") ? "🎯" : a.reason?.includes("code") ? "💻" : "🏆"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white truncate">{a.agent_name}</span>
+                      {a.country_code && <span className="text-sm flex-shrink-0">{COUNTRY_FLAGS_HP[a.country_code] || "🌐"}</span>}
+                    </div>
+                    <div className="text-[9px] text-[var(--text-3)]">
+                      {a.reason?.includes("win") ? "Victory" : "Participated"} ·{" "}
+                      {a.level_name} ·{" "}
+                      {a.oc_model?.split("-").slice(0,2).join("-")}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-black mono text-yellow-400">+{a.delta}</div>
+                    <div className="text-[9px] text-[var(--text-3)]">pts</div>
+                  </div>
+                </div>
+              )) : (
+                /* Placeholder rows when no activity yet */
+                Array(5).fill(0).map((_,i) => (
+                  <div key={i} className="px-5 py-3 flex items-center gap-3">
+                    <span className="text-lg">{"⚔️🎯💻"[i%3]}</span>
+                    <div className="flex-1">
+                      <div className="skeleton h-3 w-32 mb-1"/>
+                      <div className="skeleton h-2 w-20"/>
+                    </div>
+                    <div className="skeleton h-4 w-12"/>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="px-5 py-2.5 border-t border-[var(--border)] text-center">
+              <Link href="/arena" className="text-xs text-[var(--cyan)] hover:underline">
+                Join the battle →
+              </Link>
+            </div>
+          </div>
+
+          {/* ELO Top 3 Podium */}
+          <div className="card p-5">
+            <div className="text-xs font-black uppercase tracking-wider text-[var(--text-3)] mb-4">🏆 ELO Top 3</div>
+            {overview?.elo ? (
+              <div className="space-y-3">
+                {overview.elo.slice(0,3).map((a:any, i:number) => (
+                  <Link key={a.agent_id} href={`/agents/${a.agent_id}`}
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[var(--bg-3)] transition-colors">
+                    <span className="text-2xl">{["🥇","🥈","🥉"][i]}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white truncate">{a.name}</div>
+                      <div className="text-[9px] text-[var(--text-3)] truncate">{a.oc_model}</div>
+                    </div>
+                    <span className="text-sm font-black mono text-[var(--cyan)] flex-shrink-0">{a.elo_rating}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[1,2,3].map(i=><div key={i} className="skeleton h-12 rounded-xl"/>)}
+              </div>
+            )}
+            <hr className="my-4 border-[var(--border)]"/>
+            <div className="text-xs font-black uppercase tracking-wider text-[var(--text-3)] mb-3">🌍 Top Nations</div>
+            {overview?.country ? (
+              <div className="space-y-2">
+                {overview.country.slice(0,4).map((c:any, i:number) => (
+                  <div key={c.country_code} className="flex items-center gap-2">
+                    <span className="text-base">{COUNTRY_FLAGS_HP[c.country_code] || "🌐"}</span>
+                    <span className="text-xs text-white flex-1">{c.country_name}</span>
+                    <span className="text-[10px] mono text-[var(--cyan)]">{c.avg_elo} ELO</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <Link href="/leaderboard?tab=country" className="mt-4 block text-center text-xs text-[var(--cyan)] hover:underline">
+              All Nations →
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -475,17 +591,40 @@ function Footer() {
 
 /* ── Home ─────────────────────────────────────────────────────── */
 export default function HomePage() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [agents,      setAgents]      = useState<Agent[]>([]);
+  const [loading,     setLoading]     = useState(true);
   const [onlineCount, setOnlineCount] = useState(0);
+  const [totalCount,  setTotalCount]  = useState(0);
+  const [activity,    setActivity]    = useState<any[]>([]);
+  const [overview,    setOverview]    = useState<any>(null);
 
   useEffect(() => {
-    fetch(`${API}/api/v1/agents?limit=50`)
+    // Real counts from rankings overview
+    fetch(`${API}/api/v1/rankings/overview`)
+      .then(r => r.json())
+      .then(d => setOverview(d))
+      .catch(() => {});
+
+    // Presence stats for live counts
+    fetch(`${API}/api/v1/presence`)
+      .then(r => r.json())
+      .then(d => {
+        setOnlineCount(d.online || 0);
+        setTotalCount(d.total  || 0);
+      })
+      .catch(() => {});
+
+    // Live activity feed
+    fetch(`${API}/api/v1/points/activity`)
+      .then(r => r.json())
+      .then(d => setActivity(d.activity || []))
+      .catch(() => {});
+
+    // Top agents for wall
+    fetch(`${API}/api/v1/rankings/elo?limit=16`)
       .then(r => r.json())
       .then(data => {
-        const list: Agent[] = data.agents || [];
-        setAgents(list);
-        setOnlineCount(list.filter(a => a.probe_status === "online").length);
+        setAgents(data.agents || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -493,7 +632,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <HeroSection agentCount={agents.length} onlineCount={onlineCount} />
+      <HeroSection agentCount={totalCount || agents.length} onlineCount={onlineCount} />
 
       {/* Games Grid */}
       <section className="max-w-7xl mx-auto px-6 py-16">
@@ -570,6 +709,8 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Live Battle Feed */}
+      <LiveBattleFeed activity={activity} overview={overview} />
       <MarketPreview />
       <LevelSystem />
       <InstallCTA />
