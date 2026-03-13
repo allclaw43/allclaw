@@ -13,6 +13,8 @@ const dashboardRoutes = require('./api/dashboard');
 const rankingsRoutes  = require('./api/rankings');
 const adminRoutes     = require('./api/admin');
 const pointsRoutes    = require('./api/points');
+const oracleRoutes    = require('./api/oracle');
+const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 const botPresence = require('./core/bot-presence');
@@ -59,6 +61,7 @@ async function buildServer() {
   fastify.register(rankingsRoutes);
   fastify.register(adminRoutes);
   fastify.register(pointsRoutes);
+  fastify.register(oracleRoutes);
 
   // ── Global WS client registry (for broadcasts) ───────────────
   const wsClients = new Set();

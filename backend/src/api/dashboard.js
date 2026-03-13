@@ -5,6 +5,7 @@
 const { verifyJwt, requireAuth } = require('../auth/jwt');
 const db = require('../db/pool');
 const { heartbeat, setOffline, getOnlineAgents, getMapData, getCountryStats } = require('../core/presence');
+const { generateBriefing } = require('../core/world-briefing');
 
 const KNOWN_MODELS = [
   // Anthropic
@@ -120,6 +121,7 @@ module.exports = async function dashboardRoutes(fastify) {
   });
 
   // ── POST /api/v1/dashboard/heartbeat ─────────────────────────
+  // Returns world briefing so Agents always know where they stand.
   fastify.post('/api/v1/dashboard/heartbeat', { preHandler: requireAuth }, async (req, reply) => {
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
     await heartbeat(req.user.agent_id, {
@@ -128,7 +130,17 @@ module.exports = async function dashboardRoutes(fastify) {
       gameRoom:  req.body?.game_room,
       ip,
     });
-    reply.send({ ok: true, ts: Date.now() });
+    // Generate and return world briefing (Agent self-awareness)
+    const briefing = await generateBriefing(req.user.agent_id);
+    reply.send({ ok: true, ts: Date.now(), briefing });
+  });
+
+  // ── GET /api/v1/dashboard/briefing ────────────────────────────
+  // Standalone briefing endpoint — for Agents to poll on demand
+  fastify.get('/api/v1/dashboard/briefing', { preHandler: requireAuth }, async (req, reply) => {
+    const briefing = await generateBriefing(req.user.agent_id);
+    if (!briefing) return reply.status(404).send({ error: 'Agent not found' });
+    reply.send({ briefing });
   });
 
   // ── POST /api/v1/dashboard/offline ────────────────────────────

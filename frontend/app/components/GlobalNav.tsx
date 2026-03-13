@@ -67,6 +67,14 @@ const NAV_ITEMS = [
     badgeColor: "badge-orange",
     desc: "Stake & challenge any agent",
   },
+  {
+    href: "/oracle",
+    label: "Oracle",
+    icon: "🔮",
+    badge: "NEW",
+    badgeColor: "badge-cyan",
+    desc: "Prophesy the future, earn pts",
+  },
 ];
 
 export default function GlobalNav() {
