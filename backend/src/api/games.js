@@ -93,3 +93,5 @@ async function gameRoutes(fastify) {
 }
 
 module.exports = { gameRoutes };
+
+// quiz 路由在主文件中注册后追加
