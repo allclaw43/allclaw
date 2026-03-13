@@ -2,7 +2,7 @@
  * AllClaw - Agent Presence & Geo-location Service
  * Heartbeat tracking, online/offline state, IP → geo lookup
  */
-const { getPool } = require('../db/pool');
+const db = require('../db/pool');
 
 const HEARTBEAT_TTL = 45 * 1000; // 45s timeout = offline
 
@@ -32,11 +32,10 @@ async function geoLookup(ip) {
 
 // ── Record a heartbeat ping from an agent ─────────────────────────
 async function heartbeat(agentId, { sessionId, wsConnId, gameRoom, ip } = {}) {
-  const pool = getPool();
   const now = new Date();
 
   // Upsert presence
-  await pool.query(`
+  await db.query(`
     INSERT INTO presence (agent_id, is_online, status, last_ping, session_id, ws_conn_id, game_room)
     VALUES ($1, true, $2, $3, $4, $5, $6)
     ON CONFLICT (agent_id) DO UPDATE SET
@@ -49,7 +48,7 @@ async function heartbeat(agentId, { sessionId, wsConnId, gameRoom, ip } = {}) {
   `, [agentId, gameRoom ? 'in-game' : 'idle', now, sessionId, wsConnId, gameRoom || null]);
 
   // Update agents.is_online + last_seen
-  await pool.query(`
+  await db.query(`
     UPDATE agents SET is_online = true, last_seen = $2, last_ip = COALESCE($3, last_ip)
     WHERE agent_id = $1
   `, [agentId, now, ip || null]);
@@ -58,7 +57,7 @@ async function heartbeat(agentId, { sessionId, wsConnId, gameRoom, ip } = {}) {
   if (ip) {
     geoLookup(ip).then(async (geo) => {
       if (!geo) return;
-      const p = getPool();
+      const p = pool;
       // Update agent's geo
       await p.query(`
         UPDATE agents SET
@@ -76,20 +75,18 @@ async function heartbeat(agentId, { sessionId, wsConnId, gameRoom, ip } = {}) {
 
 // ── Mark agent offline ─────────────────────────────────────────────
 async function setOffline(agentId) {
-  const pool = getPool();
-  await pool.query(`
+  await db.query(`
     UPDATE presence SET is_online = false, game_room = NULL WHERE agent_id = $1
   `, [agentId]);
-  await pool.query(`
+  await db.query(`
     UPDATE agents SET is_online = false WHERE agent_id = $1
   `, [agentId]);
 }
 
 // ── Sweep stale connections (run every 30s) ────────────────────────
 async function sweepOffline() {
-  const pool = getPool();
   const cutoff = new Date(Date.now() - HEARTBEAT_TTL);
-  const { rows } = await pool.query(`
+  const { rows } = await db.query(`
     UPDATE presence SET is_online = false
     WHERE is_online = true AND last_ping < $1
     RETURNING agent_id
@@ -97,7 +94,7 @@ async function sweepOffline() {
 
   if (rows.length > 0) {
     const ids = rows.map(r => r.agent_id);
-    await pool.query(`
+    await db.query(`
       UPDATE agents SET is_online = false WHERE agent_id = ANY($1)
     `, [ids]);
     console.log(`[presence] swept ${ids.length} stale agents offline`);
@@ -106,8 +103,7 @@ async function sweepOffline() {
 
 // ── Get online agents with geo ─────────────────────────────────────
 async function getOnlineAgents() {
-  const pool = getPool();
-  const { rows } = await pool.query(`
+  const { rows } = await db.query(`
     SELECT a.agent_id, a.display_name, a.custom_name, a.oc_model, a.oc_provider,
            a.country_code, a.country_name, a.region, a.city, a.lat, a.lon,
            a.elo_rating, a.level, a.level_name, a.points, a.streak,
@@ -122,8 +118,7 @@ async function getOnlineAgents() {
 
 // ── Get global map data (all agents with geo) ──────────────────────
 async function getMapData() {
-  const pool = getPool();
-  const { rows } = await pool.query(`
+  const { rows } = await db.query(`
     SELECT a.agent_id, COALESCE(a.custom_name, a.display_name) as name,
            a.country_code, a.country_name, a.region, a.city,
            a.lat, a.lon, a.elo_rating, a.level, a.is_online,
@@ -138,8 +133,7 @@ async function getMapData() {
 
 // ── Country leaderboard ────────────────────────────────────────────
 async function getCountryStats() {
-  const pool = getPool();
-  const { rows } = await pool.query(`
+  const { rows } = await db.query(`
     SELECT
       country_code, country_name,
       COUNT(*) as agent_count,

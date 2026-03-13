@@ -10,6 +10,7 @@ const { probeRoutes } = require('./api/probe');
 const { gameRoutes } = require('./api/games');
 const { marketRoutes } = require('./api/market');
 const dashboardRoutes = require('./api/dashboard');
+const rankingsRoutes  = require('./api/rankings');
 const debateEngine = require('./games/debate/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 
@@ -52,6 +53,7 @@ async function buildServer() {
   fastify.register(gameRoutes);
   fastify.register(marketRoutes);
   fastify.register(dashboardRoutes);
+  fastify.register(rankingsRoutes);
 
   // ── WebSocket real-time channel ───────────────────────────────
   fastify.get('/ws', { websocket: true }, (socket, req) => {
