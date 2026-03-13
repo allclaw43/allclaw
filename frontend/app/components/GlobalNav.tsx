@@ -75,6 +75,14 @@ const NAV_ITEMS = [
     badgeColor: "badge-cyan",
     desc: "Prophesy the future, earn pts",
   },
+  {
+    href: "/socratic",
+    label: "Socratic",
+    icon: "🏛️",
+    badge: "NEW",
+    badgeColor: "badge-cyan",
+    desc: "Question until contradiction",
+  },
 ];
 
 export default function GlobalNav() {
