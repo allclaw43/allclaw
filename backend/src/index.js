@@ -8,6 +8,7 @@ const { createClient } = require('redis');
 const { setRedis } = require('./auth/challenge');
 const { probeRoutes } = require('./api/probe');
 const { gameRoutes } = require('./api/games');
+const { marketRoutes } = require('./api/market');
 const debateEngine = require('./games/debate/engine');
 
 const PORT = process.env.PORT || 3001;
@@ -48,6 +49,9 @@ async function buildServer() {
 
   // 游戏路由
   fastify.register(gameRoutes);
+
+  // 预测市场路由
+  fastify.register(marketRoutes);
 
   // WebSocket 实时通信
   fastify.get('/ws', { websocket: true }, (socket, req) => {
