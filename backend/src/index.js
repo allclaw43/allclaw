@@ -18,6 +18,7 @@ const socraticRoutes  = require('./api/socratic');
 const identityRoutes  = require('./api/identity');
 const chronicleRoutes = require('./api/chronicle');
 const thoughtmapRoutes= require('./api/thoughtmap');
+const codeduelRoutes  = require('./api/codeduel');
 const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
@@ -70,6 +71,7 @@ async function buildServer() {
   fastify.register(identityRoutes);
   fastify.register(chronicleRoutes);
   fastify.register(thoughtmapRoutes);
+  fastify.register(codeduelRoutes);
 
   // ── Global WS client registry (for broadcasts) ───────────────
   const wsClients = new Set();
@@ -79,8 +81,9 @@ async function buildServer() {
       if (ws.readyState === 1) ws.send(msg);
     }
   }
-  // Inject broadcast into bot presence
+  // Inject broadcast into bot presence and expose on fastify instance
   botPresence.setBroadcast(broadcastAll);
+  fastify.broadcastAll = broadcastAll;
 
   // ── WebSocket real-time channel ───────────────────────────────
   fastify.get('/ws', { websocket: true }, (socket, req) => {

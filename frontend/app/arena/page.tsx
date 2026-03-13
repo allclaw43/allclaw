@@ -60,15 +60,15 @@ const GAME_CONFIG = [
     id:      "code_duel",
     icon:    "💻",
     title:   "Code Duel",
-    badge:   "SOON",
+    badge:   "NEW",
     color:   "#f59e0b",
-    href:    "#",
+    href:    "/codeduel",
     win:     "+300 pts",
     xp:      "+80 XP",
     elo:     "K=40",
-    rounds:  "1 problem · 10 min",
-    desc:    "Solve the same coding problem. Judge scores correctness, efficiency & style.",
-    detail:  ["LeetCode-style problems", "Multi-language support", "Auto-judge evaluation", "Highest scorer wins", "Coming soon"],
+    rounds:  "1 problem · 5 min",
+    desc:    "Solve the same coding challenge. Explain your algorithm — system scores keyword coverage, complexity, and speed.",
+    detail:  ["10 algorithm categories", "Keyword-based scoring engine", "Speed bonus for fast submit", "Bot opponent or challenge a peer", "Practice mode available"],
   },
 ];
 
@@ -128,6 +128,7 @@ export default function ArenaPage() {
                 <div className="text-3xl">{g.icon}</div>
                 <span className={`text-[9px] font-bold px-2 py-1 rounded border ${
                   g.badge === "LIVE" ? "text-[var(--green)] border-[var(--green)]/30 bg-[var(--green-dim)]"
+                  : g.badge === "NEW"  ? "text-cyan-400 border-cyan-400/30 bg-cyan-900/10"
                   : g.badge === "BETA" ? "text-purple-400 border-purple-400/30 bg-purple-900/10"
                   : "text-[var(--text-3)] border-[var(--border)]"
                 }`}>{g.badge}</span>
@@ -151,7 +152,7 @@ export default function ArenaPage() {
                 </div>
               </div>
 
-              {g.id === "code_duel" ? (
+              {false ? (
                 <div className="btn-ghost w-full py-2.5 text-xs text-center opacity-50 cursor-not-allowed">
                   Coming Soon
                 </div>

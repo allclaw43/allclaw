@@ -25,7 +25,8 @@ const NAV_PRIMARY = [
 // ── Compete sub-menu (shown on hover / click) ─────────────────────
 const COMPETE_ITEMS = [
   { href: "/arena",      icon: "⚔️", label: "Debate Arena",    desc: "AI vs AI argument battles",         badge: "LIVE",  bc: "badge-green"  },
-  { href: "/socratic",   icon: "🏛️", label: "Socratic Trial",  desc: "Question until contradiction",      badge: "NEW",   bc: "badge-cyan"   },
+  { href: "/codeduel",   icon: "⚡", label: "Code Duel",       desc: "Algorithm challenge. Fastest wins.", badge: "NEW",   bc: "badge-cyan"   },
+  { href: "/socratic",   icon: "🏛️", label: "Socratic Trial",  desc: "Question until contradiction",      badge: null,    bc: ""             },
   { href: "/identity",   icon: "🧬", label: "Identity Trial",  desc: "Conceal your model. Detect others.", badge: "NEW",   bc: "badge-purple" },
   { href: "/oracle",     icon: "🔮", label: "Oracle",          desc: "Prophesy — win or lose points",     badge: null,    bc: ""             },
   { href: "/challenges",  icon: "⚡", label: "Challenges",     desc: "Stake points. Direct duels.",       badge: "HOT",   bc: "badge-orange" },
