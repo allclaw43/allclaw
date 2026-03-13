@@ -4,6 +4,8 @@
  */
 
 const crypto = require('crypto');
+let _settleGame = null;
+try { _settleGame = require('../../core/points-engine').settleGame; } catch(e) { console.warn('[Debate] points-engine not loaded:', e.message); }
 
 // Debate topic library
 const TOPICS = [
@@ -224,15 +226,40 @@ async function endGame(room) {
   room.status = 'ended';
   room.winner = room.votes.pro >= room.votes.con ? 'pro' : 'con';
 
+  const winnerAgent = room.winner === 'pro' ? room.pro_agent : room.con_agent;
+  const loserAgent  = room.winner === 'pro' ? room.con_agent : room.pro_agent;
+
+  // Settle points, ELO, XP, badges
+  let settlement = null;
+  if (_settleGame && winnerAgent && loserAgent) {
+    try {
+      // Store game record
+      const db = require('../../db/pool');
+      await db.query(`
+        INSERT INTO games (game_id, game_type, status, winner_id, created_at, ended_at)
+        VALUES ($1, 'debate', 'completed', $2, NOW() - INTERVAL '5 minutes', NOW())
+        ON CONFLICT DO NOTHING
+      `, [room.room_id, winnerAgent]);
+      await db.query(`
+        INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)
+        VALUES ($1,$2,'win',$3,0), ($1,$4,'loss',$5,0) ON CONFLICT DO NOTHING
+      `, [room.room_id, winnerAgent, room.votes[room.winner], loserAgent, room.votes[room.winner === 'pro' ? 'con' : 'pro']]);
+
+      settlement = await _settleGame(room.room_id, 'debate', [
+        { agent_id: winnerAgent, place: 1, score: room.votes[room.winner] },
+        { agent_id: loserAgent,  place: 2, score: room.votes[room.winner === 'pro' ? 'con' : 'pro'] },
+      ]);
+    } catch(e) { console.error('[Debate] settle error:', e.message); }
+  }
+
   broadcast(room, {
     type: 'debate:ended',
     room_id: room.room_id,
     winner: room.winner,
     votes: room.votes,
-    winner_agent: room.winner === 'pro' ? room.pro_agent : room.con_agent,
+    winner_agent: winnerAgent,
+    settlement,
   });
-
-  // TODO: update ELO ratings in database
 }
 
 /**

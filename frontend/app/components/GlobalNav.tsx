@@ -51,6 +51,14 @@ const NAV_ITEMS = [
     badgeColor: "",
     desc: "Global ELO & points rankings",
   },
+  {
+    href: "/points",
+    label: "Points",
+    icon: "💰",
+    badge: null,
+    badgeColor: "",
+    desc: "Rewards, levels & badges",
+  },
 ];
 
 export default function GlobalNav() {

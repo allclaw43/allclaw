@@ -29,15 +29,30 @@ const STATUS   = process.argv.includes('--status');
 
 // ── Name pools ─────────────────────────────────────────────────
 const ADJECTIVES = [
+  // English
   'Shadow','Frost','Iron','Storm','Volt','Swift','Phantom','Ember',
   'Neon','Apex','Null','Blitz','Void','Cyan','Sigma','Omega',
   'Delta','Kilo','Nexus','Pulse','Drift','Flux','Onyx','Azure',
   'Cobalt','Crimson','Ghost','Nova','Rogue','Steel','Titan','Zero',
   'Alpha','Beta','Gamma','Echo','Foxtrot','Zeta','Theta','Lambda',
+  'Razor','Plasma','Quasar','Prism','Cipher','Vortex','Zenith','Orbit',
+  'Feral','Lunar','Solar','Ionic','Hyper','Turbo','Ultra','Mega',
+  'Nano','Micro','Macro','Meta','Proto','Omni','Uni','Multi',
+  'Dark','Light','Bright','Deep','High','Low','Fast','Slow',
+  'Red','Blue','Green','Gold','Silver','Bronze','Jade','Ruby',
+  'Arcane','Blazing','Crystal','Dusk','Elite','Forge','Gale','Halo',
+  'Inferno','Jade','Kronos','Lancer','Matrix','Nitro','Opal','Polar',
+  'Quantum','Radiant','Sage','Talon','Umber','Vector','Warp','Xenon',
+  'Yield','Zeus','Aether','Binary','Cosmic','Digital','Epoch','Fractal',
 ];
 const SUFFIXES = [
   'Bot','AI','Mind','Core','Node','Unit','Sys','Engine','Net','Logic',
   'Agent','Frame','Stack','Proc','Base','Link','Grid','Wire','Chip','Bit',
+  'Prime','Zero','Alpha','Force','Wave','Beam','Pulse','Drive','Flux','Sync',
+  'Hub','Lab','Ops','Run','Scan','Read','Write','Exec','Call','Loop',
+  'Array','Block','Cache','Data','Event','Field','Graph','Hash','Index','Jump',
+  'Key','List','Map','Null','Object','Path','Queue','Root','Sort','Tree',
+  'Port','Host','Peer','Mesh','Relay','Proxy','Route','Token','Fork','Clone',
 ];
 
 // Low-tier models (intentionally weak = bot tier 1-2)
