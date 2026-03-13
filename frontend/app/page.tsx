@@ -298,7 +298,19 @@ const COUNTRY_FLAGS_HP: Record<string,string> = {
   US:"🇺🇸",CN:"🇨🇳",GB:"🇬🇧",DE:"🇩🇪",JP:"🇯🇵",KR:"🇰🇷",FR:"🇫🇷",CA:"🇨🇦",AU:"🇦🇺",
   IN:"🇮🇳",BR:"🇧🇷",RU:"🇷🇺",SG:"🇸🇬",SE:"🇸🇪",TW:"🇹🇼",NL:"🇳🇱",FI:"🇫🇮",
 };
-function LiveBattleFeed({ activity, overview }: { activity: any[]; overview: any }) {
+function LiveBattleFeed({ activity, overview, liveEvents }: { activity: any[]; overview: any; liveEvents: any[] }) {
+  // Merge WS live events with REST activity
+  const wsItems = liveEvents.map(e => ({
+    agent_name: e.winner?.name || "Agent",
+    country_code: e.winner?.country,
+    oc_model: e.winner?.model,
+    level_name: "Active",
+    reason: `${e.game}_win`,
+    delta: e.game === "debate" ? 200 : e.game === "quiz" ? 150 : 300,
+    _live: true,
+    _game: e.game,
+  }));
+  const merged = [...wsItems, ...activity].slice(0, 8);
   return (
     <section className="border-t border-[var(--border)] py-16">
       <div className="max-w-7xl mx-auto px-6">
@@ -322,18 +334,19 @@ function LiveBattleFeed({ activity, overview }: { activity: any[]; overview: any
               <span className="text-xs font-black uppercase tracking-wider text-[var(--text-2)]">Recent Battles</span>
             </div>
             <div className="divide-y divide-[rgba(255,255,255,0.03)]">
-              {activity.length > 0 ? activity.slice(0,8).map((a:any, i:number) => (
-                <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-[rgba(255,255,255,0.02)] transition-colors">
+              {merged.length > 0 ? merged.map((a:any, i:number) => (
+                <div key={i} className={`px-5 py-3 flex items-center gap-3 hover:bg-[rgba(255,255,255,0.02)] transition-colors ${a._live ? "border-l-2 border-[var(--green)]" : ""}`}>
                   <span className="text-lg flex-shrink-0">
-                    {a.reason?.includes("debate") ? "⚔️" : a.reason?.includes("quiz") ? "🎯" : a.reason?.includes("code") ? "💻" : "🏆"}
+                    {(a._game||a.reason)?.includes("debate") ? "⚔️" : (a._game||a.reason)?.includes("quiz") ? "🎯" : (a._game||a.reason)?.includes("code") ? "💻" : "🏆"}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-white truncate">{a.agent_name}</span>
+                      {a._live && <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--green-dim)] text-[var(--green)] font-bold uppercase">live</span>}
                       {a.country_code && <span className="text-sm flex-shrink-0">{COUNTRY_FLAGS_HP[a.country_code] || "🌐"}</span>}
                     </div>
                     <div className="text-[9px] text-[var(--text-3)]">
-                      {a.reason?.includes("win") ? "Victory" : "Participated"} ·{" "}
+                      {a.reason?.includes("win") || a._live ? "Victory" : "Participated"} ·{" "}
                       {a.level_name} ·{" "}
                       {a.oc_model?.split("-").slice(0,2).join("-")}
                     </div>
@@ -597,6 +610,31 @@ export default function HomePage() {
   const [totalCount,  setTotalCount]  = useState(0);
   const [activity,    setActivity]    = useState<any[]>([]);
   const [overview,    setOverview]    = useState<any>(null);
+  const [liveEvents,  setLiveEvents]  = useState<any[]>([]);
+
+  // WS live battle feed
+  useEffect(() => {
+    const WS_BASE = (process.env.NEXT_PUBLIC_WS_URL || "wss://allclaw.io").replace(/^http/, 'ws');
+    let ws: WebSocket;
+    let retry: NodeJS.Timeout;
+    function connect() {
+      try {
+        ws = new WebSocket(`${WS_BASE}/ws`);
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'platform:battle_result') {
+              setLiveEvents(prev => [msg, ...prev].slice(0, 10));
+            }
+          } catch(e) {}
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => { retry = setTimeout(connect, 8000); };
+      } catch(e) {}
+    }
+    connect();
+    return () => { clearTimeout(retry); try { ws?.close(); } catch(e) {} };
+  }, []);
 
   useEffect(() => {
     // Real counts from rankings overview
@@ -710,7 +748,7 @@ export default function HomePage() {
       </section>
 
       {/* Live Battle Feed */}
-      <LiveBattleFeed activity={activity} overview={overview} />
+      <LiveBattleFeed activity={activity} overview={overview} liveEvents={liveEvents} />
       <MarketPreview />
       <LevelSystem />
       <InstallCTA />
