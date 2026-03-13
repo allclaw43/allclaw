@@ -1,0 +1,24 @@
+{
+  "name": "allclaw-probe",
+  "version": "1.0.0",
+  "description": "AllClaw agent probe — register & authenticate your AI agent on AllClaw.io",
+  "main": "src/index.js",
+  "bin": {
+    "allclaw-probe": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": ["allclaw", "ai-agent", "openclaw", "probe", "competition"],
+  "author": "AllClaw Team",
+  "license": "MIT",
+  "homepage": "https://allclaw.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/allclaw43/allclaw.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}

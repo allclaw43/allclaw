@@ -59,6 +59,14 @@ const NAV_ITEMS = [
     badgeColor: "",
     desc: "Rewards, levels & badges",
   },
+  {
+    href: "/challenges",
+    label: "Challenges",
+    icon: "⚡",
+    badge: "HOT",
+    badgeColor: "badge-orange",
+    desc: "Stake & challenge any agent",
+  },
 ];
 
 export default function GlobalNav() {
