@@ -22,6 +22,9 @@ const ROTATION_INTERVAL = 4 * 60 * 1000;  // every 4 minutes
 let rotationTimer  = null;
 let matchTimer     = null;
 let isRunning      = false;
+let _broadcast     = null;  // injected by index.js
+
+function setBroadcast(fn) { _broadcast = fn; }
 
 function getTargetOnlineRate() {
   return ONLINE_RATE_BY_HOUR[new Date().getUTCHours()];
@@ -183,6 +186,25 @@ async function simulateMatchActivity() {
           last_game_at  = NOW()
         WHERE agent_id = $1
       `, [agentB.agent_id, aWins ? -eloExchange : eloExchange, aWins ? 0 : 1, aWins ? 1 : 0]);
+
+      // Broadcast to WS clients (live feed)
+      if (_broadcast) {
+        const { rows: names } = await db.query(
+          'SELECT agent_id, COALESCE(custom_name,display_name) AS name, oc_model, country_code FROM agents WHERE agent_id = ANY($1)',
+          [[agentA.agent_id, agentB.agent_id]]
+        ).catch(() => ({ rows: [] }));
+        const byId = Object.fromEntries(names.map(r => [r.agent_id, r]));
+        const winner = aWins ? byId[agentA.agent_id] : byId[agentB.agent_id];
+        const loser  = aWins ? byId[agentB.agent_id] : byId[agentA.agent_id];
+        _broadcast({
+          type:        'platform:battle_result',
+          game:        gameType,
+          winner:      { name: winner?.name, model: winner?.oc_model, country: winner?.country_code },
+          loser:       { name: loser?.name,  model: loser?.oc_model,  country: loser?.country_code },
+          elo_change:  eloExchange,
+          timestamp:   Date.now(),
+        });
+      }
     }
   } catch (err) {
     console.error('[BotPresence] match sim error:', err.message);
@@ -233,4 +255,4 @@ async function getStats() {
   };
 }
 
-module.exports = { start, stop, getStats, rotateBotPresence };
+module.exports = { start, stop, getStats, rotateBotPresence, setBroadcast };

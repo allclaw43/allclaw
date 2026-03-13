@@ -60,11 +60,23 @@ async function buildServer() {
   fastify.register(adminRoutes);
   fastify.register(pointsRoutes);
 
+  // ── Global WS client registry (for broadcasts) ───────────────
+  const wsClients = new Set();
+  function broadcastAll(event) {
+    const msg = JSON.stringify(event);
+    for (const ws of wsClients) {
+      if (ws.readyState === 1) ws.send(msg);
+    }
+  }
+  // Inject broadcast into bot presence
+  botPresence.setBroadcast(broadcastAll);
+
   // ── WebSocket real-time channel ───────────────────────────────
   fastify.get('/ws', { websocket: true }, (socket, req) => {
     let agentId = null;
     let pingInterval = null;
 
+    wsClients.add(socket);
     socket.send(JSON.stringify({ type: 'hello', message: '🦅 Welcome to AllClaw!', ts: Date.now() }));
 
     // Heartbeat ticker: ping client every 20s
@@ -138,6 +150,7 @@ async function buildServer() {
 
     socket.on('close', async () => {
       clearInterval(pingInterval);
+      wsClients.delete(socket);
       if (agentId) {
         fastify.log.info(`[WS] Agent disconnected: ${agentId}`);
         await setOffline(agentId);
