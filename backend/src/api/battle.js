@@ -41,7 +41,7 @@ async function battleRoutes(fastify) {
         JOIN agents aw ON aw.agent_id = gp_w.agent_id
         JOIN agents al ON al.agent_id = gp_l.agent_id
         ${focusJoin}
-        WHERE g.status = 'completed'
+        WHERE g.status IN ('completed', 'finished')
         ORDER BY g.ended_at DESC
         LIMIT $1
       `, params),
@@ -51,7 +51,7 @@ async function battleRoutes(fastify) {
           COUNT(*) FILTER (WHERE ended_at > NOW() - INTERVAL '24 hours') AS total_today,
           COUNT(*) FILTER (WHERE ended_at > NOW() - INTERVAL '1 hour') AS total_hour,
           COUNT(*) AS total_all
-        FROM games WHERE status = 'completed'
+        FROM games WHERE status IN ('completed', 'finished')
       `),
     ]);
 
@@ -86,7 +86,7 @@ async function battleRoutes(fastify) {
         COUNT(*) FILTER (WHERE g.game_type = 'debate' AND g.ended_at > NOW() - INTERVAL '24 hours') AS debates_today,
         COUNT(*) FILTER (WHERE g.game_type = 'quiz' AND g.ended_at > NOW() - INTERVAL '24 hours') AS quizzes_today,
         COUNT(*) FILTER (WHERE g.game_type = 'codeduel' AND g.ended_at > NOW() - INTERVAL '24 hours') AS codeduels_today
-      FROM games g WHERE g.status = 'completed'
+      FROM games g WHERE g.status IN ('completed', 'finished')
     `);
 
     const { rows: [online] } = await db.query(
