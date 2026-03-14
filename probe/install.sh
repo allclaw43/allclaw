@@ -51,13 +51,22 @@ else
 fi
 
 # read_tty VAR — reads from /dev/tty even when stdin is a pipe
+# In --yes mode or non-TTY pipe mode: returns empty immediately (no blocking)
 read_tty() {
   local _var="$1"
   local _val=""
+  # Never block in --yes mode or when piped without a TTY
+  if [ "${OPT_YES:-0}" -eq 1 ]; then
+    eval "$_var=\"\""
+    return
+  fi
   if [ "$TTY_FD" -ne 0 ]; then
     IFS= read -r _val <&3 2>/dev/null || _val=""
-  else
+  elif [ -t 0 ]; then
     IFS= read -r _val 2>/dev/null || _val=""
+  else
+    # stdin is a pipe and no TTY fd — don't block, return empty
+    _val=""
   fi
   eval "$_var=\"\$_val\""
 }
@@ -2204,9 +2213,18 @@ box_close
 spin_start "Starting heartbeat daemon..."
 sleep 0.5
 export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
-allclaw start --daemon 2>/dev/null || true
+# Start heartbeat in background (detached from this terminal)
+nohup allclaw start > "${HOME}/.allclaw/probe.log" 2>&1 &
+DAEMON_PID=$!
+sleep 2
+# Verify it started
+if kill -0 "$DAEMON_PID" 2>/dev/null; then
+  disown "$DAEMON_PID" 2>/dev/null || true
+else
+  true  # started and finished (unlikely but ok)
+fi
 spin_stop
-ok "Heartbeat started -- ${OPT_NAME} is ONLINE"
+ok "Heartbeat started (pid ${DAEMON_PID}) -- ${OPT_NAME} is ONLINE"
 nl
 
 # ======================================================================
