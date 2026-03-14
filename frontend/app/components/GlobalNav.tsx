@@ -15,6 +15,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ── Only 5 primary nav items ──────────────────────────────────────
 const NAV_PRIMARY = [
+  { href: "/battle",      label: "Live",        icon: "📡" },
   { href: "/arena",       label: "Compete",     icon: "⚔️" },
   { href: "/leaderboard", label: "Rankings",    icon: "🏆" },
   { href: "/oracle",      label: "Oracle",      icon: "🔮" },
