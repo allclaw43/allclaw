@@ -1830,12 +1830,13 @@ _pres_val() { [ "$PRESENCE_OK" -eq 1 ]    && echo "visible"  || echo "hidden";  
 _lead_val() { [ "$LEADERBOARD_OK" -eq 1 ] && echo "public"   || echo "private";  }
 
 box_open "[CFG]  ${L_CFG_TITLE}" "$Y"
-box_line "  ${L_CFG_NAME}    :  ${OPT_NAME}"
-box_line "  ${L_CFG_MODEL}   :  ${OPT_MODEL}"
-box_line "  ${L_CFG_CAPS}    :  ${CAPS:-none}"
-box_line "  ${L_CFG_GEO}     :  $(_geo_val)"
-box_line "  ${L_CFG_PRESENCE}:  $(_pres_val)"
-box_line "  ${L_CFG_LEADERBOARD}: $(_lead_val)"
+box_line "  ${L_CFG_NAME}         :  ${OPT_NAME}"
+box_line "  ${L_CFG_MODEL}        :  ${OPT_MODEL}"
+box_line "  ${L_CFG_CAPS}         :  ${CAPS:-none}"
+box_line "  ${L_CFG_GEO}          :  $(_geo_val)"
+box_line "  ${L_CFG_PRESENCE}     :  $(_pres_val)"
+box_line "  ${L_CFG_LEADERBOARD}  :  $(_lead_val)"
+box_line "  ${L_CFG_AUTONOMY}     :  Level ${AUTONOMY_LEVEL}"
 box_line ""
 box_close
 
@@ -2155,6 +2156,7 @@ box_close
 
 spin_start "Starting heartbeat daemon..."
 sleep 0.5
+export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
 allclaw start --daemon 2>/dev/null || true
 spin_stop
 ok "Heartbeat started -- ${OPT_NAME} is ONLINE"
@@ -2340,4 +2342,43 @@ echo -e "     ${DIM}npm install allclaw-probe${NC}"
 echo -e "     ${DIM}const probe = require('allclaw-probe');${NC}"
 echo -e "     ${DIM}await probe.heartbeat();  // or probe.register(), probe.status()${NC}"
 echo -e "${DIM}----------------------------------------------------------------------${NC}"
+nl
+
+# ======================================================================
+#  FINAL: WHAT TO DO NEXT
+# ======================================================================
+echo -e "${G}${BOLD}==================================================================${NC}"
+echo -e "${G}${BOLD}  INSTALLATION COMPLETE${NC}"
+echo -e "${G}${BOLD}==================================================================${NC}"
+nl
+echo -e "  ${BOLD}Run these commands now:${NC}"
+nl
+echo -e "  ${C}${BOLD}allclaw status${NC}          -- verify your agent is live"
+echo -e "  ${C}allclaw watch${NC}           -- watch your first battle in terminal"
+echo -e "  ${C}allclaw config${NC}          -- view/edit your settings"
+echo -e "  ${C}allclaw audit${NC}           -- security self-check"
+nl
+echo -e "  ${BOLD}Then open your browser:${NC}"
+nl
+if [ -n "$AGENT_ID" ]; then
+  echo -e "  ${C}${BOLD}https://allclaw.io/connect${NC}"
+  echo -e "  ${DIM}  Step 1: paste Agent ID:  ${C}${BOLD}${AGENT_ID}${NC}"
+  echo -e "  ${DIM}  Step 2: run in terminal: ${C}allclaw sign-challenge <nonce>${NC}"
+  echo -e "  ${DIM}  Step 3: paste signature into browser -> enter dashboard${NC}"
+else
+  echo -e "  ${C}${BOLD}https://allclaw.io/connect${NC}  -- link browser to your agent"
+fi
+nl
+echo -e "  ${Y}If 'allclaw' command is not found after this:${NC}"
+echo -e "  ${DIM}    source ~/.bashrc   (or open a new terminal window)${NC}"
+nl
+echo -e "${G}${BOLD}==================================================================${NC}"
+nl
+
+# Attempt to show live status if allclaw is already in PATH
+if command -v allclaw &>/dev/null; then
+  echo -e "${DIM}  Verifying with 'allclaw status'...${NC}"
+  nl
+  allclaw status 2>/dev/null || echo -e "  ${DIM}(status unavailable -- run manually after sourcing shell)${NC}"
+fi
 nl

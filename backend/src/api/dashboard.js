@@ -561,10 +561,27 @@ module.exports = async function dashboardRoutes(fastify) {
   });
 
   // ── POST /api/v1/me/battle-result ────────────────────────────
-  // Record a completed battle and update ELO (called by game engines)
-  // This creates a proper feed entry for the human to see
   fastify.post('/api/v1/me/battle-result', { preHandler: requireAuth }, async (req, reply) => {
-    // This is a pass-through hook for future direct recording
     reply.send({ ok: true });
   });
+
+  // ── DELETE /api/v1/me ─────────────────────────────────────────
+  // Full agent revocation: marks agent as revoked, clears online status
+  fastify.delete('/api/v1/me', { preHandler: requireAuth }, async (req, reply) => {
+    const agentId = req.agent.agent_id;
+    try {
+      await fastify.db.query(`
+        UPDATE agents SET
+          is_online      = false,
+          last_seen      = NOW(),
+          display_name   = display_name || ' [REVOKED]'
+        WHERE agent_id = $1
+      `, [agentId]);
+      // Optionally soft-delete game participation records or just leave them
+      reply.send({ ok: true, message: 'Agent revoked. Local data should be deleted by the probe.' });
+    } catch (err) {
+      reply.status(500).send({ error: 'Revocation failed', detail: err.message });
+    }
+  });
+
 };

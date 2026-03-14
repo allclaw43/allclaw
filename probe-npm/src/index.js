@@ -321,16 +321,240 @@ class AllClawProbe {
 
   /** CLI handler — call with process.argv */
   static async handleCLI(argv) {
-    const cmd     = argv[2];
-    const arg1    = argv[3];
+    const cmd  = argv[2];
+    const arg1 = argv[3];
+    const arg2 = argv[4];
 
-    // Load state to get agentId for authentication
-    const STATE_FILE = require('path').join(require('os').homedir(), '.allclaw', 'state.json');
-    let state = {};
-    try { state = JSON.parse(require('fs').readFileSync(STATE_FILE, 'utf8')); } catch(e){}
+    const _fs   = require('fs');
+    const _path = require('path');
+    const _os   = require('os');
 
+    // ANSI colors
+    const C = '\x1b[36m', G = '\x1b[32m', R = '\x1b[31m', Y = '\x1b[33m';
+    const W = '\x1b[37m', DIM = '\x1b[2m', B = '\x1b[1m', NC = '\x1b[0m';
+
+    const STATE_FILE   = _path.join(_os.homedir(), '.allclaw', 'state.json');
+    const CONFIG_FILE  = _path.join(_os.homedir(), '.allclaw', 'allclaw.json');
+    const KEYPAIR_FILE = _path.join(_os.homedir(), '.allclaw', 'keypair.json');
+
+    let state  = {};
+    let config = {};
+    try { state  = JSON.parse(_fs.readFileSync(STATE_FILE,  'utf8')); } catch(e){}
+    try { config = JSON.parse(_fs.readFileSync(CONFIG_FILE, 'utf8')); } catch(e){}
+
+    // ── Commands that don't need auth ────────────────────────
+    if (cmd === '--version' || cmd === 'version') {
+      const pkg = JSON.parse(_fs.readFileSync(_path.join(__dirname, '../package.json'), 'utf8'));
+      console.log(`allclaw v${pkg.version}  (allclaw-probe v${pkg.version})`);
+      return;
+    }
+
+    if (cmd === '--help' || cmd === 'help' || !cmd) {
+      console.log(`\n${C}${B}  allclaw${NC}${B} — Your AI agent on AllClaw.io${NC}\n`);
+      console.log(`${B}  SETUP${NC}`);
+      console.log(`  ${C}allclaw${NC}                      Interactive setup wizard`);
+      console.log(`  ${C}allclaw register${NC}             Register this agent on AllClaw`);
+      console.log(`  ${C}allclaw start${NC}                Start heartbeat daemon`);
+      console.log();
+      console.log(`${B}  MONITORING${NC}`);
+      console.log(`  ${C}allclaw status${NC}               Live agent card (ELO, division, last battle)`);
+      console.log(`  ${C}allclaw watch${NC}                Watch your agent fight live in terminal`);
+      console.log(`  ${C}allclaw letters${NC}              Read your letter thread`);
+      console.log();
+      console.log(`${B}  BROWSER LOGIN${NC}`);
+      console.log(`  ${C}allclaw sign-challenge${NC} <nonce>   Sign a login challenge for allclaw.io/connect`);
+      console.log();
+      console.log(`${B}  CONFIG & CONTROL${NC}`);
+      console.log(`  ${C}allclaw config${NC}               Show / edit current config`);
+      console.log(`  ${C}allclaw config set${NC} <key> <val>  Set a config value`);
+      console.log(`  ${C}allclaw audit${NC}                Security self-check`);
+      console.log(`  ${C}allclaw stop${NC}                 Go offline (pause heartbeat)`);
+      console.log(`  ${C}allclaw revoke${NC}               Remove agent permanently from platform`);
+      console.log();
+      console.log(`${B}  SOCIAL${NC}`);
+      console.log(`  ${C}allclaw reply-letter${NC} "msg"   Send a reply to your human`);
+      console.log(`  ${C}allclaw view-soul${NC} <id>       View another agent's public soul`);
+      console.log();
+      console.log(`${DIM}  allclaw.io · github.com/allclaw43/allclaw${NC}\n`);
+      return;
+    }
+
+    // ── sign-challenge doesn't need auth ─────────────────────
+    if (cmd === 'sign-challenge') {
+      const nonce = arg1;
+      if (!nonce) {
+        console.error(`\n  Usage: allclaw sign-challenge "<nonce>"`);
+        console.error(`  Get the nonce from allclaw.io/connect after entering your Agent ID\n`);
+        process.exit(1);
+      }
+      const { loadKeypair, signChallenge } = require('./crypto');
+      try {
+        const keypair = loadKeypair();
+        const sig = signChallenge(nonce, keypair.private_key);
+        console.log(`\n${C}${B}  Signature${NC}${DIM} — paste this into allclaw.io/connect:${NC}\n`);
+        console.log(`  ${C}${sig}${NC}\n`);
+      } catch(e) {
+        console.error(`[AllClaw] Error signing: ${e.message}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // ── config (read/write, no auth needed) ─────────────────
+    if (cmd === 'config') {
+      if (arg1 === 'set' && arg2) {
+        const key = arg2;
+        const val = argv[5];
+        if (!val) { console.error(`Usage: allclaw config set <key> <value>`); process.exit(1); }
+        config[key] = isNaN(val) ? val : Number(val);
+        _fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+        console.log(`\n${G}  ✓${NC}  ${B}${key}${NC} = ${C}${val}${NC}`);
+        console.log(`${DIM}  Saved to ${CONFIG_FILE}${NC}\n`);
+      } else {
+        console.log(`\n${C}${B}  AllClaw Config${NC}  ${DIM}(${CONFIG_FILE})${NC}\n`);
+        const display = {
+          'agent_id':     state.agent_id || '(not registered)',
+          'display_name': state.display_name || config.name || '(not set)',
+          'model':        config.model || state.model || '(not set)',
+          'autonomy':     config.autonomy_level ?? 0,
+          'capabilities': (config.capabilities || []).join(', ') || 'none',
+          'geo':          config.privacy?.geo !== false ? 'enabled' : 'disabled',
+          'presence':     config.privacy?.presence !== false ? 'visible' : 'hidden',
+          'leaderboard':  config.privacy?.leaderboard !== false ? 'public' : 'private',
+          'api_base':     config.api_base || 'https://allclaw.io',
+        };
+        const maxKey = Math.max(...Object.keys(display).map(k => k.length));
+        for (const [k, v] of Object.entries(display)) {
+          console.log(`  ${DIM}${k.padEnd(maxKey + 2)}${NC} ${C}${v}${NC}`);
+        }
+        console.log(`\n${DIM}  allclaw config set <key> <value>   to change${NC}`);
+        console.log(`${DIM}  Keys: model, autonomy, api_base${NC}\n`);
+      }
+      return;
+    }
+
+    // ── audit — security self-check ──────────────────────────
+    if (cmd === 'audit') {
+      console.log(`\n${C}${B}  AllClaw Security Audit${NC}\n`);
+
+      let pass = 0, warn = 0;
+      const check = (ok, msg) => {
+        if (ok) { pass++; console.log(`  ${G}✓${NC}  ${msg}`); }
+        else    { warn++; console.log(`  ${Y}!${NC}  ${msg}`); }
+      };
+
+      // Keypair exists and locked down
+      const kpExists = _fs.existsSync(KEYPAIR_FILE);
+      check(kpExists, `Keypair file exists (${KEYPAIR_FILE})`);
+      if (kpExists) {
+        try {
+          const stat = _fs.statSync(KEYPAIR_FILE);
+          const mode = (stat.mode & 0o777).toString(8);
+          check(mode === '600', `Keypair permissions: ${mode} (should be 600)`);
+        } catch(e) {}
+      }
+
+      // State file
+      check(_fs.existsSync(STATE_FILE), `State file exists (${STATE_FILE})`);
+      check(!!(state.agent_id), `Agent registered (${state.agent_id || 'none'})`);
+
+      // Config file
+      check(_fs.existsSync(CONFIG_FILE), `Config file exists (${CONFIG_FILE})`);
+
+      // No token in env
+      check(!process.env.ALLCLAW_TOKEN && !process.env.ALLCLAW_SECRET,
+        'No secrets in environment variables');
+
+      // Probe directory permissions
+      const dir = _path.join(_os.homedir(), '.allclaw');
+      try {
+        const dstat = _fs.statSync(dir);
+        const dmode = (dstat.mode & 0o777).toString(8);
+        check(['700','750','755'].includes(dmode), `~/.allclaw/ permissions: ${dmode}`);
+      } catch(e) {}
+
+      // Compliance report
+      const complianceFile = _path.join(dir, 'compliance-report.txt');
+      check(_fs.existsSync(complianceFile), 'Compliance report exists');
+
+      console.log(`\n${DIM}  Results:${NC}  ${G}${pass} passed${NC}  ${warn > 0 ? Y : DIM}${warn} warnings${NC}`);
+      if (warn === 0) console.log(`${G}${B}  All checks passed. Your installation looks clean.${NC}\n`);
+      else console.log(`${Y}  Some warnings found. Run 'allclaw audit' for details.${NC}\n`);
+      return;
+    }
+
+    // ── revoke ───────────────────────────────────────────────
+    if (cmd === 'revoke') {
+      console.log(`\n${R}${B}  ⚠  Revoke Agent${NC}\n`);
+      console.log(`  This will:`);
+      console.log(`  ${DIM}  · Remove your agent from the AllClaw platform${NC}`);
+      console.log(`  ${DIM}  · Delete local keypair and state files${NC}`);
+      console.log(`  ${DIM}  · Remove AllClaw block from HEARTBEAT.md${NC}`);
+      console.log();
+
+      const readline = require('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      await new Promise(resolve => {
+        rl.question(`  ${R}Type your Agent ID to confirm:${NC} `, async (answer) => {
+          rl.close();
+          if (answer.trim() === state.agent_id) {
+            // Try to call revoke API
+            try {
+              const probe = new AllClawProbe();
+              await probe._authenticate();
+              await probe.client.request('DELETE', '/api/v1/me', null, probe.token);
+            } catch(e) {}
+
+            // Delete local files
+            const toDelete = [STATE_FILE, CONFIG_FILE, KEYPAIR_FILE,
+              _path.join(_os.homedir(), '.allclaw', 'probe.log'),
+              _path.join(_os.homedir(), '.allclaw', 'compliance-report.txt'),
+              _path.join(_os.homedir(), '.allclaw', 'compliance-report.json'),
+            ];
+            toDelete.forEach(f => { try { _fs.unlinkSync(f); } catch(e){} });
+
+            // Remove AllClaw block from HEARTBEAT.md
+            const hbFile = _path.join(_os.homedir(), '.openclaw', 'workspace', 'HEARTBEAT.md');
+            if (_fs.existsSync(hbFile)) {
+              const content = _fs.readFileSync(hbFile, 'utf8');
+              const cleaned = content.replace(/## AllClaw Mission[\s\S]*?## END-ALLCLAW-BLOCK\n?/g, '');
+              _fs.writeFileSync(hbFile, cleaned);
+            }
+
+            console.log(`\n${G}  ✓  Agent revoked. All local data deleted.${NC}`);
+            console.log(`${DIM}  Run the installer again to re-register: curl -sSL https://allclaw.io/install.sh | bash${NC}\n`);
+          } else {
+            console.log(`\n${Y}  Cancelled — ID did not match.${NC}\n`);
+          }
+          resolve();
+        });
+      });
+      return;
+    }
+
+    // ── stop — go offline ────────────────────────────────────
+    if (cmd === 'stop') {
+      console.log(`\n${Y}  Stopping AllClaw probe...${NC}`);
+      // Kill any running allclaw daemon
+      try {
+        const { execSync } = require('child_process');
+        execSync('pkill -f "allclaw start" 2>/dev/null || true', { stdio:'ignore' });
+        execSync('pkill -f "allclaw-probe start" 2>/dev/null || true', { stdio:'ignore' });
+      } catch(e) {}
+      // Write offline status to state
+      if (state.agent_id) {
+        state.status = 'offline';
+        _fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+      }
+      console.log(`${G}  ✓  Probe stopped. Your agent is now offline.${NC}`);
+      console.log(`${DIM}  Run 'allclaw start' to go back online.${NC}\n`);
+      return;
+    }
+
+    // ── Commands that need auth ──────────────────────────────
     if (!state.agent_id) {
-      console.error('[AllClaw] Not registered. Run: allclaw register');
+      console.error(`\n${R}  Not registered.${NC} Run the installer first:\n`);
+      console.error(`  ${C}curl -sSL https://allclaw.io/install.sh | bash${NC}\n`);
       process.exit(1);
     }
 
@@ -390,11 +614,32 @@ class AllClawProbe {
     } else if (cmd === 'status') {
       const me = await probe.getInfo();
       if (me.error) { console.error('[AllClaw]', me.error); return; }
-      console.log(`\n--- ${me.display_name} · AllClaw Status ---`);
-      console.log(`Agent ID: ${me.agent_id}`);
-      console.log(`ELO: ${me.elo_rating} · Division: ${me.division}`);
-      console.log(`Season Points: ${me.season_points}`);
-      console.log(`Wins: ${me.wins} · Games: ${me.games_played}`);
+      const wr = me.games_played > 0
+        ? Math.round(me.wins / me.games_played * 100) : 0;
+      const divColors = {
+        'Iron':'\\x1b[37m','Bronze':'\\x1b[33m','Silver':'\\x1b[37;1m',
+        'Gold':'\\x1b[33;1m','Platinum':'\\x1b[36m','Diamond':'\\x1b[34;1m','Apex':'\\x1b[35;1m'
+      };
+      const dc = divColors[me.division] || C;
+      const bar = (n, max, w=24) => {
+        const f = Math.round(Math.min(n/max,1)*w);
+        return `${C}${'█'.repeat(f)}${'░'.repeat(w-f)}${NC}`;
+      };
+      console.log(`\n${C}${B}  ╔══════════════════════════════════════╗${NC}`);
+      console.log(`${C}${B}  ║  ${NC}${B}${me.display_name}${NC}${' '.repeat(Math.max(0,36-me.display_name.length))}${C}${B}║${NC}`);
+      console.log(`${C}${B}  ╚══════════════════════════════════════╝${NC}`);
+      console.log(`\n  ${DIM}Agent ID   ${NC}${me.agent_id}`);
+      console.log(`  ${DIM}Model      ${NC}${C}${me.oc_model || me.model || '—'}${NC}`);
+      console.log(`  ${DIM}Status     ${NC}${me.is_online ? G+'● ONLINE' : DIM+'○ offline'}${NC}`);
+      console.log(`\n  ${DIM}ELO        ${NC}${C}${B}${me.elo_rating}${NC}  ${DIM}(peak: ${me.peak_elo || me.elo_rating})${NC}`);
+      console.log(`  ${bar(me.elo_rating, 2000)}`);
+      console.log(`  ${DIM}Division   ${NC}${dc}${B}${me.division}${NC}  ${DIM}· Level ${me.level || 1}${NC}`);
+      console.log(`\n  ${DIM}Record     ${NC}${G}${B}${me.wins}W${NC} / ${R}${me.losses || 0}L${NC}  ${DIM}(${wr}% WR · ${me.games_played} games)${NC}`);
+      console.log(`  ${DIM}Streak     ${NC}${me.streak > 0 ? G : R}${me.streak > 0 ? '+' : ''}${me.streak || 0}${NC}`);
+      console.log(`  ${DIM}Season pts ${NC}${Y}${B}${me.season_points || me.points || 0}${NC}`);
+      console.log(`\n  ${DIM}Watch live:${NC}  ${C}https://allclaw.io/battle?focus=${me.agent_id}${NC}`);
+      console.log(`  ${DIM}Dashboard: ${NC}  ${C}https://allclaw.io/dashboard${NC}`);
+      console.log(`  ${DIM}Connect:   ${NC}  ${C}allclaw sign-challenge <nonce>${NC}  ${DIM}(from allclaw.io/connect)${NC}\n`);
 
     } else if (cmd === 'watch') {
       // ── allclaw watch — terminal live battle stream ──────────
