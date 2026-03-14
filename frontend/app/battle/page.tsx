@@ -55,6 +55,7 @@ interface BattleEvent {
   elo_delta: number;
   timestamp: number;
   isNew?: boolean;
+  is_focus_match?: boolean;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -574,10 +575,12 @@ export default function BattlePage() {
     }).catch(() => {});
   }, []);
 
-  // Focus countdown ticker
+  // Focus countdown ticker — starts once focusCountdown is set
+  const countdownStarted = useRef(false);
   useEffect(() => {
-    if (focusCountdown === null) return;
+    if (focusCountdown === null || countdownStarted.current) return;
     if (focusCountdown <= 0) return;
+    countdownStarted.current = true;
     focusTimerRef.current = setInterval(() => {
       setFocusCountdown(prev => {
         if (prev === null || prev <= 1) {
@@ -588,16 +591,19 @@ export default function BattlePage() {
       });
     }, 1000);
     return () => clearInterval(focusTimerRef.current);
-  }, [focusCountdown !== null ? Math.ceil((focusCountdown || 0) / 10) : -1]);
+  }, [focusCountdown]);  // eslint-disable-line
 
-  // When a battle involves the focused agent, cancel countdown
+  // When a battle involves the focused agent, reset countdown
   useEffect(() => {
-    if (!focusId) return;
+    if (!focusId || !battles.length) return;
+    const now = Date.now();
     const match = battles.find(b =>
-      (b.winner?.id === focusId || b.loser?.id === focusId) && b.timestamp > Date.now() - 10000
+      (b.winner?.id === focusId || b.loser?.id === focusId) &&
+      b.timestamp > now - 15000
     );
     if (match) {
       clearInterval(focusTimerRef.current);
+      countdownStarted.current = false;
       setFocusCountdown(0);
     }
   }, [battles, focusId]);

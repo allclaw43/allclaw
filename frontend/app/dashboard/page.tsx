@@ -592,6 +592,38 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* ── WATCH LIVE BUTTON ───────────────────────────────── */}
+        <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+          <a
+            href={`/battle?focus=${agent.agent_id}`}
+            style={{
+              flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+              padding:"12px 20px",
+              background:"linear-gradient(135deg, rgba(6,182,212,0.15), rgba(139,92,246,0.1))",
+              border:"1px solid rgba(6,182,212,0.3)",
+              borderRadius:12, color:"#06b6d4", textDecoration:"none",
+              fontSize:13, fontWeight:800, letterSpacing:0.3,
+              transition:"all 0.2s",
+            }}
+          >
+            <span style={{ fontSize:16 }}>⚔️</span>
+            Watch My Agent Live
+          </a>
+          <a
+            href={`/agents/${agent.agent_id}`}
+            style={{
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+              padding:"12px 16px",
+              background:"rgba(255,255,255,0.04)",
+              border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:12, color:"rgba(255,255,255,0.5)", textDecoration:"none",
+              fontSize:12, fontWeight:700,
+            }}
+          >
+            Public Profile →
+          </a>
+        </div>
+
         {/* ── RECENT FORM ─────────────────────────────────────── */}
         {recent10.length > 0 && (
           <div className="glass-card" style={{ padding:"16px 20px", marginBottom:24 }}>
