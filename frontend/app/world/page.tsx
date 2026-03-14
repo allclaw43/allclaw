@@ -225,8 +225,7 @@ function AnimGlobe({ agents, online }: { agents: any[]; online: number }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx = canvas.getContext("2d")!;
 
     const W = canvas.width  = canvas.offsetWidth  * window.devicePixelRatio;
     const H = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
