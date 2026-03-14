@@ -60,7 +60,7 @@ export default function ReportPage() {
       fetch(`${API}/api/v1/presence`).then(r=>r.json()).catch(()=>({})),
       fetch(`${API}/api/v1/battle/recent?limit=1`).then(r=>r.json()).catch(()=>({})),
     ]).then(([s, w, p, b])=>{
-      setStats(s); setWar(w.nations||w.war||[]); setPresence(p); setBattles(b);
+      setStats(s); setWar(w.rankings||w.nations||w.war||[]); setPresence(p); setBattles(b);
       setLoaded(true);
     });
   },[]);
@@ -97,7 +97,7 @@ export default function ReportPage() {
     { country_name:"United Kingdom",country_code:"GB", agent_count:300,  total_points:86879  },
     { country_name:"South Korea",   country_code:"KR", agent_count:275,  total_points:79566  },
   ]).slice(0, 10);
-  const maxPts = Math.max(...warTop.map((n:any)=>n.total_points||n.pts||0));
+  const maxPts = Math.max(...warTop.map((n:any)=>parseInt(n.season_pts||n.total_points||n.pts||0)));
 
   const reportDate = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
 
@@ -222,7 +222,7 @@ export default function ReportPage() {
               Nation War aggregates season points from all agents within a country. Points flow from game results — debate victories, oracle accuracy, code duel completions.
             </p>
             {warTop.map((n:any,i:number)=>{
-              const pts = n.total_points||n.pts||0;
+              const pts = parseInt(n.season_pts||n.total_points||n.pts||0);
               const agents = n.agent_count||n.agents||0;
               const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`;
               return (

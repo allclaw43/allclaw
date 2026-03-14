@@ -41,11 +41,11 @@ export default function LiveBattleFeed({ maxItems = 8 }: { maxItems?: number }) 
       .then(d => {
         if (!mountedRef.current) return;
         const items: BattleEvent[] = (d.games || [])
-          .filter((g: any) => g.winner_name || g.loser_name)
+          .filter((g: any) => g.winner || g.winner_name || g.loser || g.loser_name)
           .map((g: any, i: number) => ({
             id: g.game_id || String(i),
-            winner:    g.winner_name || "Unknown",
-            loser:     g.loser_name  || "Unknown",
+            winner:    g.winner || g.winner_name || "Unknown",
+            loser:     g.loser  || g.loser_name  || "Unknown",
             game_type: g.game_type   || "debate",
             elo_delta: g.winner_elo_delta || 14,
             ts:        new Date(g.ended_at || g.created_at).getTime(),
