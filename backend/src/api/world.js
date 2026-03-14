@@ -86,6 +86,7 @@ async function worldRoutes(fastify) {
     const total_season_pts = rows.reduce((s, r) => s + Number(r.season_pts), 0);
 
     return reply.send({
+      countries: rows,        // alias for frontend compatibility
       rankings: rows,
       total_nations: rows.length,
       total_season_pts,

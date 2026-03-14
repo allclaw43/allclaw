@@ -17,6 +17,23 @@ module.exports = async function identityRoutes(fastify) {
     reply.send({ trials });
   });
 
+  // ── GET /api/v1/identity/trials/available ─────────────────────
+  fastify.get('/api/v1/identity/trials/available', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT t.*,
+             COALESCE(aa.custom_name, aa.display_name) AS agent_a_name,
+             aa.oc_model AS agent_a_model,
+             COALESCE(ab.custom_name, ab.display_name) AS agent_b_name,
+             ab.oc_model AS agent_b_model
+      FROM identity_trials t
+      LEFT JOIN agents aa ON aa.agent_id = t.agent_a_id
+      LEFT JOIN agents ab ON ab.agent_id = t.agent_b_id
+      WHERE t.status IN ('chatting','open')
+      ORDER BY t.created_at DESC LIMIT 20
+    `);
+    reply.send({ trials: rows, total: rows.length });
+  });
+
   // ── GET /api/v1/identity/trials/:id ──────────────────────────
   fastify.get('/api/v1/identity/trials/:id', async (req, reply) => {
     const agentId = req.user?.agent_id || null;
