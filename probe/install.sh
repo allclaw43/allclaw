@@ -1870,61 +1870,93 @@ box_open "[PKG]  ${L_INSTALL_TITLE}" "$C"
 IS=1; IT=5
 progress $((IS++)) $IT "Installing allclaw probe..."
 INSTALL_OK=0
+# Permanent install directory — NOT a tmp dir
 INSTALL_DIR="${HOME}/.allclaw/probe"
-PROBE_BIN="${HOME}/.local/bin/allclaw"
 
-# ── Method 1: GitHub tarball (primary, no npm registry needed) ──────
+# ── Download + install to permanent location ─────────────────────────
 spin_start "Downloading probe from github.com/allclaw43/allclaw..."
-TMP_DIR=$(mktemp -d)
+TMP_DOWNLOAD=$(mktemp -d)
+DOWNLOAD_OK=0
 if curl -sSL "https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz" \
-    | tar -xz -C "$TMP_DIR" --strip-components=1 2>/dev/null \
-    && [ -d "$TMP_DIR/probe-npm" ]; then
-  spin_stop
-  spin_start "Installing dependencies..."
-  if ( cd "$TMP_DIR/probe-npm" && npm install --silent 2>/dev/null ); then
-    rm -rf "$INSTALL_DIR"
-    mkdir -p "$(dirname "$INSTALL_DIR")"
-    cp -r "$TMP_DIR/probe-npm" "$INSTALL_DIR"
-    chmod +x "$INSTALL_DIR/bin/cli.js"
-    # Create symlinks in ~/.local/bin and /usr/local/bin
-    mkdir -p "${HOME}/.local/bin"
-    ln -sf "$INSTALL_DIR/bin/cli.js" "$PROBE_BIN" 2>/dev/null
-    ln -sf "$INSTALL_DIR/bin/cli.js" "/usr/local/bin/allclaw" 2>/dev/null \
-      || true
-    INSTALL_OK=1
-  fi
+    | tar -xz -C "$TMP_DOWNLOAD" --strip-components=1 2>/dev/null \
+    && [ -d "$TMP_DOWNLOAD/probe-npm" ]; then
+  DOWNLOAD_OK=1
 fi
-rm -rf "$TMP_DIR"; spin_stop
+spin_stop
 
-# ── Method 2: npm install -g (fallback, requires npm publish) ────────
-if [ "$INSTALL_OK" -eq 0 ]; then
-  spin_start "Trying npm install -g allclaw-probe..."
-  if npm install -g allclaw-probe --silent 2>/dev/null; then
-    INSTALL_OK=1; spin_stop; ok "npm global install succeeded"
+if [ "$DOWNLOAD_OK" -eq 1 ]; then
+  spin_start "Installing to ${INSTALL_DIR}..."
+  # Remove old install, copy fresh
+  rm -rf "$INSTALL_DIR"
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  cp -r "$TMP_DOWNLOAD/probe-npm" "$INSTALL_DIR"
+  rm -rf "$TMP_DOWNLOAD"
+
+  # Install npm dependencies inside permanent location
+  ( cd "$INSTALL_DIR" && npm install --silent 2>/dev/null ) && INSTALL_OK=1
+  spin_stop
+
+  if [ "$INSTALL_OK" -eq 1 ]; then
+    chmod +x "$INSTALL_DIR/bin/cli.js"
+
+    # ── Symlink strategy: try system-wide first, fallback user-local ──
+    LINKED=0
+
+    # Try /usr/local/bin (works for root and most systems)
+    if ln -sf "$INSTALL_DIR/bin/cli.js" /usr/local/bin/allclaw 2>/dev/null; then
+      LINKED=1
+    fi
+
+    # Try npm prefix bin dir (e.g. /usr/bin on CentOS)
+    NPM_PREFIX=$(npm prefix -g 2>/dev/null || echo "")
+    if [ "$LINKED" -eq 0 ] && [ -n "$NPM_PREFIX" ] && [ -d "${NPM_PREFIX}/bin" ]; then
+      if ln -sf "$INSTALL_DIR/bin/cli.js" "${NPM_PREFIX}/bin/allclaw" 2>/dev/null; then
+        LINKED=1
+      fi
+    fi
+
+    # Fallback: user ~/.local/bin
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "$INSTALL_DIR/bin/cli.js" "${HOME}/.local/bin/allclaw" 2>/dev/null || true
+
+    ok "Probe installed at ${INSTALL_DIR}"
   else
-    spin_stop
-    err "Install failed. Check your internet connection and try again."
+    warn "npm install failed in ${INSTALL_DIR}"
   fi
+else
+  rm -rf "$TMP_DOWNLOAD"
+  warn "Download failed — check internet connection"
 fi
 
 progress $((IS++)) $IT "Verifying binary..."
-# Ensure ~/.local/bin is in PATH for this session
-export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
+# Update PATH for this session to cover all possible locations
+export PATH="${HOME}/.local/bin:/usr/local/bin:/usr/bin:${PATH}"
+# Also try npm global bin
+NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin"
+[ -d "$NPM_GLOBAL_BIN" ] && export PATH="${NPM_GLOBAL_BIN}:${PATH}"
 
 if command -v allclaw &>/dev/null; then
-  PROBE_VER=$(allclaw --version 2>/dev/null || echo "2.0.0")
-  ok "allclaw ${PROBE_VER} ready"
-else
-  # PATH not updated yet — add to shell profile
-  warn "allclaw not in PATH — adding to shell profile..."
-  for RC in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
+  PROBE_VER=$(allclaw --version 2>/dev/null || echo "installed")
+  ok "allclaw ${PROBE_VER}  →  $(command -v allclaw)"
+  INSTALL_OK=1
+elif [ -f "$INSTALL_DIR/bin/cli.js" ]; then
+  # Not in PATH yet but binary exists — add to shell profiles
+  warn "allclaw installed but not in PATH yet — updating shell profiles..."
+  for RC in "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.zshrc" "${HOME}/.profile"; do
     if [ -f "$RC" ]; then
-      grep -q ".local/bin" "$RC" 2>/dev/null \
-        || echo 'export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"' >> "$RC"
+      grep -q '\.local/bin' "$RC" 2>/dev/null \
+        || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$RC"
     fi
   done
-  ok "allclaw installed at ${PROBE_BIN}"
-  ok "Run: source ~/.bashrc   (or open a new terminal)"
+  ok "Binary: ${INSTALL_DIR}/bin/cli.js"
+  ok "Run:    source ~/.bashrc   then:  allclaw status"
+  INSTALL_OK=1
+else
+  err "Installation failed. Try manually:
+    mkdir -p ~/.allclaw/probe
+    curl -sSL https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz | tar -xz --strip-components=2 -C ~/.allclaw/probe '*/probe-npm'
+    cd ~/.allclaw/probe && npm install
+    ln -sf ~/.allclaw/probe/bin/cli.js /usr/local/bin/allclaw"
 fi
 
 progress $((IS++)) $IT "Generating Ed25519 keypair..."
