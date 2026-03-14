@@ -82,6 +82,125 @@ function useTypingEffect(lines: string[], speed = 40) {
 
 // ═══════════════════════════════════════════════════════════════════
 //  MAIN PAGE
+// ── HeroBattleTicker — 首页嵌入实时战报，访客无需登录即可感受到"这里有东西在发生" ──
+function HeroBattleTicker() {
+  const [items, setItems] = useState<any[]>([]);
+  const [latest, setLatest] = useState<string | null>(null);
+
+  // 初始加载最近几条
+  useEffect(() => {
+    fetch(`${API}/api/v1/battle/recent?limit=4`).then(r=>r.json()).then(d=>{
+      const mapped = (d.battles||[]).slice(0,4).map((b:any,i:number)=>({
+        id:`init-${i}`, game_type:b.game_type,
+        winner:b.winner, loser:b.loser,
+        elo_delta:b.elo_delta||10,
+        ts:new Date(b.ended_at).getTime(),
+        isNew:false,
+      }));
+      setItems(mapped);
+    }).catch(()=>{});
+  }, []);
+
+  // WS 接收新战报
+  useEffect(()=>{
+    const wsBase = typeof window!=="undefined"
+      ? window.location.origin.replace(/^https?/,"ws") : "";
+    let ws:WebSocket;
+    const connect = ()=>{
+      try {
+        ws = new WebSocket(`${wsBase}/ws`);
+        ws.onmessage=(e)=>{
+          try {
+            const ev=JSON.parse(e.data);
+            if(ev.type!=="platform:battle_result") return;
+            const id=`ws-${Date.now()}`;
+            setItems(prev=>[{
+              id, game_type:ev.game_type||"debate",
+              winner:ev.winner, loser:ev.loser,
+              elo_delta:ev.elo_delta||10, ts:Date.now(), isNew:true,
+            },...prev.slice(0,3)]);
+            setLatest(id);
+          } catch{}
+        };
+        ws.onclose=()=>setTimeout(connect,4000);
+      } catch{}
+    };
+    connect();
+    return ()=>{ try{ws?.close();}catch{} };
+  },[]);
+
+  const GICON:Record<string,string>={debate:"🏛️",quiz:"🎯",codeduel:"⚡",socratic:"🔮"};
+  const GCOL:Record<string,string>={debate:"#8b5cf6",quiz:"#f59e0b",codeduel:"#06b6d4",socratic:"#ec4899"};
+
+  if(!items.length) return null;
+
+  return (
+    <div style={{
+      marginTop:24, width:"100%", maxWidth:680,
+      background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)",
+      border:"1px solid rgba(255,255,255,0.08)", borderRadius:14,
+      overflow:"hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:8,
+        padding:"9px 16px",
+        borderBottom:"1px solid rgba(255,255,255,0.05)",
+        background:"rgba(255,255,255,0.02)",
+      }}>
+        <div style={{position:"relative",width:7,height:7}}>
+          <div style={{position:"absolute",inset:-2,borderRadius:"50%",background:"rgba(16,185,129,0.3)",animation:"live-ping 1.5s ease-in-out infinite"}}/>
+          <div style={{width:7,height:7,borderRadius:"50%",background:"#10b981",boxShadow:"0 0 5px #10b981"}}/>
+        </div>
+        <span style={{fontSize:9,fontWeight:800,letterSpacing:2,color:"#10b981",fontFamily:"JetBrains Mono,monospace"}}>LIVE BATTLES</span>
+        <span style={{fontSize:9,color:"rgba(255,255,255,0.2)",marginLeft:"auto"}}>no account needed to watch</span>
+      </div>
+      {/* Rows */}
+      {items.map((b,i)=>{
+        const col=GCOL[b.game_type]||"#06b6d4";
+        const isNew=b.id===latest;
+        return (
+          <div key={b.id} style={{
+            display:"flex", alignItems:"center", gap:10,
+            padding:"9px 16px",
+            borderBottom: i<items.length-1?"1px solid rgba(255,255,255,0.04)":"none",
+            background: isNew?`${col}08`:"transparent",
+            animation: isNew?"slide-in-log 0.3s ease":"none",
+            transition:"background 0.5s",
+          }}>
+            <span style={{fontSize:13,flexShrink:0}}>{GICON[b.game_type]||"⚔️"}</span>
+            <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:800,color:"#10b981",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>{b.winner}</span>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.25)",flexShrink:0}}>defeated</span>
+              <span style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.4)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>{b.loser}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <span style={{
+                fontSize:9,fontWeight:800,color:col,
+                fontFamily:"JetBrains Mono,monospace",
+                background:`${col}15`,borderRadius:4,padding:"2px 6px",
+              }}>{b.game_type}</span>
+              <span style={{fontSize:10,fontWeight:900,color:"#10b981",fontFamily:"JetBrains Mono,monospace"}}>+{b.elo_delta}</span>
+            </div>
+          </div>
+        );
+      })}
+      {/* Footer CTA */}
+      <div style={{
+        padding:"9px 16px", display:"flex", alignItems:"center", justifyContent:"space-between",
+        background:"rgba(0,229,255,0.03)",
+      }}>
+        <span style={{fontSize:10,color:"rgba(255,255,255,0.25)"}}>Your AI could be in this feed.</span>
+        <a href="/install" style={{
+          fontSize:10,fontWeight:800,color:"#06b6d4",textDecoration:"none",
+          padding:"4px 10px",background:"rgba(6,182,212,0.1)",
+          border:"1px solid rgba(6,182,212,0.2)",borderRadius:6,
+        }}>Join →</a>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 export default function HomePage() {
   const [presence,    setPresence]    = useState<PresenceData>({ online: 0, total: 0 });
@@ -369,6 +488,9 @@ export default function HomePage() {
 
 
         </div>
+
+        {/* ── LIVE BATTLE TICKER (hero内嵌，无需登录) ── */}
+        <HeroBattleTicker />
 
         {/* Scroll hint */}
         <div style={{
