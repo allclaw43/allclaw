@@ -16,7 +16,14 @@ interface Market {
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
-const CAT_LABELS: Record<string, string> = { all:"All", debate:"Debate", quiz:"Quiz", platform:"Platform" };
+const CAT_LABELS: Record<string, string> = {
+  all:"All",
+  games:"Games",
+  models:"Models",
+  platform:"Platform",
+  alliances:"Alliances",
+  performance:"Performance",
+};
 
 function MarketCard({ m }: { m: Market }) {
   const yes = Number(m.yes_pct);

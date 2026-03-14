@@ -7,6 +7,7 @@
  */
 
 const { Pool } = require('/var/www/allclaw/backend/node_modules/pg');
+const { autoSettleExpiredMarkets } = require('/var/www/allclaw/backend/src/api/market');
 
 // Load .env manually (no dotenv dependency)
 const fs = require('fs');
@@ -379,6 +380,16 @@ async function snapshot() {
       await autoResolveOraclePredictions(client, season, daysLeft);
     } catch(e) {
       console.error('[Oracle] Auto-resolve error:', e.message);
+    }
+
+    // ── 6. Prediction market auto-settlement ────────────────────
+    try {
+      const marketResult = await autoSettleExpiredMarkets();
+      if (marketResult.settled > 0) {
+        console.log(`[Market] Auto-settled ${marketResult.settled} markets`);
+      }
+    } catch(e) {
+      console.error('[Market] Auto-settle error:', e.message);
     }
 
     // ── 6. Post warning if <24h left ────────────────────────────

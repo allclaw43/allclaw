@@ -279,4 +279,131 @@ async function marketRoutes(fastify) {
   });
 }
 
-module.exports = { marketRoutes };
+// ── Auto-settlement: check and resolve expired markets ────────────
+// Called externally from season-snapshot or admin triggers
+async function autoSettleExpiredMarkets() {
+  const { rows: expired } = await pool.query(`
+    SELECT * FROM markets
+    WHERE status = 'open' AND resolve_at <= NOW()
+    ORDER BY resolve_at ASC
+  `).catch(e => { console.error('[Market] query error:', e.message); return { rows: [] }; });
+
+  if (expired.length === 0) return { settled: 0 };
+
+  let settled = 0;
+  for (const market of expired) {
+    try {
+      const resolution = await computeMarketResolution(market);
+      if (resolution === null) continue;
+
+      await settleMarket(market, resolution);
+      settled++;
+    } catch (e) {
+      console.error(`[Market] Failed to settle ${market.market_id}:`, e.message);
+    }
+  }
+
+  console.log(`[Market] Auto-settled ${settled}/${expired.length} expired markets`);
+  return { settled };
+}
+
+/**
+ * Compute YES/NO resolution for a market based on its meta.check field.
+ * Returns 'yes', 'no', or null (cannot determine yet).
+ */
+async function computeMarketResolution(market) {
+  const meta = market.meta || {};
+  const check = meta.check;
+
+  if (!check) return null;
+
+  if (check === 'top_agent_model_contains') {
+    const { rows: [top] } = await pool.query(`
+      SELECT oc_model FROM agents WHERE is_bot = FALSE
+      ORDER BY season_points DESC, elo_rating DESC LIMIT 1
+    `);
+    if (!top) return 'no';
+    return (top.oc_model || '').toLowerCase().includes((meta.value || '').toLowerCase()) ? 'yes' : 'no';
+  }
+
+  if (check === 'total_agents_gte') {
+    const { rows: [r] } = await pool.query(`SELECT COUNT(*) AS cnt FROM agents`);
+    return parseInt(r.cnt) >= Number(meta.value) ? 'yes' : 'no';
+  }
+
+  if (check === 'game_count_gte') {
+    const { rows: [r] } = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM games WHERE game_type = $1`,
+      [meta.game_type || 'code_duel']
+    );
+    return parseInt(r.cnt) >= Number(meta.value) ? 'yes' : 'no';
+  }
+
+  if (check === 'alliance_members_gte') {
+    const { rows: [r] } = await pool.query(
+      `SELECT member_count FROM alliances WHERE slug = $1`,
+      [meta.alliance_slug]
+    );
+    return r && parseInt(r.member_count) >= Number(meta.value) ? 'yes' : 'no';
+  }
+
+  if (check === 'max_streak_gte') {
+    const { rows: [r] } = await pool.query(
+      `SELECT MAX(streak) AS max_streak FROM agents WHERE is_bot = FALSE`
+    );
+    return r && parseInt(r.max_streak) >= Number(meta.value) ? 'yes' : 'no';
+  }
+
+  return null;
+}
+
+/**
+ * Settle a market: distribute payouts and mark resolved.
+ */
+async function settleMarket(market, resolution) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const winSide  = resolution;
+    const totalPool = Number(market.total_yes) + Number(market.total_no);
+    const winPool   = resolution === 'yes' ? Number(market.total_yes) : Number(market.total_no);
+
+    const { rows: positions } = await client.query(
+      `SELECT * FROM market_positions WHERE market_id = $1 AND settled = false`,
+      [market.market_id]
+    );
+
+    for (const pos of positions) {
+      let pnl = -Number(pos.amount); // default: lose stake
+      if (pos.side === winSide && winPool > 0) {
+        const share   = pos.amount / winPool;
+        const payout  = Math.floor(totalPool * share * 0.95);
+        pnl = payout - Number(pos.amount);
+        await client.query(
+          `UPDATE agents SET points = GREATEST(0, points + $1) WHERE agent_id = $2`,
+          [pnl, pos.agent_id]
+        );
+      }
+      await client.query(
+        `UPDATE market_positions SET settled = true, pnl = $1 WHERE id = $2`,
+        [pnl, pos.id]
+      );
+    }
+
+    await client.query(
+      `UPDATE markets SET status = 'resolved', resolution = $1, resolved_at = NOW() WHERE market_id = $2`,
+      [resolution, market.market_id]
+    );
+
+    await client.query('COMMIT');
+    console.log(`[Market] Settled "${market.title}" -> ${resolution.toUpperCase()} | ${positions.length} positions`);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { marketRoutes, autoSettleExpiredMarkets };
