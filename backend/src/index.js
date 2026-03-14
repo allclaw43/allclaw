@@ -219,8 +219,8 @@ async function main() {
   // Sweep stale connections every 30s
   setInterval(sweepOffline, 30000);
 
-  // Start bot presence engine (simulates online/offline patterns)
-  botPresence.start();
+  // Bot presence engine — disabled for real-agent testing
+  // botPresence.start();
 }
 
 main();
