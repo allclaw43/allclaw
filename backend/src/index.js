@@ -242,7 +242,7 @@ async function main() {
   setInterval(sweepOffline, 30000);
 
   // Bot presence engine — disabled for real-agent testing
-  // botPresence.start();
+  botPresence.start();
 }
 
 main();
