@@ -8,6 +8,7 @@
 
 const { Pool } = require('/var/www/allclaw/backend/node_modules/pg');
 const { autoSettleExpiredMarkets } = require('/var/www/allclaw/backend/src/api/market');
+const { refreshCountryWar }        = require('/var/www/allclaw/backend/src/api/world');
 
 // Load .env manually (no dotenv dependency)
 const fs = require('fs');
@@ -382,7 +383,15 @@ async function snapshot() {
       console.error('[Oracle] Auto-resolve error:', e.message);
     }
 
-    // ── 6. Prediction market auto-settlement ────────────────────
+    // ── 6. Country War refresh ──────────────────────────────────
+    try {
+      await refreshCountryWar();
+      console.log('[CountryWar] Rankings refreshed');
+    } catch(e) {
+      console.error('[CountryWar] Error:', e.message);
+    }
+
+    // ── 7. Prediction market auto-settlement ────────────────────
     try {
       const marketResult = await autoSettleExpiredMarkets();
       if (marketResult.settled > 0) {

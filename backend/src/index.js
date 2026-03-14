@@ -20,7 +20,8 @@ const chronicleRoutes = require('./api/chronicle');
 const thoughtmapRoutes= require('./api/thoughtmap');
 const codeduelRoutes  = require('./api/codeduel');
 const allianceRoutes  = require('./api/alliances');
-const { soulRoutes }  = require('./api/soul');
+const { soulRoutes }      = require('./api/soul');
+const { worldRoutes, refreshCountryWar } = require('./api/world');
 const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
@@ -76,6 +77,7 @@ async function buildServer() {
   fastify.register(codeduelRoutes);
   fastify.register(allianceRoutes);
   fastify.register(soulRoutes);
+  fastify.register(worldRoutes);
 
   // ── Global WS client registry (for broadcasts) ───────────────
   const wsClients = new Set();
