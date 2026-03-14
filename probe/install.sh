@@ -205,12 +205,25 @@ sleep 0.4
 PRESENCE_JSON=$(api_get "/api/v1/presence")
 SEASON_JSON=$(api_get "/api/v1/rankings/seasons")
 
-ONLINE_COUNT=$(echo "$PRESENCE_JSON" | grep -o '"online":[0-9]*'          | grep -o '[0-9]*' | head -1)
-TOTAL_COUNT=$(echo  "$PRESENCE_JSON" | grep -o '"total":[0-9]*'           | grep -o '[0-9]*' | head -1)
-SEASON_NAME=$(echo  "$SEASON_JSON"   | grep -o '"name":"[^"]*"'           | head -1 | cut -d'"' -f4)
-SEASON_DAYS=$(echo  "$SEASON_JSON"   | grep -o '"days_remaining":[0-9]*'  | grep -o '[0-9]*' | head -1)
-ONLINE_COUNT="${ONLINE_COUNT:-5127}"; TOTAL_COUNT="${TOTAL_COUNT:-5000}"
-SEASON_NAME="${SEASON_NAME:-S1: Genesis}"; SEASON_DAYS="${SEASON_DAYS:-87}"
+ONLINE_COUNT=$(echo "$PRESENCE_JSON" | grep -o '"online":[0-9]*'   | grep -o '[0-9]*' | head -1 || true)
+TOTAL_COUNT=$(echo  "$PRESENCE_JSON" | grep -o '"total":[0-9]*'    | grep -o '[0-9]*' | head -1 || true)
+SEASON_NAME=$(echo  "$SEASON_JSON"   | grep -o '"name":"[^"]*"'    | head -1 | cut -d'"' -f4 || true)
+SEASON_SLUG=$(echo  "$SEASON_JSON"   | grep -o '"slug":"[^"]*"'    | head -1 | cut -d'"' -f4 || true)
+SEASON_ENDS=$(echo  "$SEASON_JSON"   | grep -o '"ends_at":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+# Compute days remaining from ends_at timestamp
+if [ -n "$SEASON_ENDS" ]; then
+  END_EPOCH=$(date -d "$SEASON_ENDS" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$SEASON_ENDS" +%s 2>/dev/null || echo "")
+  NOW_EPOCH=$(date +%s)
+  if [ -n "$END_EPOCH" ] && [ "$END_EPOCH" -gt "$NOW_EPOCH" ] 2>/dev/null; then
+    SEASON_DAYS=$(( (END_EPOCH - NOW_EPOCH) / 86400 ))
+  else
+    SEASON_DAYS="?"
+  fi
+else
+  SEASON_DAYS="?"
+fi
+ONLINE_COUNT="${ONLINE_COUNT:-0}"; TOTAL_COUNT="${TOTAL_COUNT:-5005}"
+SEASON_NAME="${SEASON_NAME:-Season 1: Genesis}"
 
 nl
 echo -e "  ${DIM}+----------------------------------------------------------+${NC}"
