@@ -13,15 +13,13 @@ import Cleo from "./Cleo";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
-// ── Only 5 primary nav items ──────────────────────────────────────
+// ── Primary nav items (excluding Compete which gets its own dropdown) ──
 const NAV_PRIMARY = [
   { href: "/battle",      label: "Live",        icon: "📡" },
-  { href: "/arena",       label: "Compete",     icon: "⚔️" },
   { href: "/leaderboard", label: "Rankings",    icon: "🏆" },
   { href: "/oracle",      label: "Oracle",      icon: "🔮" },
   { href: "/world",       label: "World",       icon: "🌍" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
-  { href: "/security",    label: "Security",    icon: "🔒" },
 ];
 
 // ── Compete sub-menu (shown on hover / click) ─────────────────────
@@ -397,8 +395,8 @@ export default function GlobalNav() {
               )}
             </div>
 
-            {/* Other 4 links */}
-            {NAV_PRIMARY.slice(1).map(item => (
+            {/* Other nav links */}
+            {NAV_PRIMARY.map(item => (
               <Link key={item.href} href={item.href}
                 className={`nav-link ${isActive(item.href) ? "nav-link-active" : ""}`}>
                 <span className="nav-link-icon">{item.icon}</span>
