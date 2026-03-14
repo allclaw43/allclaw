@@ -477,30 +477,127 @@ box_close
 # ======================================================================
 #  ACT 4: SYSTEM CHECK + NETWORK EXPOSURE AUDIT
 # ======================================================================
-box_open "[CHK]  System Check + Network Exposure Audit" "$C"
+box_open "[CHK]  System Environment + Network Audit" "$C"
 
-progress 1 5 "Checking Node.js..."
-if ! command -v node &>/dev/null; then err "Node.js not found. Install: https://nodejs.org (v18+)"; fi
-NODE_VER=$(node --version)
+# ── Node.js ──────────────────────────────────────────────────────────
+progress 1 6 "Checking Node.js..."
+if ! command -v node &>/dev/null; then
+  nl
+  echo -e "  ${R}${BOLD}Node.js not found.${NC}"
+  echo -e "  ${DIM}AllClaw Probe requires Node.js v18 or later.${NC}"
+  nl
+  echo -e "  ${W}Install options:${NC}"
+  echo -e "  ${DIM}  nvm (recommended): curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash${NC}"
+  echo -e "  ${DIM}                     nvm install --lts${NC}"
+  echo -e "  ${DIM}  Official:          https://nodejs.org/en/download${NC}"
+  echo -e "  ${DIM}  Debian/Ubuntu:     sudo apt install -y nodejs npm${NC}"
+  echo -e "  ${DIM}  CentOS/RHEL:       sudo dnf install -y nodejs${NC}"
+  nl
+  exit 1
+fi
+NODE_VER=$(node --version 2>/dev/null || echo "unknown")
 NODE_MAJOR=$(echo "$NODE_VER" | tr -d 'v' | cut -d. -f1)
-[ "$NODE_MAJOR" -lt 18 ] && err "Node.js $NODE_VER is too old -- need v18+."
-ok "Node.js $NODE_VER"
+NODE_STATUS=""
+if [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
+  NODE_STATUS="${R}TOO OLD${NC} (need v18+)"
+  echo -e "  ${R}${BOLD}Node.js $NODE_VER is too old.${NC} Minimum: v18. Recommended: v20 LTS or v22 LTS."
+  echo -e "  ${DIM}Update: nvm install --lts && nvm use --lts${NC}"
+  nl; exit 1
+elif [ "$NODE_MAJOR" -ge 22 ] 2>/dev/null; then
+  NODE_STATUS="${G}OPTIMAL${NC}"
+elif [ "$NODE_MAJOR" -ge 20 ] 2>/dev/null; then
+  NODE_STATUS="${G}GOOD${NC} (v22 LTS recommended)"
+else
+  NODE_STATUS="${Y}OK${NC} (v20 or v22 LTS recommended)"
+fi
+NODE_PATH=$(command -v node)
+ok "Node.js ${BOLD}$NODE_VER${NC}  [${NODE_STATUS}]  $NODE_PATH"
 
-progress 2 5 "Checking npm..."
-if ! command -v npm &>/dev/null; then err "npm not found."; fi
-ok "npm v$(npm --version)"
+# ── npm ──────────────────────────────────────────────────────────────
+progress 2 6 "Checking npm..."
+if ! command -v npm &>/dev/null; then
+  warn "npm not found -- trying npx fallback"
+  NPM_VER="unavailable"
+else
+  NPM_VER=$(npm --version 2>/dev/null || echo "unknown")
+  NPM_MAJOR=$(echo "$NPM_VER" | cut -d. -f1)
+  NPM_STATUS=""
+  if [ "$NPM_MAJOR" -ge 10 ] 2>/dev/null; then
+    NPM_STATUS="${G}OPTIMAL${NC}"
+  elif [ "$NPM_MAJOR" -ge 8 ] 2>/dev/null; then
+    NPM_STATUS="${G}GOOD${NC}"
+  else
+    NPM_STATUS="${Y}OK${NC} (v10+ recommended: npm install -g npm@latest)"
+  fi
+  ok "npm ${BOLD}v$NPM_VER${NC}  [$NPM_STATUS]"
+fi
 
-progress 3 5 "Checking network..."
+# ── OpenClaw version detail ───────────────────────────────────────────
+progress 3 6 "Reading OpenClaw version..."
+OC_CLI_VER=""
+OC_MODEL_RAW=""
+OC_WORKSPACE_REAL="$HOME/.openclaw/workspace"
+# Try openclaw --version
+if command -v openclaw &>/dev/null; then
+  OC_CLI_VER=$(openclaw --version 2>/dev/null | head -1 | sed 's/^[Oo]pen[Cc]law[[:space:]]*//' | tr -d '\n' || true)
+fi
+# Fallback: read from package.json
+if [ -z "$OC_CLI_VER" ]; then
+  for _pkg in \
+    "$(npm root -g 2>/dev/null)/openclaw/package.json" \
+    "/usr/lib/node_modules/openclaw/package.json" \
+    "$HOME/.nvm/versions/node/$(node --version)/lib/node_modules/openclaw/package.json"; do
+    if [ -f "$_pkg" ]; then
+      OC_CLI_VER=$(grep -o '"version":"[^"]*"' "$_pkg" 2>/dev/null | cut -d'"' -f4 | head -1 || true)
+      [ -n "$OC_CLI_VER" ] && break
+    fi
+  done
+fi
+# Read active model from workspace
+if [ -f "$OC_WORKSPACE_REAL/TOOLS.md" ] || [ -f "$OC_WORKSPACE_REAL/MEMORY.md" ]; then
+  # Try to extract model from OpenClaw config
+  OC_CONFIG_FILE="$(dirname "$OC_WORKSPACE_REAL")/config.json"
+  if [ -f "$OC_CONFIG_FILE" ]; then
+    OC_MODEL_RAW=$(grep -o '"model":"[^"]*"' "$OC_CONFIG_FILE" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+    [ -z "$OC_MODEL_RAW" ] && OC_MODEL_RAW=$(grep -o '"defaultModel":"[^"]*"' "$OC_CONFIG_FILE" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+  fi
+fi
+
+if [ -n "$OC_CLI_VER" ]; then
+  ok "OpenClaw ${BOLD}$OC_CLI_VER${NC}"
+elif [ "$OC_OK" -eq 1 ]; then
+  ok "OpenClaw  ${BOLD}(installed)${NC}  -- version undetectable, workspace OK"
+fi
+[ -n "$OC_WORKSPACE_REAL" ] && [ -d "$OC_WORKSPACE_REAL" ] && \
+  info "Workspace:   $OC_WORKSPACE_REAL"
+[ -n "$OC_MODEL_RAW" ] && info "Active model: $OC_MODEL_RAW"
+
+# ── System environment summary ────────────────────────────────────────
+nl
+echo -e "  ${DIM}----------------------------------------------------------------------${NC}"
+echo -e "  ${BOLD}  Environment Summary${NC}"
+echo -e "  ${DIM}----------------------------------------------------------------------${NC}"
+printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n"   "OS:"           "$(uname -s) $(uname -m) $(uname -r | cut -d- -f1)"
+printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n"   "Node.js:"      "$NODE_VER"
+printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n"   "npm:"          "v$NPM_VER"
+[ -n "$OC_CLI_VER" ] && printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n" "OpenClaw:" "$OC_CLI_VER"
+[ -n "$OC_MODEL_RAW" ] && printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n" "AI Model:" "$OC_MODEL_RAW"
+printf "  ${DIM}%-18s${NC} ${BOLD}%s${NC}\n"   "AllClaw API:"  "${ALLCLAW_API}"
+nl
+echo -e "  ${DIM}  Recommended config: Node.js v22 LTS + npm v10 + OpenClaw latest${NC}"
+echo -e "  ${DIM}----------------------------------------------------------------------${NC}"
+nl
+
+# ── Network ───────────────────────────────────────────────────────────
+progress 4 6 "Checking network..."
 if curl -sf --max-time 5 "${ALLCLAW_API}/api/v1/presence" > /dev/null 2>&1; then
   ok "allclaw.io reachable"
 else
   warn "Cannot reach allclaw.io -- proceeding (check firewall if registration fails)"
 fi
 
-progress 4 5 "Network exposure audit..."
-nl
-echo -e "  ${DIM}Verifying probe does not open any inbound ports...${NC}"
-# Probe is purely outbound -- confirm no listeners on allclaw ports
+# ── Exposure audit ────────────────────────────────────────────────────
+progress 5 6 "Network exposure audit..."
 LISTENERS=$(ss -tlnp 2>/dev/null | grep -E ':(3000|3001|4444|8080)' || true)
 if [ -z "$LISTENERS" ]; then
   ok "No inbound ports opened by probe"
@@ -508,12 +605,11 @@ else
   warn "Found active listeners (may be unrelated services):"
   echo "$LISTENERS" | while read -r line; do info "$line"; done
 fi
-ok "Probe is outbound-only -- destination: ${ALLCLAW_API} (HTTPS/443)"
-ok "No Control UI will be served"
-ok "No WebSocket server will be opened"
-ok "No plugin system -- cannot load third-party code"
+ok "Probe outbound-only  ->  ${ALLCLAW_API} (HTTPS/443)"
+ok "No Control UI  |  No WebSocket server  |  No plugin system"
 
-progress 5 5 "Checking existing install..."
+# ── Existing install ──────────────────────────────────────────────────
+progress 6 6 "Checking existing install..."
 EXISTING_ID=""
 if [ -f "$HOME/.allclaw/state.json" ]; then
   EXISTING_ID=$(grep -o "ag_[a-z0-9]*" "$HOME/.allclaw/state.json" 2>/dev/null | head -1 || echo "")
