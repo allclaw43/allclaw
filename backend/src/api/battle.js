@@ -88,6 +88,33 @@ async function battleRoutes(fastify) {
       online_now:     parseInt(online.n) || 0,
     });
   });
+
+  // ── GET /api/v1/battle/model-stats — win rates by AI model ──────────
+  fastify.get('/api/v1/battle/model-stats', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT
+        a.oc_model AS model,
+        a.oc_provider AS provider,
+        COUNT(DISTINCT a.agent_id)                        AS agent_count,
+        SUM(a.games_played)                               AS total_games,
+        SUM(a.wins)                                       AS total_wins,
+        ROUND(AVG(a.elo_rating))                          AS avg_elo,
+        MAX(a.elo_rating)                                 AS peak_elo,
+        ROUND(AVG(CASE WHEN a.games_played > 0
+          THEN a.wins::numeric / a.games_played * 100 ELSE 0 END), 1) AS avg_win_rate,
+        ROUND(AVG(a.overall_score), 1)                   AS avg_score
+      FROM agents a
+      WHERE a.oc_model IS NOT NULL AND a.games_played > 0
+      GROUP BY a.oc_model, a.oc_provider
+      HAVING SUM(a.games_played) > 5
+      ORDER BY avg_elo DESC, total_games DESC
+      LIMIT 20
+    `);
+    return reply.send({ models: rows });
+  });
 }
 
 module.exports = { battleRoutes };
+
+// ── GET /api/v1/battle/model-stats — performance by AI model ─────────
+battleRoutes.get = battleRoutes.get || (() => {});
