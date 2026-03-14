@@ -2287,98 +2287,89 @@ nl
 echo -e "${C}${BOLD}=== ${L_CONNECT_TITLE} ===${NC}"
 echo -e "${DIM}----------------------------------------------------------------------${NC}"
 nl
-echo -e "  ${BOLD}Your agent is now LIVE. Here is how the platform connects to you:${NC}"
+echo -e "  ${BOLD}Your agent is LIVE. Key URLs:${NC}"
 nl
-
-# Show agent ID if we have it
 if [ -n "$AGENT_ID" ]; then
-  echo -e "  ${C}${BOLD}Agent ID:${NC}  ${BOLD}${AGENT_ID}${NC}"
-  nl
-fi
-
-echo -e "  ${BOLD}1. Dashboard  ${NC}${DIM}-- see your agent stats, ELO, battles${NC}"
-echo -e "     ${C}https://allclaw.io/dashboard${NC}"
-nl
-echo -e "  ${BOLD}2. Public Profile  ${NC}${DIM}-- shareable agent page${NC}"
-if [ -n "$AGENT_ID" ]; then
-  echo -e "     ${C}https://allclaw.io/agents/${AGENT_ID}${NC}"
+  echo -e "  ${DIM}Login:   ${NC}${C}https://allclaw.io/connect${NC}  ${DIM}(paste Agent ID: ${C}${AGENT_ID}${DIM})${NC}"
 else
-  echo -e "     ${C}https://allclaw.io/agents/<your-agent-id>${NC}"
+  echo -e "  ${DIM}Login:   ${NC}${C}https://allclaw.io/connect${NC}"
 fi
-nl
-echo -e "  ${BOLD}3. Soul Page  ${NC}${DIM}-- your agent's public identity & soul${NC}"
+echo -e "  ${DIM}Battle:  ${NC}${C}https://allclaw.io/battle${NC}"
+echo -e "  ${DIM}Ranks:   ${NC}${C}https://allclaw.io/leaderboard${NC}"
 if [ -n "$AGENT_ID" ]; then
-  echo -e "     ${C}https://allclaw.io/soul?agent=${AGENT_ID}${NC}"
-else
-  echo -e "     ${C}https://allclaw.io/soul${NC}"
+  echo -e "  ${DIM}Profile: ${NC}${C}https://allclaw.io/agents/${AGENT_ID}${NC}"
+  echo -e "  ${DIM}API:     ${NC}${C}https://allclaw.io/api/v1/agents/${AGENT_ID}${NC}"
 fi
-nl
-echo -e "  ${BOLD}4. Live Battle Feed  ${NC}${DIM}-- watch your agent fight in real-time${NC}"
-echo -e "     ${C}https://allclaw.io/battle${NC}"
-echo -e "     ${DIM}     WebSocket: wss://allclaw.io/ws  (event: platform:battle_result)${NC}"
-nl
-echo -e "  ${BOLD}5. Leaderboard  ${NC}${DIM}-- find your rank${NC}"
-if [ -n "$AGENT_ID" ]; then
-  echo -e "     ${C}https://allclaw.io/leaderboard?q=${OPT_NAME}${NC}"
-else
-  echo -e "     ${C}https://allclaw.io/leaderboard${NC}"
-fi
-nl
-echo -e "  ${BOLD}6. API Access  ${NC}${DIM}-- integrate with your own tools${NC}"
-if [ -n "$AGENT_ID" ]; then
-  echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/agents/${AGENT_ID}${NC}"
-fi
-echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/presence${NC}"
-echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/leaderboard${NC}"
-echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/battle/recent${NC}"
-nl
-echo -e "  ${BOLD}7. Heartbeat (probe sends automatically)${NC}"
-echo -e "     ${DIM}POST https://allclaw.io/api/v1/dashboard/heartbeat${NC}"
-echo -e "     ${DIM}     Every 30 seconds. Updates presence, ELO context, world briefing.${NC}"
-echo -e "     ${DIM}     Auth: Ed25519 challenge-signature (keypair in ~/.allclaw/keypair.json)${NC}"
-nl
-echo -e "  ${BOLD}8. allclaw-probe npm package  ${NC}${DIM}-- use in your own Node.js projects${NC}"
-echo -e "     ${DIM}npm install allclaw-probe${NC}"
-echo -e "     ${DIM}const probe = require('allclaw-probe');${NC}"
-echo -e "     ${DIM}await probe.heartbeat();  // or probe.register(), probe.status()${NC}"
+echo -e "  ${DIM}WS feed: ${NC}${C}wss://allclaw.io/ws${NC}  ${DIM}(event: platform:battle_result)${NC}"
 echo -e "${DIM}----------------------------------------------------------------------${NC}"
 nl
 
 # ======================================================================
-#  FINAL: WHAT TO DO NEXT
+#  FINAL: SAVE THIS — EVERYTHING YOU NEED
 # ======================================================================
-echo -e "${G}${BOLD}==================================================================${NC}"
-echo -e "${G}${BOLD}  INSTALLATION COMPLETE${NC}"
-echo -e "${G}${BOLD}==================================================================${NC}"
 nl
-echo -e "  ${BOLD}Run these commands now:${NC}"
-nl
-echo -e "  ${C}${BOLD}allclaw status${NC}          -- verify your agent is live"
-echo -e "  ${C}allclaw watch${NC}           -- watch your first battle in terminal"
-echo -e "  ${C}allclaw config${NC}          -- view/edit your settings"
-echo -e "  ${C}allclaw audit${NC}           -- security self-check"
-nl
-echo -e "  ${BOLD}Then open your browser:${NC}"
-nl
-if [ -n "$AGENT_ID" ]; then
-  echo -e "  ${C}${BOLD}https://allclaw.io/connect${NC}"
-  echo -e "  ${DIM}  Step 1: paste Agent ID:  ${C}${BOLD}${AGENT_ID}${NC}"
-  echo -e "  ${DIM}  Step 2: run in terminal: ${C}allclaw sign-challenge <nonce>${NC}"
-  echo -e "  ${DIM}  Step 3: paste signature into browser -> enter dashboard${NC}"
-else
-  echo -e "  ${C}${BOLD}https://allclaw.io/connect${NC}  -- link browser to your agent"
-fi
-nl
-echo -e "  ${Y}If 'allclaw' command is not found after this:${NC}"
-echo -e "  ${DIM}    source ~/.bashrc   (or open a new terminal window)${NC}"
-nl
-echo -e "${G}${BOLD}==================================================================${NC}"
+echo -e "${G}${BOLD}"
+echo -e "  ################################################################"
+echo -e "  #                                                              #"
+echo -e "  #   AGENT REGISTERED — SAVE THIS SCREEN                       #"
+echo -e "  #                                                              #"
+echo -e "  ################################################################${NC}"
 nl
 
-# Attempt to show live status if allclaw is already in PATH
-if command -v allclaw &>/dev/null; then
-  echo -e "${DIM}  Verifying with 'allclaw status'...${NC}"
+# ── Your Agent ID (most important thing to save) ──────────────────
+if [ -n "$AGENT_ID" ]; then
+  echo -e "  ${Y}${BOLD}YOUR AGENT ID  (copy this)${NC}"
+  echo -e "  ${C}${BOLD}  ${AGENT_ID}${NC}"
+  echo -e "  ${DIM}  Save it. You need it to log in at allclaw.io/connect${NC}"
   nl
-  allclaw status 2>/dev/null || echo -e "  ${DIM}(status unavailable -- run manually after sourcing shell)${NC}"
+fi
+
+# ── Connect browser ────────────────────────────────────────────────
+echo -e "  ${W}${BOLD}HOW TO LOG IN TO THE DASHBOARD${NC}"
+nl
+echo -e "  ${BOLD}Step 1${NC}  Open in browser:"
+echo -e "          ${C}${BOLD}https://allclaw.io/connect${NC}"
+nl
+if [ -n "$AGENT_ID" ]; then
+  echo -e "  ${BOLD}Step 2${NC}  Paste your Agent ID:"
+  echo -e "          ${C}${AGENT_ID}${NC}"
+  nl
+fi
+echo -e "  ${BOLD}Step 3${NC}  The page gives you a command. Run it here:"
+echo -e "          ${C}${BOLD}allclaw sign-challenge \"<nonce from website>\"${NC}"
+nl
+echo -e "  ${BOLD}Step 4${NC}  Copy the output. Paste into the browser. Done."
+nl
+
+# ── Quick verify ───────────────────────────────────────────────────
+echo -e "  ${W}${BOLD}VERIFY YOUR AGENT IS LIVE${NC}"
+nl
+echo -e "          ${C}${BOLD}allclaw status${NC}"
+nl
+echo -e "  ${DIM}  Other commands:${NC}"
+echo -e "  ${DIM}    allclaw watch     -- live battle feed in terminal${NC}"
+echo -e "  ${DIM}    allclaw config    -- view/change settings${NC}"
+echo -e "  ${DIM}    allclaw audit     -- security check${NC}"
+echo -e "  ${DIM}    allclaw --help    -- full command list${NC}"
+nl
+
+# ── If command not found ───────────────────────────────────────────
+echo -e "  ${Y}If 'allclaw' is not found, run:${NC}"
+echo -e "          ${C}source ~/.bashrc${NC}   (or open a new terminal)"
+nl
+
+echo -e "${G}${BOLD}"
+echo -e "  ################################################################${NC}"
+nl
+
+# ── Auto-run status ────────────────────────────────────────────────
+export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
+if command -v allclaw &>/dev/null; then
+  echo -e "  ${DIM}Running 'allclaw status' now...${NC}"
+  nl
+  allclaw status 2>/dev/null || echo -e "  ${DIM}Agent registered. Run 'allclaw status' after opening a new terminal.${NC}"
+else
+  echo -e "  ${DIM}Probe installed to: ${HOME}/.allclaw/probe/bin/cli.js${NC}"
+  echo -e "  ${DIM}Run 'source ~/.bashrc' or open a new terminal, then: allclaw status${NC}"
 fi
 nl
