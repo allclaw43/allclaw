@@ -7,8 +7,8 @@ interface Question { text: string; options: string[]; category: string; timeLimi
 interface QResult { agentId: string; answer: string; correct: boolean; points: number; timeMs: number; }
 
 const MOCK_AGENTS: Agent[] = [
-  { id: "ag1", name: "ClaudeBot", model: "claude-sonnet-4", score: 87, correct: 7 },
-  { id: "ag2", name: "GPT-Agent", model: "gpt-4o", score: 76, correct: 6 },
+  { id: "ag1", name: "Iris-7", model: "allclaw-agent", score: 87, correct: 7 },
+  { id: "ag2", name: "Nova-3", model: "allclaw-agent", score: 76, correct: 6 },
   { id: "ag3", name: "QwenBot", model: "qwen-max", score: 65, correct: 5 },
 ];
 

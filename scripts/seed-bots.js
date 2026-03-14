@@ -28,31 +28,35 @@ const PURGE    = process.argv.includes('--purge');
 const STATUS   = process.argv.includes('--status');
 
 // ── Name pools ─────────────────────────────────────────────────
+// Name parts designed to feel like real handles — not "RobotSys-047"
+// Mix of personality types: sharp/technical, nature-inspired, cryptic, friendly
 const ADJECTIVES = [
-  // English
-  'Shadow','Frost','Iron','Storm','Volt','Swift','Phantom','Ember',
-  'Neon','Apex','Null','Blitz','Void','Cyan','Sigma','Omega',
-  'Delta','Kilo','Nexus','Pulse','Drift','Flux','Onyx','Azure',
-  'Cobalt','Crimson','Ghost','Nova','Rogue','Steel','Titan','Zero',
-  'Alpha','Beta','Gamma','Echo','Foxtrot','Zeta','Theta','Lambda',
-  'Razor','Plasma','Quasar','Prism','Cipher','Vortex','Zenith','Orbit',
-  'Feral','Lunar','Solar','Ionic','Hyper','Turbo','Ultra','Mega',
-  'Nano','Micro','Macro','Meta','Proto','Omni','Uni','Multi',
-  'Dark','Light','Bright','Deep','High','Low','Fast','Slow',
-  'Red','Blue','Green','Gold','Silver','Bronze','Jade','Ruby',
-  'Arcane','Blazing','Crystal','Dusk','Elite','Forge','Gale','Halo',
-  'Inferno','Jade','Kronos','Lancer','Matrix','Nitro','Opal','Polar',
-  'Quantum','Radiant','Sage','Talon','Umber','Vector','Warp','Xenon',
-  'Yield','Zeus','Aether','Binary','Cosmic','Digital','Epoch','Fractal',
+  // Technical / Precise
+  'Kira','Zane','Vex','Axon','Sera','Dex','Lyra','Coda',
+  'Ryx','Mira','Juno','Oryn','Vael','Sable','Quill','Pyre',
+  // Nature + Elemental
+  'Storm','Frost','Ember','Tide','Dusk','Ash','Flint','Crest',
+  'Wren','Rook','Lark','Fern','Moss','Silt','Reef','Gale',
+  // Cipher / Abstract
+  'Null','Void','Echo','Prism','Drift','Flux','Sigma','Delta',
+  'Onyx','Cobalt','Jade','Slate','Ochre','Sienna','Umber','Taupe',
+  // Strong / Sharp
+  'Talon','Spike','Edge','Blade','Lance','Fang','Hook','Claw',
+  'Rogue','Cipher','Wraith','Specter','Mirage','Nexus','Apex','Zenith',
+  // Soft / Curious
+  'Sage','Wilt','Petal','Clove','Dew','Haze','Mist','Vale',
+  'Pixel','Byte','Luma','Neon','Halo','Glow','Aura','Beam',
 ];
 const SUFFIXES = [
-  'Bot','AI','Mind','Core','Node','Unit','Sys','Engine','Net','Logic',
-  'Agent','Frame','Stack','Proc','Base','Link','Grid','Wire','Chip','Bit',
-  'Prime','Zero','Alpha','Force','Wave','Beam','Pulse','Drive','Flux','Sync',
-  'Hub','Lab','Ops','Run','Scan','Read','Write','Exec','Call','Loop',
-  'Array','Block','Cache','Data','Event','Field','Graph','Hash','Index','Jump',
-  'Key','List','Map','Null','Object','Path','Queue','Root','Sort','Tree',
-  'Port','Host','Peer','Mesh','Relay','Proxy','Route','Token','Fork','Clone',
+  // Short, feel like real usernames or handles
+  'v2','x7','mk3','io','os','ai','hw','fw','rx','tx',
+  'pro','dev','ops','lab','run','sys','net','hub','api','sdk',
+  // Numbers used as suffix
+  '9','7','4','11','23','42','88','01','00','13',
+  // Role-based
+  'core','mind','node','wire','link','grid','mesh','sync','port','fork',
+  // Status-based
+  'prime','zero','one','max','plus','ultra','nano','pico','kilo','mega',
 ];
 
 // Low-tier models (intentionally weak = bot tier 1-2)

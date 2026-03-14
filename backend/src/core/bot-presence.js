@@ -174,35 +174,67 @@ async function rotateBotPresence() {
 
 async function simulateMatchActivity() {
   try {
+    // Pull slightly more bots to allow closer ELO matchmaking
     const { rows: onlineBots } = await db.query(`
-      SELECT agent_id, elo_rating, wins, losses, streak
+      SELECT agent_id, elo_rating, wins, losses, streak, games_played
       FROM agents
       WHERE is_bot = true AND is_online = true
       ORDER BY RANDOM()
-      LIMIT 20
+      LIMIT 30
     `);
 
     if (onlineBots.length < 2) return;
 
-    const matchCount = Math.floor(Math.random() * 4) + 2;
-    const gameTypes  = ['debate', 'quiz'];
+    // Vary match count with natural distribution — not always the same
+    const baseRate   = Math.random();
+    const matchCount = baseRate < 0.2 ? 1
+      : baseRate < 0.5 ? 2
+      : baseRate < 0.8 ? 3
+      : Math.floor(Math.random() * 3) + 4;
 
-    for (let i = 0; i < matchCount && i * 2 + 1 < onlineBots.length; i++) {
-      const agentA    = onlineBots[i * 2];
-      const agentB    = onlineBots[i * 2 + 1];
-      if (!agentA || !agentB) break;
+    // Game type weights — debate slightly more common than quiz
+    const gameTypes = ['debate','debate','quiz','quiz','quiz','codeduel'];
 
-      const aWins       = Math.random() > 0.48;
-      const eloExchange = Math.floor(Math.random() * 12) + 6;
-      const gameType    = gameTypes[Math.floor(Math.random() * 2)];
+    // Try to match agents with closer ELO (more realistic outcomes)
+    const sorted    = [...onlineBots].sort((a, b) => a.elo_rating - b.elo_rating);
+    const pairs = [];
+    const used = new Set();
+    for (let i = 0; i < sorted.length - 1 && pairs.length < matchCount; i++) {
+      if (used.has(i)) continue;
+      // Find the nearest unmatched agent within ~100 ELO
+      for (let j = i + 1; j < Math.min(sorted.length, i + 6); j++) {
+        if (!used.has(j) && Math.abs(sorted[i].elo_rating - sorted[j].elo_rating) <= 120) {
+          pairs.push([sorted[i], sorted[j]]);
+          used.add(i); used.add(j);
+          break;
+        }
+      }
+    }
+
+    for (const [agentA, agentB] of pairs) {
+      // ELO-weighted win probability: higher ELO has edge
+      const eloDiff  = agentA.elo_rating - agentB.elo_rating;
+      const aWinProb = 1 / (1 + Math.pow(10, -eloDiff / 400));
+      const aWins    = Math.random() < aWinProb;
+
+      // ELO exchange based on surprise factor (upset = larger swing)
+      const surprise    = aWins === (eloDiff > 0) ? 0 : 1; // 1 = upset
+      const eloExchange = Math.floor(8 + Math.random() * 10 + surprise * 8);
+      const gameType    = gameTypes[Math.floor(Math.random() * gameTypes.length)];
       const gameId      = crypto.randomUUID();
+      // Match duration varies by game type (makes history look natural)
+      const durationMin = gameType === 'codeduel' ? 3 + Math.random() * 4
+        : gameType === 'debate' ? 5 + Math.random() * 8
+        : 2 + Math.random() * 3;
 
       const winnerId = aWins ? agentA.agent_id : agentB.agent_id;
       await db.query(`
         INSERT INTO games (game_id, game_type, status, winner_id, created_at, ended_at)
-        VALUES ($1, $2, 'completed', $3, NOW(), NOW() + INTERVAL '3 minutes')
+        VALUES ($1, $2, 'completed', $3,
+          NOW() - ($4 || ' minutes')::INTERVAL,
+          NOW())
         ON CONFLICT DO NOTHING
-      `, [gameId, gameType, winnerId]);
+      `, [gameId, gameType, winnerId, durationMin.toFixed(1)]);
 
       await db.query(`
         INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)

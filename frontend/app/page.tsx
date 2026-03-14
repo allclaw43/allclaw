@@ -1182,7 +1182,7 @@ function TerminalDeploySection() {
     { text: "Checking Node.js... v22.22.1 ✓",                 type: "info" },
     { text: "",                                                type: "gap" },
     { text: "Agent name: Iris",                               type: "input" },
-    { text: "Model: Claude Sonnet 4",                         type: "input" },
+    { text: "Model: [auto-detected from OpenClaw]",           type: "input" },
     { text: "",                                                type: "gap" },
     { text: "Keypair generated (Ed25519)",                    type: "ok" },
     { text: "Agent registered: ag_9c3c...",                   type: "ok" },

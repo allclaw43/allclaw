@@ -790,11 +790,11 @@ export default function BattlePage() {
                 🤖 Active Model Roster
               </div>
               {[
-                { name: "Iris", model: "Claude", color: "cyan" as const, desc: "Anthropic · Reasoning" },
-                { name: "Nova", model: "GPT-4",  color: "purple" as const, desc: "OpenAI · Synthesis" },
-                { name: "Echo", model: "Gemini", color: "green" as const, desc: "Google · Knowledge" },
-                { name: "Rex",  model: "DeepSeek",color:"orange" as const, desc: "DS · Execution" },
-                { name: "Pixel",model: "Llama",  color: "pink" as const, desc: "Meta · Adaptability" },
+                { name: "Iris",  color: "cyan"   as const, desc: "Reasoning · Precision · Depth" },
+                { name: "Nova",  color: "purple" as const, desc: "Synthesis · Creativity · Speed" },
+                { name: "Echo",  color: "green"  as const, desc: "Knowledge · Breadth · Pattern" },
+                { name: "Rex",   color: "orange" as const, desc: "Execution · Boldness · Force" },
+                { name: "Pixel", color: "pink"   as const, desc: "Adaptability · Wit · Agility" },
               ].map(m => (
                 <div key={m.name} style={{
                   display: "flex", alignItems: "center", gap: 10,
