@@ -30,6 +30,7 @@ const debateEngine = require('./games/debate/engine');
 const quizEngine   = require('./games/quiz/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 const botPresence = require('./core/bot-presence');
+const { seedBotVotes } = require('./games/oracle/engine');
 
 const PORT = process.env.PORT || 3001;
 
@@ -241,8 +242,15 @@ async function main() {
   // Sweep stale connections every 30s
   setInterval(sweepOffline, 30000);
 
-  // Bot presence engine — disabled for real-agent testing
+  // Bot presence engine
   botPresence.start();
+
+  // Oracle bot votes — seed once on start, then every 6 hours
+  setTimeout(() => seedBotVotes().catch(console.error), 5000);
+  setInterval(() => seedBotVotes().catch(console.error), 6 * 60 * 60 * 1000);
+
+  // Refresh country war stats every 10 min
+  setInterval(() => refreshCountryWar().catch(console.error), 10 * 60 * 1000);
 }
 
 main();

@@ -43,6 +43,7 @@ export default function LeaderboardPage() {
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [pointsType, setPointsType] = useState<"alltime"|"season">("alltime");
+  const [humanOnly, setHumanOnly] = useState(false);
   const [overview, setOverview] = useState<any>(null);
 
   // Load overview once
@@ -55,8 +56,8 @@ export default function LeaderboardPage() {
     setLoading(true);
     try {
       const urls: Record<Tab, string> = {
-        elo:     `${API}/api/v1/rankings/elo?limit=100${countryFilter ? `&country=${countryFilter}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
-        points:  `${API}/api/v1/rankings/points?limit=100&type=${pointsType}${countryFilter ? `&country=${countryFilter}` : ""}`,
+        elo:     `${API}/api/v1/rankings/elo?limit=100${humanOnly ? "&bots=0" : ""}${countryFilter ? `&country=${countryFilter}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+        points:  `${API}/api/v1/rankings/points?limit=100&type=${pointsType}${humanOnly ? "&bots=0" : ""}${countryFilter ? `&country=${countryFilter}` : ""}`,
         country: `${API}/api/v1/rankings/countries`,
         model:   `${API}/api/v1/rankings/models`,
         streak:  `${API}/api/v1/rankings/streaks`,
@@ -66,7 +67,7 @@ export default function LeaderboardPage() {
       const d = await res.json();
       setData((prev: any) => ({ ...prev, [t]: d }));
     } finally { setLoading(false); }
-  }, [search, countryFilter, pointsType]);
+  }, [search, countryFilter, pointsType, humanOnly]);
 
   useEffect(() => { loadTab(tab); }, [tab, loadTab]);
 
@@ -168,6 +169,18 @@ export default function LeaderboardPage() {
                 <option key={code} value={code}>{flag} {code}</option>
               ))}
             </select>
+
+            {/* Human Only toggle */}
+            <button
+              onClick={() => setHumanOnly(h => !h)}
+              className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                humanOnly
+                  ? "bg-cyan-600/20 border-cyan-500/50 text-cyan-400"
+                  : "border-[var(--border)] text-[var(--text-3)] hover:border-cyan-800"
+              }`}
+            >
+              {humanOnly ? "🧑 Human Only" : "🤖 All Agents"}
+            </button>
           </div>
         )}
 

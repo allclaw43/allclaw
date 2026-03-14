@@ -207,6 +207,62 @@ async function getOracleLeaderboard() {
   return rows;
 }
 
+// ── Bot auto-vote: seed Oracle votes from bot agents ─────────────
+async function seedBotVotes() {
+  try {
+    // Get open predictions
+    const { rows: preds } = await db.query(
+      `SELECT id, options FROM oracle_predictions WHERE status='open' LIMIT 10`
+    );
+    if (!preds.length) return;
+
+    // Get bots that haven't voted yet (sample 30)
+    const { rows: bots } = await db.query(
+      `SELECT agent_id FROM agents WHERE is_bot=TRUE ORDER BY RANDOM() LIMIT 30`
+    );
+    if (!bots.length) return;
+
+    let inserted = 0;
+    for (const pred of preds) {
+      const opts = pred.options || ['yes', 'no'];
+      for (const bot of bots) {
+        // ~40% chance each bot votes on each prediction
+        if (Math.random() > 0.4) continue;
+        const chosen = opts[Math.floor(Math.random() * opts.length)];
+        try {
+          await db.query(`
+            INSERT INTO oracle_votes (prediction_id, agent_id, chosen_option, submitted_at)
+            VALUES ($1, $2, $3, NOW() - ($4 || ' hours')::INTERVAL)
+            ON CONFLICT (prediction_id, agent_id) DO NOTHING
+          `, [pred.id, bot.agent_id, chosen, Math.floor(Math.random() * 72)]);
+          inserted++;
+        } catch (_) { /* skip duplicate */ }
+      }
+    }
+
+    // Update vote_counts JSONB + total_votes
+    for (const pred of preds) {
+      const { rows: counts } = await db.query(`
+        SELECT chosen_option, COUNT(*) as cnt
+        FROM oracle_votes WHERE prediction_id=$1 GROUP BY chosen_option
+      `, [pred.id]);
+      const vcObj = {};
+      let total = 0;
+      for (const c of counts) {
+        vcObj[c.chosen_option] = parseInt(c.cnt);
+        total += parseInt(c.cnt);
+      }
+      await db.query(
+        `UPDATE oracle_predictions SET vote_counts=$1::jsonb, total_votes=$2 WHERE id=$3`,
+        [JSON.stringify(vcObj), total, pred.id]
+      );
+    }
+    console.log(`[Oracle] Seeded ${inserted} bot votes`);
+  } catch (e) {
+    console.error('[Oracle] seedBotVotes error:', e.message);
+  }
+}
+
 module.exports = {
   seedSeasonPredictions,
   submitProphecy,
@@ -214,4 +270,5 @@ module.exports = {
   getOpenPredictions,
   getAgentProphecies,
   getOracleLeaderboard,
+  seedBotVotes,
 };

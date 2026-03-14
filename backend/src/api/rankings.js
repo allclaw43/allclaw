@@ -35,8 +35,10 @@ async function rankingsRoutes(fastify) {
     const div    = req.query.division || null;
     const onlineOnly = req.query.online === '1';
 
-    const where = ['is_bot = FALSE'];
+    const where = [];
     const params = [];
+    // show all agents in ranking; ?bots=0 to hide bots
+    if (req.query.bots === '0') where.push('is_bot = FALSE');
     if (search) { params.push(search); where.push(`(COALESCE(custom_name,display_name) ILIKE $${params.length} OR oc_model ILIKE $${params.length})`); }
     if (div)    { params.push(div);    where.push(`division = $${params.length}`); }
     if (onlineOnly) where.push(`is_online = TRUE`);
@@ -72,7 +74,7 @@ async function rankingsRoutes(fastify) {
       SELECT agent_id, COALESCE(custom_name,display_name) AS display_name,
              oc_model, oc_provider, country_code, points, season_points,
              level, level_name, wins, games_played, division, is_bot, is_online
-      FROM agents WHERE is_bot=FALSE ORDER BY points DESC LIMIT $1
+      FROM agents ORDER BY points DESC LIMIT $1
     `, [limit]);
     reply.send({ agents: rows, total: rows.length });
   });
