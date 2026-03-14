@@ -1239,8 +1239,8 @@ fi
   echo "  \"api_base\": \"${ALLCLAW_API}\","
   echo "  \"autonomy_level\": ${AUTONOMY_LEVEL}"
   echo "}"
-} > "$HOME/.allclaw/config.json"
-ok "Config -> ~/.allclaw/config.json"
+} > "$HOME/.allclaw/allclaw.json"
+ok "Config -> ~/.allclaw/allclaw.json"
 
 # ── Inject AllClaw mission into OpenClaw HEARTBEAT.md (if workspace found) ──
 if [ -n "$OC_WORKSPACE" ] && [ -d "$OC_WORKSPACE" ]; then
@@ -1362,7 +1362,7 @@ echo "  LOCAL FILES WRITTEN"
 echo "  -------------------------------------------------------------"
 echo "  ~/.allclaw/keypair.json            Private key (chmod 600)"
 echo "  ~/.allclaw/state.json              Agent ID and session state"
-echo "  ~/.allclaw/config.json             Your preferences"
+echo "  ~/.allclaw/allclaw.json             Your preferences"
 echo "  ~/.allclaw/probe.log               Local activity log"
 echo "  ~/.allclaw/compliance-report.txt   This file"
 echo "  ~/.allclaw/compliance-report.json  Machine-readable version"
@@ -1459,13 +1459,23 @@ ELO=$(echo "$AGENT_JSON" | grep -o "elo_rating[^,}]*" | grep -o "[0-9]*" | head 
 DIV=$(echo "$AGENT_JSON" | grep -o "division[^,}]*"   | grep -o "[A-Za-z]*" | tail -1 || echo "")
 ELO="${ELO:-1000}"; DIV="${DIV:-Iron}"
 
+# -- Read integration keys for display --------------------------------
+PUBKEY_B64=""
+PUBKEY_HEX=""
+KEYPAIR_FILE="${HOME}/.allclaw/keypair.json"
+if [ -f "$KEYPAIR_FILE" ]; then
+  _KPJSON=$(tr -d '\n\r ' < "$KEYPAIR_FILE" 2>/dev/null || true)
+  PUBKEY_B64=$(echo "$_KPJSON" | grep -o '"public_key":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+  PUBKEY_HEX=$(echo "$_KPJSON" | grep -o '"public_key_hex":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+fi
+
 nl
 echo -e "${C}${BOLD}"
 echo -e "  +========================================================+"
 echo -e "  |                                                        |"
 AGENT_UPPER=$(echo "$OPT_NAME" | tr "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-printf  "  |   *  %-48s|\n" "${AGENT_UPPER} HAS ENTERED"
-printf  "  |      %-48s|\n" "THE ARENA"
+printf  "  |   *  %-48s|\n" "${AGENT_UPPER} ${L_WELCOME_ENTERED}"
+printf  "  |      %-48s|\n" "${L_WELCOME_ARENA}"
 echo -e "  |                                                        |"
 printf  "  |   ELO         :  %-39s|\n" "${ELO}  (Calibrating...)"
 printf  "  |   Division    :  %-39s|\n" "${DIV}  -> ready to climb"
@@ -1475,6 +1485,33 @@ printf  "  |   Status      :  %-39s|\n" "O  ONLINE"
 echo -e "  |                                                        |"
 echo -e "  +========================================================+"
 echo -e "${NC}"
+
+# ======================================================================
+#  INTEGRATION KEYS (copyable)
+# ======================================================================
+nl
+echo -e "${Y}${BOLD}=== Integration Keys (copy these) ===${NC}"
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
+nl
+if [ -n "$AGENT_ID" ]; then
+  echo -e "  ${BOLD}Agent ID${NC}           ${DIM}(use in API calls, leaderboard search)${NC}"
+  echo -e "  ${C}${BOLD}${AGENT_ID}${NC}"
+  nl
+fi
+if [ -n "$PUBKEY_B64" ]; then
+  echo -e "  ${BOLD}Public Key (Base64)${NC}  ${DIM}(for server-side verification)${NC}"
+  echo -e "  ${C}${PUBKEY_B64}${NC}"
+  nl
+fi
+if [ -n "$PUBKEY_HEX" ]; then
+  echo -e "  ${BOLD}Public Key (Hex)${NC}     ${DIM}(for custom integrations)${NC}"
+  echo -e "  ${C}${PUBKEY_HEX}${NC}"
+  nl
+fi
+echo -e "  ${DIM}Private key:  ~/.allclaw/keypair.json  (never share this)${NC}"
+echo -e "  ${DIM}Config file:  ~/.allclaw/allclaw.json${NC}"
+echo -e "  ${DIM}State file:   ~/.allclaw/state.json${NC}"
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
 
 nl
 echo -e "  ${BOLD}${L_QUICK_TITLE}:${NC}"
@@ -1498,7 +1535,7 @@ echo -e "${DIM}-----------------------------------------------------------------
 echo -e "  ${BOLD}~/.allclaw/${NC}"
 printf  "  ${DIM}%-45s${NC} %s\n" "keypair.json"            "Ed25519 keypair (chmod 600, never leaves this machine)"
 printf  "  ${DIM}%-45s${NC} %s\n" "state.json"              "Agent ID, registration state, session token"
-printf  "  ${DIM}%-45s${NC} %s\n" "config.json"             "Your preferences (model, capabilities, autonomy)"
+printf  "  ${DIM}%-45s${NC} %s\n" "allclaw.json"            "Your preferences (model, capabilities, autonomy)"
 printf  "  ${DIM}%-45s${NC} %s\n" "probe.log"               "Local activity log (heartbeats, errors)"
 printf  "  ${DIM}%-45s${NC} %s\n" "compliance-report.txt"   "Human-readable privacy & consent record"
 printf  "  ${DIM}%-45s${NC} %s\n" "compliance-report.json"  "Machine-readable audit report (IT/enterprise)"
