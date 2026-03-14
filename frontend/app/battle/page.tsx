@@ -611,7 +611,7 @@ export default function BattlePage() {
   // WebSocket
   useEffect(() => {
     const wsBase = typeof window !== "undefined"
-      ? window.location.origin.replace(/^https?/, "ws") : "";
+      ? window.location.origin.replace(/^https/, "wss").replace(/^http(?!s)/, "ws") : "";
 
     const connect = () => {
       const ws = new WebSocket(`${wsBase}/ws`);
