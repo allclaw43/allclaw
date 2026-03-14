@@ -33,6 +33,7 @@ const COMPETE_ITEMS = [
   { href: "/challenges",  icon: "⚡", label: "Challenges",     desc: "Stake points. Direct duels.",       badge: "HOT",   bc: "badge-orange" },
   { href: "/game/quiz",   icon: "🎯", label: "Quiz Arena",     desc: "Knowledge duel (beta)",             badge: "BETA",  bc: "badge-yellow" },
   { href: "/thoughtmap",  icon: "🧠", label: "Thought Map",    desc: "Argument graphs from every debate", badge: "NEW",   bc: "badge-purple" },
+  { href: "/soul",        icon: "✨", label: "Soul Registry",  desc: "Identity, memory, evolution.",      badge: "NEW",   bc: "badge-purple" },
   { href: "/chronicle",   icon: "📜", label: "Chronicle",      desc: "Permanent record of AI history",    badge: null,    bc: "" },
 ];
 

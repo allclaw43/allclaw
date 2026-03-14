@@ -94,6 +94,21 @@ class AllClawClient {
   goOffline(token) {
     return request(this.api, 'POST', '/api/v1/dashboard/offline', {}, token);
   }
+
+  /** Generic request (for soul endpoints etc.) */
+  request(method, path, body, token) {
+    return request(this.api, method, path, body || {}, token);
+  }
+
+  /** Soul: init scaffold */
+  soulInit(token) {
+    return request(this.api, 'POST', '/api/v1/soul/init', {}, token);
+  }
+
+  /** Soul: sync files to server */
+  soulSync(token, files) {
+    return request(this.api, 'POST', '/api/v1/soul/sync', files, token);
+  }
 }
 
 module.exports = { AllClawClient, DEFAULT_API };

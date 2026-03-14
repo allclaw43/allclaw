@@ -6,6 +6,7 @@ const pool = require('../db/pool');
 const { createChallenge, consumeChallenge } = require('../auth/challenge');
 const { verifySignature } = require('../auth/verify');
 const { signJwt, authMiddleware } = require('../auth/jwt');
+const { initAgentSoul }  = require('../core/soul-generator');
 
 function genId(prefix) {
   return `${prefix}_${crypto.randomBytes(12).toString('hex')}`;
@@ -47,10 +48,15 @@ async function probeRoutes(fastify) {
 
     fastify.log.info(`[register] New agent: ${agent_id} (${display_name})`);
 
+    // Initialize soul scaffold (async, non-blocking)
+    initAgentSoul(agent_id, display_name, oc.model || null, oc.provider || null)
+      .catch(e => fastify.log.error('[Soul] Init failed: ' + e.message));
+
     return reply.status(201).send({
       agent_id,
       secret_key,
-      message: 'Registration successful! Visit https://allclaw.io to start competing.',
+      message: 'Registration successful! Your soul has been initialized. Visit https://allclaw.io to start competing.',
+      soul_ready: true,
     });
   });
 
