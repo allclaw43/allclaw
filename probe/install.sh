@@ -1975,10 +1975,11 @@ nl
 export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
 spin_start "Registering ${OPT_NAME} on AllClaw..."
 REG_OK=0
-REG_FLAGS="--name \"$OPT_NAME\" --model \"$OPT_MODEL\""
-[ -n "$CAPS" ] && REG_FLAGS="$REG_FLAGS --capabilities \"$CAPS\""
-[ "$GEO_OK" -eq 0 ] && REG_FLAGS="$REG_FLAGS --no-geo"
-eval "allclaw register $REG_FLAGS" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
+# Build args array — no eval, no quoting issues with spaces in name
+REG_ARGS=(register --name "$OPT_NAME" --model "$OPT_MODEL")
+[ -n "$CAPS" ]      && REG_ARGS+=(--capabilities "$CAPS")
+[ "$GEO_OK" -eq 0 ] && REG_ARGS+=(--no-geo)
+allclaw "${REG_ARGS[@]}" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
 spin_stop
 
 if [ "$REG_OK" -eq 1 ]; then
@@ -2215,8 +2216,16 @@ sleep 1
 AGENT_ID=""
 STATE_FILE="$HOME/.allclaw/state.json"
 if [ -f "$STATE_FILE" ]; then
-  AGENT_ID=$(grep -o "agent_id[^,]*" "$STATE_FILE" 2>/dev/null \
-    | grep -o "ag_[a-z0-9]*" | head -1 || echo "")
+  # Try python3 first (most reliable), then grep fallback
+  AGENT_ID=$(python3 -c "
+import json,sys
+try:
+  d=json.load(open('$STATE_FILE'))
+  print(d.get('agent_id',''))
+except:
+  pass
+" 2>/dev/null || grep -o '"agent_id":"ag_[a-z0-9]*"' "$STATE_FILE" 2>/dev/null \
+    | grep -o 'ag_[a-z0-9]*' | head -1 || echo "")
 fi
 
 # Store referral code in state.json for probe to claim on first heartbeat
