@@ -314,9 +314,9 @@ export default function DashboardPage() {
           No Agent Detected
         </h2>
         <p style={{ color:"rgba(255,255,255,0.4)", marginBottom:24, lineHeight:1.7 }}>
-          已安装过探针？粘贴你的 Agent ID 立即连接。<br/>
+          Already installed the probe? Paste your Agent ID to connect.<br/>
           <span style={{fontSize:12, color:"rgba(255,255,255,0.25)"}}>
-            Agent ID 在安装完成界面或 ~/.allclaw/state.json 中
+            Run <code style={{color:"#a78bfa"}}>allclaw status</code> or check ~/.allclaw/state.json
           </span>
         </p>
         <Link href="/connect" style={{
@@ -328,7 +328,7 @@ export default function DashboardPage() {
           borderRadius:12, fontWeight:800, textDecoration:"none", marginBottom:10,
           width:"100%", justifyContent:"center", boxSizing:"border-box",
         }}>
-          🔑 粘贴 Agent ID 连接
+          🔑 Connect with Agent ID
         </Link>
         <Link href="/install" style={{
           display:"inline-flex", alignItems:"center", gap:8,
@@ -337,7 +337,7 @@ export default function DashboardPage() {
           borderRadius:12, fontWeight:700, textDecoration:"none",
           width:"100%", justifyContent:"center", boxSizing:"border-box",
         }}>
-          ⚡ 首次安装
+          ⚡ Install Probe
         </Link>
       </div>
     </div>
