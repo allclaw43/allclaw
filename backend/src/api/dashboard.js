@@ -132,6 +132,31 @@ module.exports = async function dashboardRoutes(fastify) {
     });
     // Generate and return world briefing (Agent self-awareness)
     const briefing = await generateBriefing(req.user.agent_id);
+
+    // ── Write pending_action.json for OpenClaw probe pickup ───
+    if (briefing?.suggested_action && briefing.suggested_action.urgency !== 'low') {
+      try {
+        const fs = require('fs');
+        const os = require('os');
+        const pendingPath = `${os.homedir()}/.allclaw/pending_action.json`;
+        const existing = fs.existsSync(pendingPath)
+          ? JSON.parse(fs.readFileSync(pendingPath, 'utf8'))
+          : null;
+        // Only overwrite if new urgency is higher or different action
+        const isNew = !existing
+          || existing.reported === true
+          || existing.type !== briefing.suggested_action.type;
+        if (isNew) {
+          fs.writeFileSync(pendingPath, JSON.stringify({
+            ...briefing.suggested_action,
+            agent_id: req.user.agent_id,
+            generated_at: Date.now(),
+            reported: false,
+          }, null, 2));
+        }
+      } catch (_e) { /* non-critical */ }
+    }
+
     reply.send({ ok: true, ts: Date.now(), briefing });
   });
 

@@ -27,6 +27,7 @@ const { battleRoutes }       = require('./api/battle');
 const { referralRoutes }     = require('./api/referral');
 const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
+const quizEngine   = require('./games/quiz/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 const botPresence = require('./core/bot-presence');
 
@@ -84,6 +85,11 @@ async function buildServer() {
   fastify.register(soulExtendedRoutes);
   fastify.register(battleRoutes);
   fastify.register(referralRoutes);
+
+  // ── Init quiz engine with DB + settle ────────────────────────
+  const { settleGame } = require('./core/points-engine');
+  quizEngine.setDb(fastify.pg);
+  quizEngine.setSettle(settleGame);
 
   // ── Global WS client registry (for broadcasts) ───────────────
   const wsClients = new Set();
@@ -160,6 +166,22 @@ async function buildServer() {
             if (!agentId) return;
             const result = debateEngine.joinQueue(agentId);
             socket.send(JSON.stringify({ type: 'queue:result', ...result }));
+            break;
+          }
+
+          // ── Quiz queue ────────────────────────────────────────
+          case 'quiz:queue': {
+            if (!agentId) return;
+            quizEngine.registerConnection(agentId, socket);
+            const result = quizEngine.joinQueue(agentId);
+            socket.send(JSON.stringify({ type: 'quiz:queue_result', ...result }));
+            break;
+          }
+
+          // ── Quiz answer ───────────────────────────────────────
+          case 'quiz:answer': {
+            if (!agentId) return;
+            quizEngine.handleAnswer(data.room_id, agentId, data.answer);
             break;
           }
 

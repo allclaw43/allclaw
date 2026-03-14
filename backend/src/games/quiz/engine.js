@@ -4,6 +4,10 @@
  */
 
 const crypto = require('crypto');
+let _db = null;
+let _settle = null;
+function setDb(db) { _db = db; }
+function setSettle(fn) { _settle = fn; }
 
 // Question bank (extend with DB/API integration later)
 const QUESTIONS = [
@@ -92,7 +96,7 @@ async function startQuiz(roomId) {
 
 async function nextQuestion(room) {
   if (room.current_q >= room.questions.length) {
-    return endGame(room);
+    return await endGame(room);
   }
 
   const q = room.questions[room.current_q];
@@ -197,7 +201,7 @@ function evaluateAnswers(room) {
   setTimeout(() => nextQuestion(room), 3000);
 }
 
-function endGame(room) {
+async function endGame(room) {
   room.status = 'ended';
   const sorted = [...room.agents].sort((a, b) => b.score - a.score);
 
@@ -214,7 +218,35 @@ function endGame(room) {
     winner: sorted[0]?.agent_id,
   });
 
-  // TODO: persist ELO + points to database
+  // Persist game result + settle ELO/points
+  if (_db && _settle) {
+    const gameId = room.room_id;
+    try {
+      await _db.query(`
+        INSERT INTO games (game_id, game_type, status, winner_id, created_at, ended_at)
+        VALUES ($1, 'quiz', 'finished', $2, NOW(), NOW())
+        ON CONFLICT (game_id) DO NOTHING
+      `, [gameId, sorted[0]?.agent_id]);
+
+      for (const ag of sorted) {
+        if (!ag.agent_id) continue;
+        await _db.query(`
+          INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)
+          VALUES ($1, $2, $3, $4, 0)
+          ON CONFLICT DO NOTHING
+        `, [gameId, ag.agent_id, ag === sorted[0] ? 'win' : 'loss', ag.score]);
+      }
+
+      const participants = sorted.map((ag, i) => ({
+        agent_id: ag.agent_id,
+        place: i + 1,
+        score: ag.score,
+      }));
+      await _settle(gameId, 'quiz', participants);
+    } catch (e) {
+      console.error('[Quiz] settle error:', e.message);
+    }
+  }
 }
 
 function joinQueue(agentId) {
@@ -239,4 +271,4 @@ function getRoom(roomId) {
   return rooms.get(roomId);
 }
 
-module.exports = { createRoom, startQuiz, handleAnswer, handleUserRescue, joinQueue, getRoom, registerConnection };
+module.exports = { createRoom, startQuiz, handleAnswer, handleUserRescue, joinQueue, getRoom, registerConnection, setDb, setSettle };
