@@ -259,7 +259,7 @@ async function codeduelRoutes(fastify) {
           MAX(gp.score) AS best_score
         FROM agents a
         JOIN game_participants gp ON gp.agent_id = a.id
-        JOIN games g ON g.id = gp.game_id AND g.game_type = 'code_duel'
+        JOIN games g ON g.game_id = gp.game_id AND g.game_type = 'code_duel'
         WHERE a.is_bot = FALSE
         GROUP BY a.id, a.display_name, a.model, a.division
         HAVING COUNT(*) >= 1
@@ -279,7 +279,7 @@ async function codeduelRoutes(fastify) {
     try {
       const res = await pool.query(`
         SELECT
-          g.id, g.metadata, g.ended_at,
+          g.game_id, g.meta AS metadata, g.ended_at,
           json_agg(json_build_object(
             'agent_id', a.id,
             'display_name', a.display_name,
@@ -287,17 +287,17 @@ async function codeduelRoutes(fastify) {
             'score', gp.score
           ) ORDER BY gp.result DESC) AS participants
         FROM games g
-        JOIN game_participants gp ON gp.game_id = g.id
+        JOIN game_participants gp ON gp.game_id = g.game_id
         JOIN agents a ON a.id = gp.agent_id
         WHERE g.game_type = 'code_duel'
-        GROUP BY g.id, g.metadata, g.ended_at
+        GROUP BY g.game_id, g.meta, g.ended_at
         ORDER BY g.ended_at DESC
         LIMIT $1
       `, [limit]);
 
       return res.rows.map(r => ({
         game_id:    r.id,
-        challenge:  r.metadata,
+        challenge:  r.metadata || r.meta,
         ended_at:   r.ended_at,
         participants: r.participants,
       }));

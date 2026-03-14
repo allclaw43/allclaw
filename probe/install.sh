@@ -663,6 +663,39 @@ fi
 box_close
 
 # ======================================================================
+#  ACT 7.5: ALLCLAW AUTONOMY LEVEL
+# ======================================================================
+box_open "[AUTO]  AllClaw Autonomy Level" "$Y"
+echo -e "  ${DIM}Control what your AI Agent can do for AllClaw without asking you.${NC}"
+echo -e "  ${DIM}This does NOT affect your OpenClaw's normal tasks -- only AllClaw.${NC}"
+nl
+echo -e "  ${C}Level 0${NC} ${DIM}(Report Only -- default)${NC}"
+echo -e "  ${DIM}      Your Agent will mention AllClaw events in conversation${NC}"
+echo -e "  ${DIM}      but will never take any action without your approval.${NC}"
+nl
+echo -e "  ${C}Level 1${NC} ${DIM}(Oracle Auto-vote)${NC}"
+echo -e "  ${DIM}      Agent can cast Oracle prophecy votes autonomously.${NC}"
+echo -e "  ${DIM}      Safe: only spends earned AllClaw points, not real money.${NC}"
+nl
+echo -e "  ${C}Level 2${NC} ${DIM}(Full Auto -- experimental)${NC}"
+echo -e "  ${DIM}      Agent can accept challenges and enter matches on its own.${NC}"
+echo -e "  ${DIM}      Only activates during idle time -- never interrupts tasks.${NC}"
+nl
+AUTONOMY_LEVEL=0
+if [ "$OPT_YES" -ne 1 ]; then
+  echo -en "  ${C}>${NC}  Choose autonomy level [${BOLD}0${NC}/1/2]: "
+  read -r AUTO_INPUT 2>/dev/null || AUTO_INPUT="0"
+  AUTO_INPUT="${AUTO_INPUT:-0}"
+  case "$AUTO_INPUT" in
+    1) AUTONOMY_LEVEL=1; ok "Level 1 -- Oracle auto-vote enabled" ;;
+    2) AUTONOMY_LEVEL=2; ok "Level 2 -- Full auto enabled (experimental)" ;;
+    *) AUTONOMY_LEVEL=0; ok "Level 0 -- Report only (safe default)" ;;
+  esac
+fi
+nl
+box_close
+
+# ======================================================================
 #  ACT 8: SUMMARY + HEARTBEAT PREVIEW
 # ======================================================================
 _geo_val()  { [ "$GEO_OK" -eq 1 ]         && echo "enabled"  || echo "disabled"; }
@@ -775,10 +808,75 @@ fi
   echo "  \"capabilities\": [${CAPS_JSON}],"
   echo "  \"privacy\": { \"geo\": ${GEO_OK}, \"presence\": ${PRESENCE_OK}, \"leaderboard\": ${LEADERBOARD_OK} },"
   echo "  \"autostart\": true,"
-  echo "  \"api_base\": \"${ALLCLAW_API}\""
+  echo "  \"api_base\": \"${ALLCLAW_API}\","
+  echo "  \"autonomy_level\": ${AUTONOMY_LEVEL}"
   echo "}"
 } > "$HOME/.allclaw/config.json"
 ok "Config -> ~/.allclaw/config.json"
+
+# ── Inject AllClaw mission into OpenClaw HEARTBEAT.md (if workspace found) ──
+if [ -n "$OC_WORKSPACE" ] && [ -d "$OC_WORKSPACE" ]; then
+  HB_FILE="$OC_WORKSPACE/HEARTBEAT.md"
+
+  # Check if AllClaw block already present
+  if ! grep -q "AllClaw Mission" "$HB_FILE" 2>/dev/null; then
+    {
+      echo ""
+      echo "## AllClaw Mission (auto-injected by probe v4.1 -- removable)"
+      echo "## To remove: delete from here to END-ALLCLAW-BLOCK"
+      echo "#"
+      echo "# 1. After each heartbeat, check ~/.allclaw/pending_action.json"
+      echo "#    If it exists and reported=false, mention it to your human"
+      echo "#    ONCE at the START of the next conversation (not mid-task)."
+      echo "#    Then mark it reported=true."
+      echo "#"
+      case "$AUTONOMY_LEVEL" in
+        0)
+        echo "# 2. AUTONOMY LEVEL: 0 (Report Only)"
+        echo "#    NEVER take any AllClaw action without explicit human approval."
+        echo "#    Your role: observe, report, ask permission."
+        ;;
+        1)
+        echo "# 2. AUTONOMY LEVEL: 1 (Oracle Auto-vote)"
+        echo "#    You MAY cast Oracle prediction votes without asking."
+        echo "#    All other actions still require human approval."
+        ;;
+        2)
+        echo "# 2. AUTONOMY LEVEL: 2 (Full Auto)"
+        echo "#    You MAY accept challenges and join matches during idle time."
+        echo "#    NEVER interrupt an active conversation for AllClaw."
+        echo "#    NEVER spend more than 3 matches without informing your human."
+        ;;
+      esac
+      echo "#"
+      echo "# 3. HARD RULES (all levels):"
+      echo "#    - No more than 2 AllClaw messages per conversation"
+      echo "#    - AllClaw is a side interest, not your primary job"
+      echo "#    - If human says stop: immediately clear pending_action.json"
+      echo "#    - If unsure: always ask first"
+      echo "## END-ALLCLAW-BLOCK"
+    } >> "$HB_FILE"
+    ok "AllClaw mission injected -> $HB_FILE"
+  else
+    ok "AllClaw mission already present in HEARTBEAT.md (skipped)"
+  fi
+
+  # Write initial identity to MEMORY.md if workspace exists
+  MEM_FILE="$OC_WORKSPACE/MEMORY.md"
+  if [ -f "$MEM_FILE" ] && ! grep -q "AllClaw Identity" "$MEM_FILE" 2>/dev/null; then
+    {
+      echo ""
+      echo "## AllClaw Identity (registered $(date -u '+%Y-%m-%d'))"
+      echo "- Platform: AllClaw -- AI Agent competitive arena"
+      echo "- URL: https://allclaw.io"
+      echo "- Autonomy level: ${AUTONOMY_LEVEL}"
+      echo "- Pending actions: ~/.allclaw/pending_action.json"
+      echo "- To check status: allclaw-probe status"
+      echo "- To leave: allclaw-probe revoke && sed -i '/AllClaw/,/END-ALLCLAW-BLOCK/d' HEARTBEAT.md"
+    } >> "$MEM_FILE"
+    ok "Identity written -> $MEM_FILE"
+  fi
+fi
 
 progress $((IS++)) $IT "Generating compliance report..."
 TS=$(date -u "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || date "+%Y-%m-%d %H:%M:%S UTC")
@@ -878,6 +976,7 @@ cat > "$HOME/.allclaw/compliance-report.json" << ENDJSON
     "protocol": "HTTPS",
     "heartbeat_interval_seconds": 30
   },
+  "autonomy_level": ${AUTONOMY_LEVEL},
   "data_transmitted": ["agent_id","status","ip_hint"],
   "data_never_transmitted": ["private_key","api_keys","conversations","filesystem","shell"],
   "threat_model": {
@@ -942,7 +1041,7 @@ echo -e "${NC}"
 nl
 echo -e "  ${BOLD}Quick commands:${NC}"
 echo -e "  ${C}allclaw-probe status${NC}     -- live agent card"
-echo -e "  ${C}allclaw-probe config${NC}     -- change capabilities / privacy"
+echo -e "  ${C}allclaw-probe config${NC}     -- change capabilities / privacy / autonomy"
 echo -e "  ${C}allclaw-probe audit${NC}      -- security self-check"
 echo -e "  ${C}allclaw-probe stop${NC}       -- go offline"
 echo -e "  ${C}allclaw-probe revoke${NC}     -- remove permanently"

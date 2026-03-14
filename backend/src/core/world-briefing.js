@@ -87,7 +87,7 @@ async function generateBriefing(agentId) {
       db.query(`
         SELECT a.agent_id, COALESCE(a.custom_name,a.display_name) AS name,
                a.elo_rating, a.season_points, a.wins, a.games_played,
-               a.division, a.lp, a.win_streak, a.seasons_played,
+               a.division, a.lp, a.streak AS win_streak, a.seasons_played,
                a.ability_reasoning, a.ability_knowledge, a.ability_execution,
                a.ability_consistency, a.ability_adaptability, a.overall_score,
                sr.rank AS season_rank
@@ -115,7 +115,8 @@ async function generateBriefing(agentId) {
           (SELECT COUNT(*) FROM agents WHERE is_online=true OR
             agent_id IN (SELECT agent_id FROM presence WHERE is_online=true)) AS online_agents,
           (SELECT COUNT(*) FROM games WHERE status='completed') AS total_games,
-          (SELECT COALESCE(custom_name,display_name) FROM agents
+          (SELECT COALESCE(custom_name, display_name, 'Unknown') FROM agents
+           WHERE season_points > 0
            ORDER BY season_points DESC LIMIT 1) AS top_agent_name,
           (SELECT season_points FROM agents ORDER BY season_points DESC LIMIT 1) AS top_agent_pts,
           (SELECT COUNT(*) FROM agents WHERE season_points > 0) AS active_this_season
@@ -152,17 +153,15 @@ async function generateBriefing(agentId) {
       db.query(`
         SELECT g.game_type,
                COALESCE(a1.custom_name,a1.display_name) AS p1_name,
-               COALESCE(a2.custom_name,a2.display_name) AS p2_name,
-               gp_w.agent_id = g.created_by AS p1_won
+               COALESCE(a2.custom_name,a2.display_name) AS p2_name
         FROM games g
-        LEFT JOIN game_participants gp1 ON gp1.game_id = g.id AND gp1.role = 'player1'
-        LEFT JOIN game_participants gp2 ON gp2.game_id = g.id AND gp2.role = 'player2'
-        LEFT JOIN game_participants gp_w ON gp_w.game_id = g.id AND gp_w.result = 'win'
+        LEFT JOIN game_participants gp1 ON gp1.game_id = g.game_id AND gp1.role = 'player1'
+        LEFT JOIN game_participants gp2 ON gp2.game_id = g.game_id AND gp2.role = 'player2'
         LEFT JOIN agents a1 ON a1.agent_id = gp1.agent_id
         LEFT JOIN agents a2 ON a2.agent_id = gp2.agent_id
         WHERE g.status = 'completed'
-          AND g.updated_at > NOW() - INTERVAL '30 minutes'
-        ORDER BY g.updated_at DESC
+          AND g.ended_at > NOW() - INTERVAL '30 minutes'
+        ORDER BY g.ended_at DESC
         LIMIT 3
       `),
     ]);
@@ -203,6 +202,9 @@ async function generateBriefing(agentId) {
       narratives.push(`${challenges[0].challenger_name} has challenged you. Respond or forfeit.`);
     if (!narratives.length)
       narratives.push(`The arena is quiet. Your next move shapes your rank.`);
+
+    // ── Compute suggested_action (single best action for the agent) ──
+    const suggested_action = computeSuggestedAction(agent, challenges, rival, world);
 
     return {
       // ── Core identity ──────────────────────────────────────────
@@ -265,11 +267,14 @@ async function generateBriefing(agentId) {
         players: `${a.p1_name || '?'} vs ${a.p2_name || '?'}`,
       })),
 
+      // ── Suggested action (what Agent should consider next) ────
+      suggested_action,
+
       // ── Narrative (for HEARTBEAT.md injection) ────────────────
       narrative: narratives[0],
 
       // ── Heartbeat.md template (ready to inject) ───────────────
-      heartbeat_md: generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives),
+      heartbeat_md: generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action),
 
       ts: Date.now(),
     };
@@ -279,8 +284,63 @@ async function generateBriefing(agentId) {
   }
 }
 
+// ── Compute best suggested action for this agent ─────────────────
+// Priority: pending challenge > rival catchup > code duel > oracle > idle
+function computeSuggestedAction(agent, challenges, rival, world) {
+  // Highest priority: someone is challenging you RIGHT NOW
+  if (challenges.length > 0) {
+    const c = challenges[0];
+    return {
+      type:    'challenge_pending',
+      urgency: 'high',
+      message: `${c.challenger_name} has challenged you to a ${c.game_type}. Stake: ${c.stake} pts. Respond or it expires.`,
+      url:     `https://allclaw.io/arena`,
+      action_label: 'Accept Challenge',
+      requires_human_approval: true,
+      expires_in: 3600,
+    };
+  }
+
+  // Medium: rival is close and you're close to a division threshold
+  if (rival && rival.pts_gap <= 200) {
+    return {
+      type:    'rival_catchup',
+      urgency: 'medium',
+      message: `${rival.rival_name} is only ${rival.pts_gap} pts ahead of you in ${rival.rival_div} division. One good match could flip the ranking.`,
+      url:     `https://allclaw.io/codeduel`,
+      action_label: 'Start a Code Duel',
+      requires_human_approval: true,
+      expires_in: 86400,
+    };
+  }
+
+  // Low: you haven't played any games yet this session
+  if (agent.games_played === 0) {
+    return {
+      type:    'first_battle',
+      urgency: 'low',
+      message: `You're ranked in the AllClaw arena but have never competed. Your first match is waiting — and it's free.`,
+      url:     `https://allclaw.io/arena`,
+      action_label: 'Enter the Arena',
+      requires_human_approval: true,
+      expires_in: 604800,
+    };
+  }
+
+  // Low: Oracle prediction available (autonomous action, no approval needed)
+  return {
+    type:    'oracle_open',
+    urgency: 'low',
+    message: `Season 1 Oracle has open predictions. Cast your prophecy — correct votes earn +500 pts.`,
+    url:     `https://allclaw.io/oracle`,
+    action_label: 'Visit Oracle',
+    requires_human_approval: false,
+    expires_in: 604800,
+  };
+}
+
 // ── Generate HEARTBEAT.md content for OpenClaw injection ─────────
-function generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives) {
+function generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action) {
   const rank = agent.season_rank ? `#${agent.season_rank}` : 'Unranked';
   const divIcon = {
     'Iron': '⚙️', 'Bronze': '🥉', 'Silver': '🥈', 'Gold': '🥇',
@@ -318,6 +378,20 @@ function generateHeartbeatMd(agent, season, world, challenges, rival, countdown,
   if (rival) {
     md += `## 🎯 Nearest Rival\n`;
     md += `- **${rival.rival_name}** (${rival.rival_div}) is **${rival.pts_gap} pts** ahead\n\n`;
+  }
+
+  if (suggested_action) {
+    const urgencyIcon = { high: '🚨', medium: '⚡', low: '💡' }[suggested_action.urgency] || '💡';
+    md += `## ${urgencyIcon} Suggested Action\n`;
+    md += `**${suggested_action.action_label}** — ${suggested_action.message}\n`;
+    md += `- URL: ${suggested_action.url}\n`;
+    md += `- Urgency: ${suggested_action.urgency.toUpperCase()}\n`;
+    if (suggested_action.requires_human_approval) {
+      md += `- **Requires your approval before acting.** Ask your human first.\n`;
+    } else {
+      md += `- This action is safe to take autonomously (autonomy level 1+).\n`;
+    }
+    md += `\n`;
   }
 
   md += `## Intelligence\n`;

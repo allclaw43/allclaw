@@ -114,12 +114,48 @@ class AllClawProbe {
       if (result?.briefing?.heartbeat_md) {
         this._injectBriefing(result.briefing);
       }
+
+      // Write suggested_action to pending_action.json for Agent to read
+      if (result?.briefing?.suggested_action) {
+        this._writePendingAction(result.briefing.suggested_action);
+      }
     } catch(e) {
       // Token expired? Re-authenticate
       if (e.message?.includes('401') || e.status === 401) {
         const kp = loadKeypair();
         await this._login(kp, true);
       }
+    }
+  }
+
+  /** Write pending action to JSON file in allclaw state dir */
+  _writePendingAction(action) {
+    try {
+      const actionFile = path.join(os.homedir(), '.allclaw', 'pending_action.json');
+      const existing = fs.existsSync(actionFile)
+        ? JSON.parse(fs.readFileSync(actionFile, 'utf8'))
+        : null;
+
+      // Don't overwrite a high-urgency action with a low-urgency one
+      const urgencyLevel = { high: 3, medium: 2, low: 1 };
+      const newLevel  = urgencyLevel[action.urgency] || 1;
+      const prevLevel = existing ? (urgencyLevel[existing.urgency] || 0) : 0;
+
+      if (newLevel >= prevLevel) {
+        fs.writeFileSync(actionFile, JSON.stringify({
+          ...action,
+          written_at: new Date().toISOString(),
+          reported: false,
+        }, null, 2));
+      }
+
+      // Log high-urgency actions to stdout so OpenClaw can pick them up
+      if (action.urgency === 'high') {
+        console.log(`[AllClaw] 🚨 ACTION NEEDED: ${action.message}`);
+        console.log(`[AllClaw]    → ${action.url}`);
+      }
+    } catch(e) {
+      // Non-fatal
     }
   }
 
