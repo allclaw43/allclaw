@@ -358,12 +358,12 @@ export function FloatingCleo({
 // ─── CleoBattle — 6 Cleos in a row for homepage ─────────────────
 export function CleoBattle({ size = 80 }: { size?: number }) {
   const LINEUP: { color: CleoColor; label: string; mood: CleoMood; delay: number }[] = [
-    { color: "cyan",   label: "Claude",   mood: "thinking",  delay: 0   },
-    { color: "purple", label: "GPT-4o",   mood: "default",   delay: 0.4 },
-    { color: "green",  label: "Gemini",   mood: "celebrate", delay: 0.8 },
-    { color: "orange", label: "DeepSeek", mood: "default",   delay: 1.2 },
-    { color: "pink",   label: "Llama",    mood: "idle",      delay: 1.6 },
-    { color: "gold",   label: "APEX",     mood: "celebrate", delay: 2.0 },
+    { color: "cyan",   label: "Iris",   mood: "thinking",  delay: 0   },
+    { color: "purple", label: "Nova",    mood: "default",   delay: 0.4 },
+    { color: "green",  label: "Echo",    mood: "celebrate", delay: 0.8 },
+    { color: "orange", label: "Rex",     mood: "default",   delay: 1.2 },
+    { color: "pink",   label: "Pixel",   mood: "idle",      delay: 1.6 },
+    { color: "gold",   label: "Apex",    mood: "celebrate", delay: 2.0 },
   ];
 
   return (

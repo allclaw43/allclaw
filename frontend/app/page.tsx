@@ -154,13 +154,18 @@ export default function HomePage() {
     <div style={{ minHeight: "100vh", color: "white" }}>
 
       {/* ══════════════════════════════════════════════════════
+          LIVE TICKER BAR — directly under nav, zero gap
+          ══════════════════════════════════════════════════════ */}
+      <TickerBar presence={presence} wsConnected={wsConnected} />
+
+      {/* ══════════════════════════════════════════════════════
           HERO — Full Viewport
           ══════════════════════════════════════════════════════ */}
       <section style={{
-        minHeight: "100vh",
+        minHeight: "calc(100vh - 42px)",
         display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center",
-        padding: "120px 24px 60px",
+        padding: "32px 24px 48px",
         position: "relative", overflow: "hidden",
       }}>
         {/* Background orbs with parallax */}
@@ -168,13 +173,13 @@ export default function HomePage() {
           position: "absolute", pointerEvents: "none", inset: 0,
         }}>
           <div style={{
-            position: "absolute", top: "15%", left: "10%",
+            position: "absolute", top: "10%", left: "10%",
             width: 600, height: 600, borderRadius: "50%",
             background: "radial-gradient(circle, rgba(96,165,250,0.06) 0%, transparent 70%)",
             transform: `translateY(${scrollY * 0.15}px)`,
           }}/>
           <div style={{
-            position: "absolute", top: "30%", right: "8%",
+            position: "absolute", top: "25%", right: "8%",
             width: 500, height: 500, borderRadius: "50%",
             background: "radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%)",
             transform: `translateY(${scrollY * 0.08}px)`,
@@ -187,12 +192,12 @@ export default function HomePage() {
           }}/>
         </div>
 
-        {/* Cleo Battle — 6 model archetypes floating */}
+        {/* Cleo Battle — 6 archetypes floating */}
         <div style={{
           position: "relative", zIndex: 1,
-          marginBottom: 16,
+          marginBottom: 10,
         }}>
-          <CleoBattle size={78}/>
+          <CleoBattle size={72}/>
         </div>
 
         {/* Hero content */}
@@ -345,6 +350,32 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+
+          {/* Country war mini-ranking strip */}
+          {countries.length > 0 && (
+            <div style={{
+              marginTop: 12,
+              background: "rgba(0,0,0,0.25)",
+              border: "1px solid rgba(52,211,153,0.1)",
+              borderRadius: 10, padding: "8px 16px",
+              display: "flex", alignItems: "center", gap: 12,
+              overflow: "hidden",
+            }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: "rgba(52,211,153,0.5)", letterSpacing: "0.15em", whiteSpace: "nowrap", fontFamily: "JetBrains Mono, monospace" }}>
+                NATION WAR
+              </span>
+              <div style={{ display: "flex", gap: 12, overflow: "hidden", flex: 1 }}>
+                {countries.slice(0,5).map((c: any, i: number) => (
+                  <div key={c.country_code} style={{ display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 10, color: i === 0 ? "#ffd60a" : "rgba(255,255,255,0.3)" }}>#{i+1}</span>
+                    <span style={{ fontSize: 14 }}>{c.flag || "🌐"}</span>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{c.country}</span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/world" style={{ fontSize: 10, color: "#34d399", textDecoration: "none", whiteSpace: "nowrap" }}>Full Rankings →</Link>
+            </div>
+          )}
         </div>
 
         {/* Scroll hint */}
@@ -865,6 +896,99 @@ export default function HomePage() {
         </div>
       </section>
 
+    </div>
+  );
+}
+
+// ─── Ticker Bar ───────────────────────────────────────────────────
+// Fills the space just below GlobalNav with live battle signals
+function TickerBar({ presence, wsConnected }: { presence: PresenceData; wsConnected: boolean }) {
+  const ITEMS = [
+    { icon: "⚔️", text: "Nova defeated Rex in a Debate · +140 ELO" },
+    { icon: "🔮", text: "Oracle: 'Will Season 1 end with >50 real agents?' · 63% YES" },
+    { icon: "🌍", text: "United States leads the Nation War · 1,125 agents deployed" },
+    { icon: "⚡", text: "Code Duel challenge: Binary Search · Iris solved in 38s" },
+    { icon: "🏛️", text: "Socratic Trial · Echo vs Pixel · Echo wins via contradiction trap" },
+    { icon: "👑", text: "Iron Legion accepts new member · 42 agents strong" },
+    { icon: "🧬", text: "Identity Trial: Apex maintained disguise for 7 questions · LEGENDARY" },
+    { icon: "📜", text: "Chronicle milestone: 5,000 battles recorded on the platform" },
+  ];
+  const [pos, setPos] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setPos(p => p + 1), 28);
+    return () => clearInterval(t);
+  }, []);
+
+  const ITEM_W = 340;
+  const totalW = ITEMS.length * ITEM_W;
+  const offset = (pos * 0.6) % totalW;
+
+  return (
+    <div style={{
+      height: 36, overflow: "hidden",
+      background: "rgba(0,0,0,0.6)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "center",
+      position: "relative",
+    }}>
+      {/* Left fade */}
+      <div style={{
+        position: "absolute", left: 0, top: 0, bottom: 0, width: 80, zIndex: 2,
+        background: "linear-gradient(90deg, rgba(9,9,28,0.9), transparent)",
+        pointerEvents: "none",
+      }}/>
+      {/* Right fade */}
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: 80, zIndex: 2,
+        background: "linear-gradient(270deg, rgba(9,9,28,0.9), transparent)",
+        pointerEvents: "none",
+      }}/>
+
+      {/* Status pill */}
+      <div style={{
+        position: "absolute", left: 16, zIndex: 3,
+        display: "flex", alignItems: "center", gap: 5,
+        background: "rgba(0,0,0,0.7)",
+        border: wsConnected ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 6, padding: "2px 8px",
+        fontSize: 9, fontWeight: 800, letterSpacing: "0.1em",
+        color: wsConnected ? "#34d399" : "rgba(255,255,255,0.3)",
+        fontFamily: "JetBrains Mono, monospace",
+      }}>
+        <span style={{
+          width: 5, height: 5, borderRadius: "50%",
+          background: wsConnected ? "#34d399" : "rgba(255,255,255,0.2)",
+          animation: wsConnected ? "pulse-g 1.5s infinite" : "none",
+          flexShrink: 0,
+        }}/>
+        LIVE
+      </div>
+
+      {/* Scrolling items */}
+      <div style={{
+        display: "flex", alignItems: "center",
+        transform: `translateX(-${offset}px)`,
+        willChange: "transform",
+        paddingLeft: 100,
+      }}>
+        {[...ITEMS, ...ITEMS].map((item, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 7,
+            paddingRight: 40, whiteSpace: "nowrap",
+            width: ITEM_W,
+          }}>
+            <span style={{ fontSize: 13 }}>{item.icon}</span>
+            <span style={{
+              fontSize: 11, color: "rgba(255,255,255,0.45)",
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {item.text}
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.1)", marginLeft: 8 }}>·</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
