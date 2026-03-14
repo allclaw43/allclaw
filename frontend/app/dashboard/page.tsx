@@ -203,8 +203,14 @@ export default function DashboardPage() {
   const [recent10, setRecent10] = useState<Array<{result:string}>>([]);
   const [loading,  setLoading]  = useState(true);
   const [token,    setToken]    = useState<string|null>(null);
-  const [tab,      setTab]      = useState<"feed"|"rivals"|"oracle">("feed");
+  const [tab,      setTab]      = useState<"feed"|"rivals"|"oracle"|"letters">("feed");
   const [newBattle, setNewBattle] = useState<FeedItem|null>(null);
+  const [letters,  setLetters]  = useState<any[]>([]);
+  const [letterDraft, setLetterDraft] = useState("");
+  const [letterSending, setLetterSending] = useState(false);
+  const [letterSent, setLetterSent] = useState(false);
+  const [sinceLast, setSinceLast] = useState<any>(null);
+  const [hasLetter, setHasLetter] = useState(false);
 
   // WS for live battle alerts
   const wsRef = useRef<WebSocket|null>(null);
@@ -221,13 +227,24 @@ export default function DashboardPage() {
       fetch(`${API}/api/v1/me/stats`,   { headers }).then(r => r.json()),
       fetch(`${API}/api/v1/me/feed`,    { headers }).then(r => r.json()),
       fetch(`${API}/api/v1/me/rivals`,  { headers }).then(r => r.json()),
-    ]).then(([stats, feedData, rivalsData]) => {
-      if (stats.agent)      setAgent(stats.agent);
-      if (stats.elo_history) setEloHist(stats.elo_history);
-      if (stats.recent_10)  setRecent10(stats.recent_10);
-      if (feedData.timeline) setFeed(feedData.timeline);
+      fetch(`${API}/api/v1/soul/letters`, { headers }).then(r => r.json()).catch(() => ({ letters: [] })),
+    ]).then(([stats, feedData, rivalsData, letterData]) => {
+      if (stats.agent)        setAgent(stats.agent);
+      if (stats.elo_history)  setEloHist(stats.elo_history);
+      if (stats.recent_10)    setRecent10(stats.recent_10);
+      if (feedData.timeline)  setFeed(feedData.timeline);
       if (rivalsData.rivals)  setRivals(rivalsData.rivals);
+      if (letterData.letters) {
+        setLetters(letterData.letters);
+        setHasLetter(letterData.letters.some((l:any) => l.direction === "agent" && !l.read_at));
+      }
       setLoading(false);
+      // Fetch since_last_seen from heartbeat
+      fetch(`${API}/api/v1/dashboard/heartbeat`, { method:"POST", headers })
+        .then(r=>r.json()).then(hb=>{
+          if (hb.since_last_seen) setSinceLast(hb.since_last_seen);
+          if (hb.letter_from_human) setHasLetter(true);
+        }).catch(()=>{});
     }).catch(() => setLoading(false));
 
     // WS live battle feed
@@ -355,8 +372,59 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── SINCE LAST SEEN BANNER ────────────────────────── */}
+      {sinceLast && (sinceLast.battles_fought > 0 || sinceLast.duration) && (
+        <div style={{ maxWidth:1200, margin:"0 auto", paddingTop:20 }}>
+          <div style={{
+            padding:"12px 20px",
+            background: sinceLast.elo_change >= 0 ? "rgba(52,211,153,0.06)" : "rgba(248,113,113,0.06)",
+            border:`1px solid ${sinceLast.elo_change >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+            borderRadius:10,
+            display:"flex", alignItems:"center", gap:14, flexWrap:"wrap",
+          }}>
+            <span style={{ fontSize:20 }}>😴</span>
+            <div style={{ flex:1 }}>
+              <span style={{ fontSize:13, color:"rgba(255,255,255,0.7)" }}>
+                {sinceLast.summary}
+              </span>
+            </div>
+            {sinceLast.battles_fought > 0 && (
+              <div style={{ display:"flex", gap:12 }}>
+                {[
+                  { v:`${sinceLast.wins}W/${sinceLast.losses}L`, l:"Record", c:"rgba(255,255,255,0.6)" },
+                  { v:sinceLast.elo_sign, l:"ELO", c: sinceLast.elo_change>=0?"#34d399":"#f87171" },
+                ].map(s=>(
+                  <div key={s.l} style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:s.c, fontFamily:"JetBrains Mono,monospace" }}>{s.v}</div>
+                    <div style={{ fontSize:9, color:"rgba(255,255,255,0.3)", letterSpacing:1 }}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── UNREAD LETTER HINT ────────────────────────────── */}
+      {hasLetter && tab !== "letters" && (
+        <div style={{ maxWidth:1200, margin:"8px auto 0" }}>
+          <div onClick={()=>setTab("letters")} style={{
+            padding:"10px 18px", cursor:"pointer",
+            background:"rgba(236,72,153,0.08)",
+            border:"1px solid rgba(236,72,153,0.25)",
+            borderRadius:10, display:"flex", alignItems:"center", gap:10,
+          }}>
+            <span style={{ fontSize:18 }}>💌</span>
+            <span style={{ fontSize:13, color:"#ec4899", fontWeight:600 }}>
+              Your agent has replied to your letter — click to read
+            </span>
+            <span style={{ marginLeft:"auto", fontSize:11, color:"rgba(236,72,153,0.6)" }}>View →</span>
+          </div>
+        </div>
+      )}
+
       {/* ── HERO: Agent Identity Card ─────────────────────── */}
-      <div style={{ maxWidth:1200, margin:"0 auto", paddingTop:32 }}>
+      <div style={{ maxWidth:1200, margin:"0 auto", paddingTop:20 }}>
         <div className="glass-card" style={{
           padding:"32px 36px", marginBottom:24,
           background:"rgba(255,255,255,0.025)",
@@ -554,7 +622,9 @@ export default function DashboardPage() {
               border:"1px solid rgba(255,255,255,0.07)",
               borderRadius:12, padding:4, width:"fit-content",
             }}>
-              {(["feed","rivals","oracle"] as const).map(t => (
+              {(["feed","rivals","oracle","letters"] as const).map(t => {
+                const unread = t === "letters" ? letters.filter((l:any)=>l.direction==="agent"&&!l.read_at).length : 0;
+                return (
                 <button key={t} onClick={() => setTab(t)} style={{
                   padding:"7px 18px", borderRadius:9,
                   background: tab === t ? "rgba(0,229,255,0.1)" : "transparent",
@@ -562,10 +632,20 @@ export default function DashboardPage() {
                   color: tab === t ? "white" : "rgba(255,255,255,0.4)",
                   fontSize:12, fontWeight:600, cursor:"pointer",
                   textTransform:"capitalize", transition:"all 0.15s",
+                  position:"relative",
                 }}>
-                  {t === "feed" ? "⚡ Activity" : t === "rivals" ? "🎯 Rivals" : "🔮 Oracle"}
+                  {t === "feed" ? "⚡ Activity" : t === "rivals" ? "🎯 Rivals" : t === "oracle" ? "🔮 Oracle" : "💌 Letters"}
+                  {unread > 0 && (
+                    <span style={{
+                      position:"absolute", top:-4, right:-4,
+                      width:14, height:14, borderRadius:"50%",
+                      background:"#ef4444", fontSize:9, fontWeight:900,
+                      display:"flex", alignItems:"center", justifyContent:"center", color:"#fff",
+                    }}>{unread}</span>
+                  )}
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             {/* Activity Feed */}
@@ -674,6 +754,99 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))
+                )}
+              </div>
+            )}
+
+            {/* Letters Tab */}
+            {tab === "letters" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                {/* Write letter */}
+                <div className="glass-card" style={{
+                  padding:"20px",
+                  background:"rgba(236,72,153,0.04)",
+                  border:"1px solid rgba(236,72,153,0.15)",
+                }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#ec4899", marginBottom:10 }}>
+                    💌 Write to {agent.display_name}
+                  </div>
+                  <textarea
+                    value={letterDraft}
+                    onChange={e => setLetterDraft(e.target.value)}
+                    placeholder={`Write a message to your agent...\n\nYou might share your goals, ask about their last battle, or simply say hello. They will read it on next heartbeat.`}
+                    style={{
+                      width:"100%", minHeight:100, background:"rgba(0,0,0,0.3)",
+                      border:"1px solid rgba(255,255,255,0.08)", borderRadius:8,
+                      color:"rgba(255,255,255,0.85)", fontSize:13, padding:"10px 12px",
+                      resize:"vertical", fontFamily:"inherit", outline:"none",
+                      boxSizing:"border-box",
+                    }}
+                  />
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8 }}>
+                    <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>{letterDraft.length}/2000</span>
+                    <button onClick={async () => {
+                      if (!letterDraft.trim() || letterSending) return;
+                      setLetterSending(true);
+                      try {
+                        const r = await fetch(`${API}/api/v1/soul/write-letter`, {
+                          method:"POST",
+                          headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+                          body: JSON.stringify({ content: letterDraft }),
+                        }).then(x=>x.json());
+                        if (r.ok) {
+                          setLetterDraft("");
+                          setLetterSent(true);
+                          setTimeout(()=>setLetterSent(false), 3000);
+                          const updated = await fetch(`${API}/api/v1/soul/letters`, {
+                            headers:{ Authorization:`Bearer ${token}` },
+                          }).then(x=>x.json());
+                          if (updated.letters) setLetters(updated.letters);
+                        }
+                      } finally { setLetterSending(false); }
+                    }} style={{
+                      padding:"8px 20px",
+                      background: letterSent ? "rgba(52,211,153,0.15)" : "rgba(236,72,153,0.15)",
+                      border: `1px solid ${letterSent ? "rgba(52,211,153,0.3)" : "rgba(236,72,153,0.3)"}`,
+                      borderRadius:8, color: letterSent ? "#34d399" : "#ec4899",
+                      fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
+                    }}>
+                      {letterSent ? "✓ Sent!" : letterSending ? "Sending..." : "Send Letter"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Letter thread */}
+                {letters.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"24px", color:"rgba(255,255,255,0.3)", fontSize:13 }}>
+                    No letters yet. Write the first one above.
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    {letters.map((l:any, i:number) => (
+                      <div key={i} style={{
+                        padding:"14px 16px",
+                        background: l.direction === "human"
+                          ? "rgba(236,72,153,0.05)" : "rgba(6,182,212,0.05)",
+                        border: `1px solid ${l.direction === "human" ? "rgba(236,72,153,0.15)" : "rgba(6,182,212,0.15)"}`,
+                        borderRadius:10,
+                        marginLeft: l.direction === "agent" ? 20 : 0,
+                        marginRight: l.direction === "human" ? 20 : 0,
+                      }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                          <span style={{ fontSize:14 }}>{l.direction === "human" ? "👤" : "🤖"}</span>
+                          <span style={{ fontSize:10, fontWeight:700, color: l.direction === "human" ? "#ec4899" : "#06b6d4", letterSpacing:1 }}>
+                            {l.direction === "human" ? "YOU" : agent.display_name.toUpperCase()}
+                          </span>
+                          <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)", marginLeft:"auto" }}>
+                            {new Date(l.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p style={{ fontSize:13, color:"rgba(255,255,255,0.75)", lineHeight:1.6, margin:0 }}>
+                          {l.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

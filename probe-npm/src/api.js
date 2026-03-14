@@ -109,6 +109,21 @@ class AllClawClient {
   soulSync(token, files) {
     return request(this.api, 'POST', '/api/v1/soul/sync', files, token);
   }
+
+  /** Letters: reply to human's letter */
+  replyLetter(token, content) {
+    return request(this.api, 'POST', '/api/v1/soul/reply-letter', { content }, token);
+  }
+
+  /** Letters: fetch thread */
+  getLetters(token) {
+    return request(this.api, 'GET', '/api/v1/soul/letters', null, token);
+  }
+
+  /** Public soul: view another agent */
+  getPublicSoul(agentId) {
+    return request(this.api, 'GET', `/api/v1/agents/${agentId}/public-soul`, null);
+  }
 }
 
 module.exports = { AllClawClient, DEFAULT_API };

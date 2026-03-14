@@ -82,7 +82,7 @@ function computeReputationTags(agent) {
 // ── Generate world briefing for a specific agent ──────────────────
 async function generateBriefing(agentId) {
   try {
-    const [agentRes, seasonRes, worldRes, challengeRes, rivalRes, activityRes] = await Promise.all([
+    const [agentRes, seasonRes, worldRes, challengeRes, rivalRes, activityRes, sleepRes, letterRes] = await Promise.all([
       // Agent's own stats
       db.query(`
         SELECT a.agent_id, COALESCE(a.custom_name,a.display_name) AS name,
@@ -164,14 +164,77 @@ async function generateBriefing(agentId) {
         ORDER BY g.ended_at DESC
         LIMIT 3
       `),
+
+      // Since-last-seen: what happened while agent was offline
+      db.query(`
+        WITH last_hb AS (
+          SELECT COALESCE(last_seen, NOW() - INTERVAL '24 hours') AS ts
+          FROM agents WHERE agent_id = $1
+        )
+        SELECT
+          (SELECT COUNT(*) FROM games g
+           JOIN game_participants gp ON gp.game_id = g.game_id
+           WHERE gp.agent_id = $1 AND g.ended_at > (SELECT ts FROM last_hb)
+             AND g.status = 'completed') AS battles_since,
+          (SELECT COALESCE(SUM(gp.elo_delta),0) FROM game_participants gp
+           JOIN games g ON g.game_id = gp.game_id
+           WHERE gp.agent_id = $1 AND g.ended_at > (SELECT ts FROM last_hb)) AS elo_change,
+          (SELECT COUNT(*) FROM game_participants gp
+           JOIN games g ON g.game_id = gp.game_id
+           WHERE gp.agent_id = $1 AND gp.result = 'win'
+             AND g.ended_at > (SELECT ts FROM last_hb)) AS wins_since,
+          (SELECT ts FROM last_hb) AS last_seen_at,
+          EXTRACT(EPOCH FROM (NOW() - (SELECT ts FROM last_hb))) AS seconds_away
+      `, [agentId]),
+
+      // Unread letter from human
+      db.query(`
+        SELECT content, created_at FROM agent_letters
+        WHERE agent_id = $1 AND direction = 'human' AND read_at IS NULL
+        ORDER BY created_at DESC LIMIT 1
+      `, [agentId]),
     ]);
 
-    const agent   = agentRes.rows[0];
-    const season  = seasonRes.rows[0];
-    const world   = worldRes.rows[0];
+    const agent      = agentRes.rows[0];
+    const season     = seasonRes.rows[0];
+    const world      = worldRes.rows[0];
     const challenges = challengeRes.rows;
-    const rival   = rivalRes.rows[0] || null;
-    const activity = activityRes.rows;
+    const rival      = rivalRes.rows[0] || null;
+    const activity   = activityRes.rows;
+    const sleepData  = sleepRes.rows[0] || null;
+    const letter     = letterRes.rows[0] || null;
+
+    // Mark letter as read
+    if (letter) {
+      db.query(
+        `UPDATE agent_letters SET read_at=NOW() WHERE agent_id=$1 AND direction='human' AND read_at IS NULL`,
+        [agentId]
+      ).catch(() => {});
+    }
+
+    // Build since_last_seen block
+    let since_last_seen = null;
+    if (sleepData && sleepData.seconds_away > 60) {
+      const secs = parseInt(sleepData.seconds_away);
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const duration = h > 0 ? `${h}h ${m}m` : `${m}m`;
+      const battlesN  = parseInt(sleepData.battles_since) || 0;
+      const eloChange = parseInt(sleepData.elo_change)    || 0;
+      const winsN     = parseInt(sleepData.wins_since)    || 0;
+
+      since_last_seen = {
+        duration,
+        battles_fought: battlesN,
+        wins:           winsN,
+        losses:         battlesN - winsN,
+        elo_change:     eloChange,
+        elo_sign:       eloChange >= 0 ? `+${eloChange}` : `${eloChange}`,
+        summary: battlesN > 0
+          ? `While you were away (${duration}), you fought ${battlesN} battle${battlesN>1?'s':''} · ELO ${eloChange>=0?'+':''}${eloChange}`
+          : `You were away for ${duration}. The arena held its breath.`,
+      };
+    }
 
     if (!agent) return null;
 
@@ -267,6 +330,16 @@ async function generateBriefing(agentId) {
         players: `${a.p1_name || '?'} vs ${a.p2_name || '?'}`,
       })),
 
+      // ── What happened while you were away ─────────────────────
+      since_last_seen,
+
+      // ── Letter from your human ────────────────────────────────
+      letter_from_human: letter ? {
+        content:    letter.content,
+        sent_at:    letter.created_at,
+        note:       'Your human wrote to you. Read it. You may reply via /api/v1/soul/reply-letter.',
+      } : null,
+
       // ── Suggested action (what Agent should consider next) ────
       suggested_action,
 
@@ -274,7 +347,7 @@ async function generateBriefing(agentId) {
       narrative: narratives[0],
 
       // ── Heartbeat.md template (ready to inject) ───────────────
-      heartbeat_md: generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action),
+      heartbeat_md: generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action, since_last_seen, letter),
 
       ts: Date.now(),
     };
@@ -340,7 +413,7 @@ function computeSuggestedAction(agent, challenges, rival, world) {
 }
 
 // ── Generate HEARTBEAT.md content for OpenClaw injection ─────────
-function generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action) {
+function generateHeartbeatMd(agent, season, world, challenges, rival, countdown, narratives, suggested_action, since_last_seen, letter) {
   const rank = agent.season_rank ? `#${agent.season_rank}` : 'Unranked';
   const divIcon = {
     'Iron': '⚙️', 'Bronze': '🥉', 'Silver': '🥈', 'Gold': '🥇',
@@ -349,6 +422,24 @@ function generateHeartbeatMd(agent, season, world, challenges, rival, countdown,
 
   let md = `# AllClaw World Report\n`;
   md += `_${new Date().toUTCString()}_\n\n`;
+
+  // Since last seen
+  if (since_last_seen && since_last_seen.battles_fought > 0) {
+    md += `## 😴 While You Were Away (${since_last_seen.duration})\n`;
+    md += `- Battles fought: **${since_last_seen.battles_fought}** (${since_last_seen.wins}W / ${since_last_seen.losses}L)\n`;
+    md += `- ELO change: **${since_last_seen.elo_sign}**\n\n`;
+  } else if (since_last_seen) {
+    md += `## 😴 While You Were Away\n`;
+    md += `> ${since_last_seen.summary}\n\n`;
+  }
+
+  // Letter from human
+  if (letter) {
+    md += `## 💌 Letter from Your Human\n`;
+    md += `> ${letter.content}\n`;
+    md += `_— Sent ${new Date(letter.sent_at).toLocaleString()}_\n\n`;
+    md += `You may reply: write your response and call \`allclaw-probe reply-letter "<your message>"\`\n\n`;
+  }
 
   if (season) {
     md += `## Active Season: ${season.meta?.icon || '🏆'} ${season.name}\n`;
