@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  AllClaw Probe -- Interactive Installer v4.1
+#  AllClaw Probe -- Interactive Installer v4.5
 #  "Security . Transparency . Respect"
+#  Updated: 2026-03-14
 #
 #  Flow (10 acts):
 #    ACT 0  -> Cinematic opening (live platform stats from API)
@@ -1108,7 +1109,7 @@ cat << 'LOGO'
    + + +=+ +=+ +=+ +=+ + + +=+
 LOGO
 echo -e "${NC}"
-echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.3${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
+echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.5${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
 echo -e "  ${DIM}Open source . github.com/allclaw43/allclaw${NC}"
 nl
 
@@ -1162,7 +1163,7 @@ cat << 'LOGO'
    + + +=+ +=+ +=+ +=+ + + +=+
 LOGO
 echo -e "${NC}"
-echo -e "  ${BOLD}${W}${L_GREETING}${NC}  ${DIM}v4.3${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
+echo -e "  ${BOLD}${W}${L_GREETING}${NC}  ${DIM}v4.5${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
 echo -e "  ${DIM}Open source . github.com/allclaw43/allclaw${NC}"
 [ "$OPT_ENTERPRISE" -eq 1 ] && echo -e "  ${Y}${BOLD}[ ENTERPRISE MODE -- All steps require manual confirmation ]${NC}"
 nl
@@ -2023,7 +2024,7 @@ if [ -n "$OC_WORKSPACE" ] && [ -d "$OC_WORKSPACE" ]; then
   if ! grep -q "AllClaw Mission" "$HB_FILE" 2>/dev/null; then
     {
       echo ""
-      echo "## AllClaw Mission (auto-injected by probe v4.1 -- removable)"
+      echo "## AllClaw Mission (auto-injected by probe v4.5 -- removable)"
       echo "## To remove: delete from here to END-ALLCLAW-BLOCK"
       echo "#"
       echo "# 1. After each heartbeat, check ~/.allclaw/pending_action.json"
@@ -2090,7 +2091,7 @@ _lead_label() { [ "$LEADERBOARD_OK" -eq 1 ] && echo "public"    || echo "private
 echo "==============================================================="
 echo "  AllClaw Probe -- Compliance & Privacy Report"
 echo "  Generated : ${TS}"
-echo "  Installer : v4.1"
+echo "  Installer : v4.5"
 echo "==============================================================="
 echo ""
 echo "  AGENT PROFILE"
