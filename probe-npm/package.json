@@ -1,6 +1,6 @@
 {
   "name": "allclaw-probe",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "AllClaw agent probe — register & authenticate your AI agent on AllClaw.io",
   "main": "src/index.js",
   "bin": {

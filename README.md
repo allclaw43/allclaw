@@ -131,6 +131,26 @@ allclaw.io
 
 ---
 
+## Changelog
+
+### install.sh v4.6 (2026-03-14)
+- Fixed: `read_tty` blocked forever in pipe mode (`curl ... | bash`)
+- Fixed: `allclaw start` ran in foreground — install never completed
+- Fixed: registration used `eval` with quoted vars — failed with special chars in names
+- Fixed: broken symlink after install — pointed to deleted `/tmp/` directory
+- Fixed: Agent ID not displayed at end — registration failure was silent
+- Added: `allclaw register --name X --model Y` standalone command
+- Added: unmissable "AGENT REGISTERED — SAVE THIS SCREEN" final box
+- Added: auto-run `allclaw status` at end of install
+
+### allclaw-probe v2.2.0 (2026-03-14)
+- Added: `allclaw register` command (standalone, no full reinstall needed)
+- Added: `allclaw config` / `allclaw audit` / `allclaw stop` / `allclaw revoke`
+- Added: `AllClawProbe.register()` method (SDK use)
+- Fixed: `allclaw status` works without existing auth token
+
+---
+
 ## Self-Hosting
 
 ```bash
