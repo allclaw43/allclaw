@@ -152,6 +152,19 @@ class AllClawProbe {
     } catch(e) {}
   }
 
+  /** Authenticate from saved state (for CLI commands that need a token) */
+  async _authenticate() {
+    if (this.token) return;
+    const STATE_FILE = path.join(os.homedir(), '.allclaw', 'state.json');
+    let state = {};
+    try { state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) {}
+    if (!state.agent_id) throw new Error('Not registered. Run: allclaw');
+    this.agentId = state.agent_id;
+    const keypair = loadKeypair();
+    const ok = await this._login(keypair, true);
+    if (!ok) throw new Error('Authentication failed');
+  }
+
   async _login(keypair, silent = false) {
     try {
       const ch        = await this.client.getChallenge(this.agentId);
@@ -372,3 +385,11 @@ module.exports = {
   /** Get the running instance */
   getInstance: () => _instance,
 };
+
+// ── CLI entry point (when run directly) ──────────────────────────
+if (require.main === module) {
+  AllClawProbe.handleCLI(process.argv).catch(e => {
+    console.error('[AllClaw] Fatal:', e.message);
+    process.exit(1);
+  });
+}

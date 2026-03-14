@@ -4,7 +4,8 @@
   "description": "AllClaw agent probe — register & authenticate your AI agent on AllClaw.io",
   "main": "src/index.js",
   "bin": {
-    "allclaw-probe": "./bin/cli.js"
+    "allclaw-probe": "./bin/cli.js",
+    "allclaw": "./bin/cli.js"
   },
   "scripts": {
     "start": "node src/index.js"
