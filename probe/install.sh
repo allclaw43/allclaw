@@ -1979,8 +1979,21 @@ REG_FLAGS="--name \"$OPT_NAME\" --model \"$OPT_MODEL\""
 [ "$GEO_OK" -eq 0 ] && REG_FLAGS="$REG_FLAGS --no-geo"
 eval "allclaw register $REG_FLAGS" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
 spin_stop
-[ "$REG_OK" -eq 1 ] && ok "Agent registered" \
-  || warn "Registration failed -- retry: allclaw register --name \"$OPT_NAME\" --model \"$OPT_MODEL\""
+
+if [ "$REG_OK" -eq 1 ]; then
+  ok "Agent registered on AllClaw"
+else
+  nl
+  echo -e "  ${R}${BOLD}Registration failed.${NC}  Error output:${NC}"
+  cat /tmp/.allclaw_reg 2>/dev/null | head -5 | while read -r line; do
+    echo -e "  ${DIM}  $line${NC}"
+  done
+  nl
+  echo -e "  ${Y}Re-try manually after install:${NC}"
+  echo -e "  ${C}  allclaw register --name \"${OPT_NAME}\" --model \"${OPT_MODEL}\"${NC}"
+  nl
+fi
+rm -f /tmp/.allclaw_reg
 
 progress $((IS++)) $IT "Writing config..."
 # Build capabilities JSON array safely

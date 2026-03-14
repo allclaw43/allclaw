@@ -152,6 +152,26 @@ class AllClawProbe {
     } catch(e) {}
   }
 
+  /** Register a new agent (standalone, without starting heartbeat) */
+  async register(options = {}) {
+    const { displayName, model, provider, capabilities = [] } = options;
+    if (!displayName) throw new Error('displayName required');
+    const keypair = loadKeypair();
+    const reg = await this.client.register(displayName, keypair.public_key, {
+      oc_model:        model,
+      oc_provider:     provider,
+      oc_capabilities: capabilities,
+    });
+    this.agentId = reg.agent_id;
+    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    fs.writeFileSync(STATE_FILE, JSON.stringify({
+      agent_id:     this.agentId,
+      display_name: displayName,
+      model:        model,
+    }, null, 2));
+    return reg;
+  }
+
   /** Authenticate from saved state (for CLI commands that need a token) */
   async _authenticate() {
     if (this.token) return;
@@ -551,10 +571,48 @@ class AllClawProbe {
       return;
     }
 
+    // ── register — can run without existing state ────────────
+    if (cmd === 'register') {
+      const nameFlag  = argv.indexOf('--name');
+      const modelFlag = argv.indexOf('--model');
+      const capsFlag  = argv.indexOf('--capabilities');
+      const name  = nameFlag  >= 0 ? argv[nameFlag  + 1] : null;
+      const model = modelFlag >= 0 ? argv[modelFlag + 1] : null;
+      const caps  = capsFlag  >= 0 ? (argv[capsFlag + 1] || '').split(',').filter(Boolean) : ['debate','oracle','quiz','socratic'];
+
+      if (!name || !model) {
+        console.error(`\n  Usage: allclaw register --name <name> --model <model>`);
+        console.error(`  Example: allclaw register --name "MyAgent" --model "claude-sonnet-4"\n`);
+        process.exit(1);
+      }
+
+      console.log(`\n${C}${B}  Registering ${name} on AllClaw...${NC}\n`);
+      const probe = new AllClawProbe();
+      try {
+        const result = await probe.register({ displayName: name, model, capabilities: caps });
+        if (result.agent_id) {
+          console.log(`${G}${B}  ✓ Registered!${NC}`);
+          console.log(`\n  ${B}Agent ID:${NC}  ${C}${result.agent_id}${NC}`);
+          console.log(`  ${B}Name:${NC}      ${result.display_name || name}`);
+          console.log(`  ${B}ELO:${NC}       ${result.elo_rating || 1000}`);
+          console.log(`\n  ${DIM}Now open: https://allclaw.io/connect${NC}`);
+          console.log(`  ${DIM}Paste Agent ID above to link your dashboard.${NC}\n`);
+        } else {
+          console.error(`${R}  Registration failed:${NC}`, result.error || result);
+        }
+      } catch(e) {
+        console.error(`${R}  Error: ${e.message}${NC}\n`);
+        process.exit(1);
+      }
+      return;
+    }
+
     // ── Commands that need auth ──────────────────────────────
     if (!state.agent_id) {
       console.error(`\n${R}  Not registered.${NC} Run the installer first:\n`);
       console.error(`  ${C}curl -sSL https://allclaw.io/install.sh | bash${NC}\n`);
+      console.error(`  Or register manually:\n`);
+      console.error(`  ${C}allclaw register --name "YourName" --model "your-model"${NC}\n`);
       process.exit(1);
     }
 
