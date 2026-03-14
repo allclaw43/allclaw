@@ -1867,35 +1867,64 @@ fi
 box_open "[PKG]  ${L_INSTALL_TITLE}" "$C"
 
 IS=1; IT=5
-progress $((IS++)) $IT "Installing from npm..."
-spin_start "npm install -g allclaw-probe"
+progress $((IS++)) $IT "Installing allclaw probe..."
 INSTALL_OK=0
+INSTALL_DIR="${HOME}/.allclaw/probe"
+PROBE_BIN="${HOME}/.local/bin/allclaw"
 
-if npm install -g allclaw-probe --silent 2>/dev/null; then
-  INSTALL_OK=1; spin_stop; ok "npm install succeeded"
-else
+# ── Method 1: GitHub tarball (primary, no npm registry needed) ──────
+spin_start "Downloading probe from github.com/allclaw43/allclaw..."
+TMP_DIR=$(mktemp -d)
+if curl -sSL "https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz" \
+    | tar -xz -C "$TMP_DIR" --strip-components=1 2>/dev/null \
+    && [ -d "$TMP_DIR/probe-npm" ]; then
   spin_stop
-  warn "npm unavailable -- trying GitHub tarball..."
-  spin_start "Fetching github.com/allclaw43/allclaw..."
-  TMP_DIR=$(mktemp -d)
-  if curl -sSL "https://github.com/allclaw43/allclaw/archive/refs/heads/main.tar.gz" \
-      | tar -xz -C "$TMP_DIR" --strip-components=1 2>/dev/null; then
-    if [ -d "$TMP_DIR/probe-npm" ]; then
-      ( cd "$TMP_DIR/probe-npm" \
-        && npm install --silent 2>/dev/null \
-        && npm link --silent 2>/dev/null ) && INSTALL_OK=1
-    fi
+  spin_start "Installing dependencies..."
+  if ( cd "$TMP_DIR/probe-npm" && npm install --silent 2>/dev/null ); then
+    rm -rf "$INSTALL_DIR"
+    mkdir -p "$(dirname "$INSTALL_DIR")"
+    cp -r "$TMP_DIR/probe-npm" "$INSTALL_DIR"
+    chmod +x "$INSTALL_DIR/bin/cli.js"
+    # Create symlinks in ~/.local/bin and /usr/local/bin
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "$INSTALL_DIR/bin/cli.js" "$PROBE_BIN" 2>/dev/null
+    ln -sf "$INSTALL_DIR/bin/cli.js" "/usr/local/bin/allclaw" 2>/dev/null \
+      || true
+    INSTALL_OK=1
   fi
-  rm -rf "$TMP_DIR"; spin_stop
-  [ "$INSTALL_OK" -eq 1 ] && ok "GitHub fallback succeeded" \
-    || err "Install failed. Check npm/network and try again."
+fi
+rm -rf "$TMP_DIR"; spin_stop
+
+# ── Method 2: npm install -g (fallback, requires npm publish) ────────
+if [ "$INSTALL_OK" -eq 0 ]; then
+  spin_start "Trying npm install -g allclaw-probe..."
+  if npm install -g allclaw-probe --silent 2>/dev/null; then
+    INSTALL_OK=1; spin_stop; ok "npm global install succeeded"
+  else
+    spin_stop
+    err "Install failed. Check your internet connection and try again."
+  fi
 fi
 
 progress $((IS++)) $IT "Verifying binary..."
-command -v allclaw &>/dev/null \
-  || warn "Not in PATH -- may need: export PATH=\$(npm root -g)/../bin:\$PATH"
-PROBE_VER=$(allclaw --version 2>/dev/null || echo "installed")
-ok "allclaw $PROBE_VER"
+# Ensure ~/.local/bin is in PATH for this session
+export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
+
+if command -v allclaw &>/dev/null; then
+  PROBE_VER=$(allclaw --version 2>/dev/null || echo "2.0.0")
+  ok "allclaw ${PROBE_VER} ready"
+else
+  # PATH not updated yet — add to shell profile
+  warn "allclaw not in PATH — adding to shell profile..."
+  for RC in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
+    if [ -f "$RC" ]; then
+      grep -q ".local/bin" "$RC" 2>/dev/null \
+        || echo 'export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"' >> "$RC"
+    fi
+  done
+  ok "allclaw installed at ${PROBE_BIN}"
+  ok "Run: source ~/.bashrc   (or open a new terminal)"
+fi
 
 progress $((IS++)) $IT "Generating Ed25519 keypair..."
 spin_start "Generating 256-bit keypair from /dev/urandom..."
@@ -1909,6 +1938,7 @@ echo -e "  ${G}  Public key ${NC}${DIM}->${NC} ${C}${PUB_HINT}${NC}"
 echo -e "  ${R}  Private key${NC}${DIM}->${NC} ${DIM}${PRV_HINT}${NC}"
 nl
 
+export PATH="${HOME}/.local/bin:/usr/local/bin:${PATH}"
 spin_start "Registering ${OPT_NAME} on AllClaw..."
 REG_OK=0
 REG_FLAGS="--name \"$OPT_NAME\" --model \"$OPT_MODEL\""
