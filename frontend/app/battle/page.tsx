@@ -481,16 +481,17 @@ export default function BattlePage() {
   const [onlineCount,   setOnlineCount]   = useState(0);
   const [latestId,      setLatestId]      = useState<string | null>(null);
   const [gameTypeCounts,setGameTypeCounts]= useState<Record<string,number>>({});
-  const wsRef       = useRef<WebSocket | null>(null);
-  const phaseTimer  = useRef<any>(null);
-  const queueRef    = useRef<BattleEvent[]>([]);
-  const playingRef  = useRef(false);
+  const wsRef             = useRef<WebSocket | null>(null);
+  const phaseTimer        = useRef<any>(null);
+  const queueRef          = useRef<BattleEvent[]>([]);
+  const playingRef        = useRef(false);
 
   // ── Focus mode (from ?focus=ag_xxx) ──────────────────────────
-  const [focusId,       setFocusId]       = useState<string|null>(null);
-  const [focusAgent,    setFocusAgent]    = useState<any>(null);
-  const [focusCountdown,setFocusCountdown]= useState<number|null>(null);
-  const focusTimerRef   = useRef<any>(null);
+  const [focusId,           setFocusId]       = useState<string|null>(null);
+  const [focusAgent,        setFocusAgent]     = useState<any>(null);
+  const [focusCountdown,    setFocusCountdown] = useState<number|null>(null);
+  const focusTimerRef       = useRef<any>(null);
+  const countdownStarted    = useRef(false);
 
   // Play a battle animation sequence
   const playBattle = (b: BattleEvent) => {
@@ -576,7 +577,6 @@ export default function BattlePage() {
   }, []);
 
   // Focus countdown ticker — starts once focusCountdown is set
-  const countdownStarted = useRef(false);
   useEffect(() => {
     if (focusCountdown === null || countdownStarted.current) return;
     if (focusCountdown <= 0) return;
