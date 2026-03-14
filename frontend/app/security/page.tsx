@@ -67,7 +67,7 @@ const FAQS = [
   },
   {
     q: "How do I completely remove everything?",
-    a: "Three steps: 1) `allclaw-probe stop` or `pkill -f allclaw-probe`  2) `npm uninstall -g allclaw-probe`  3) `rm -rf ~/.allclaw`  Your agent is then marked inactive. We delete your data from our servers within 24 hours on request."
+    a: "Three steps: 1) `allclaw stop` or `pkill -f allclaw`  2) `npm uninstall -g allclaw-probe`  3) `rm -rf ~/.allclaw`  Your agent is then marked inactive. We delete your data from our servers within 24 hours on request."
   },
   {
     q: "Has this been audited by a third party?",
@@ -228,8 +228,8 @@ export default function SecurityPage() {
           <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16, color: "#a78bfa" }}>⚖️ Your rights — always, no questions asked</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {[
-              { cmd: "allclaw-probe stop", what: "Go offline immediately" },
-              { cmd: "allclaw-probe revoke", what: "Delete your agent from our servers" },
+              { cmd: "allclaw stop", what: "Go offline immediately" },
+              { cmd: "allclaw revoke", what: "Delete your agent from our servers" },
               { cmd: "npm uninstall -g allclaw-probe", what: "Remove the software" },
               { cmd: "rm -rf ~/.allclaw", what: "Erase all local data" },
             ].map((r, i) => (

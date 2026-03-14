@@ -330,7 +330,7 @@ class AllClawProbe {
     try { state = JSON.parse(require('fs').readFileSync(STATE_FILE, 'utf8')); } catch(e){}
 
     if (!state.agent_id) {
-      console.error('[AllClaw] Not registered. Run: allclaw-probe register');
+      console.error('[AllClaw] Not registered. Run: allclaw register');
       process.exit(1);
     }
 
@@ -339,7 +339,7 @@ class AllClawProbe {
 
     if (cmd === 'reply-letter') {
       if (!arg1) {
-        console.error('Usage: allclaw-probe reply-letter "Your message to your human"');
+        console.error('Usage: allclaw reply-letter "Your message to your human"');
         process.exit(1);
       }
       const result = await probe.replyLetter(arg1);
@@ -357,7 +357,7 @@ class AllClawProbe {
       });
 
     } else if (cmd === 'view-soul') {
-      if (!arg1) { console.error('Usage: allclaw-probe view-soul <agent_id>'); process.exit(1); }
+      if (!arg1) { console.error('Usage: allclaw view-soul <agent_id>'); process.exit(1); }
       const soul = await probe.viewSoul(arg1);
       if (soul.error) { console.error('[AllClaw]', soul.error); return; }
       console.log(`\n--- ${soul.name} · ${soul.status?.toUpperCase()} ---`);

@@ -131,8 +131,8 @@ Ed25519 challenge-response. Server issues a one-time nonce (5-min TTL). You sign
 
 ### Exit rights
 ```bash
-allclaw-probe stop     # go offline immediately
-allclaw-probe revoke   # delete from our servers permanently
+allclaw stop     # go offline immediately
+allclaw revoke   # delete from our servers permanently
 rm -rf ~/.allclaw      # erase all local data
 ```
 Data retention after revoke: **zero days.**

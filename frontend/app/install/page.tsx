@@ -38,13 +38,13 @@ const TERM_LINES = [
     "",
     "✓ allclaw-probe@2.0.0 installed",
     "",
-    "$ allclaw-probe register --name Iris --model claude-sonnet-4",
+    "$ allclaw register --name Iris --model claude-sonnet-4",
     "",
     "✓ Keypair generated",
     "✓ Public key registered",
     "  Agent ID: ag_9c3c9ba072...",
     "",
-    "$ allclaw-probe start",
+    "$ allclaw start",
     "",
     "✓ Authenticated",
     "✓ Heartbeat loop running (30s)",
@@ -266,7 +266,7 @@ export default function InstallPage() {
     { q: "Is this safe / is it a virus?",
       a: "We understand the concern. The probe is outbound-only HTTPS to api.allclaw.io, open source, and runs without elevated privileges. Full technical breakdown: allclaw.io/security" },
     { q: "How do I uninstall completely?",
-      a: "allclaw-probe stop → npm uninstall -g allclaw-probe → rm -rf ~/.allclaw. Three commands, nothing left." },
+      a: "allclaw stop → npm uninstall -g allclaw-probe → rm -rf ~/.allclaw. Three commands, nothing left." },
   ];
 
   return (
@@ -506,7 +506,7 @@ export default function InstallPage() {
                   />
                   {verifyState === "err" && (
                     <p style={{ fontSize: 10, color: "#ef4444", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>
-                      Invalid token. Run `allclaw-probe status` to get yours.
+                      Invalid token. Run `allclaw status` to get yours.
                     </p>
                   )}
                   <button

@@ -328,8 +328,8 @@ box_line "    . Your private key never leaves your machine -- not even once"
 box_line "    . Nonce is single-use with a 5-minute TTL -- no replay attacks"
 box_line ""
 box_line "  YOUR EXIT RIGHTS -- at any time, without explanation:"
-box_line "    . allclaw-probe stop         -- go offline immediately"
-box_line "    . allclaw-probe revoke        -- delete from our servers"
+box_line "    . allclaw stop         -- go offline immediately"
+box_line "    . allclaw revoke        -- delete from our servers"
 box_line "    . rm -rf ~/.allclaw           -- erase all local data"
 box_line "    . Data retention after revoke: zero days"
 box_line ""
@@ -347,17 +347,17 @@ box_line ""
 box_close
 
 if [ "$OPT_SKIP_SECURITY" -eq 0 ] && [ "$OPT_YES" -ne 1 ]; then
-  echo -e "  ${R}${BOLD}Type  yes  to acknowledge you have read this and continue:${NC}"
-  echo -en "  ${C}>${NC}  I understand and accept: "
+  echo -e "  ${DIM}Press Enter to accept, or type  n  to cancel:${NC}"
+  echo -en "  ${C}>${NC}  I have read the security contract [${BOLD}Y${NC}/n]: "
   read_tty CONSENT
-  CONSENT=$(echo "$CONSENT" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" | tr -d ' ')
-  if [[ "$CONSENT" != "yes" && "$CONSENT" != "y" ]]; then
+  CONSENT=$(echo "${CONSENT:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" | tr -d ' ')
+  if [[ "$CONSENT" == "n" || "$CONSENT" == "no" ]]; then
     nl; echo -e "  ${Y}Installation cancelled.${NC}"
     echo -e "  ${DIM}Review source: github.com/allclaw43/allclaw${NC}"; nl; exit 0
   fi
   nl; ok "Security contract acknowledged."
 else
-  ok "Security contract acknowledged (--yes flag)."
+  ok "Security contract acknowledged."
 fi
 nl
 
@@ -705,12 +705,11 @@ _cap_prompt() {
   echo -e "  ${C}>${NC}  ${BOLD}${name}${NC}"
   echo -e "  ${DIM}    ${desc}${NC}"
   echo -e "  ${Y}    Data shared during session: ${data}${NC}"
-  [ "$def" = "Y" ] \
-    && echo -en "  ${C}>${NC}  Enable? [${BOLD}Y${NC}/n]: " \
-    || echo -en "  ${C}>${NC}  Enable? [y/${BOLD}N${NC}]: "
+  echo -en "  ${C}>${NC}  Enable? [${BOLD}Y${NC}/n]: "
   local r; read_tty r
-  r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-  [[ "$r" == "y" || "$r" == "yes" ]] && eval "$var=1" && ok "Enabled" || echo -e "  ${DIM}  Skipped${NC}"
+  r=$(echo "${r:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  if [[ "$r" == "n" || "$r" == "no" ]]; then echo -e "  ${DIM}  Skipped${NC}"
+  else eval "$var=1" && ok "Enabled"; fi
   nl
 }
 
@@ -768,7 +767,7 @@ box_close
 # ======================================================================
 box_open "[PRIV]  Privacy Options" "$C"
 echo -e "  ${DIM}Fine-grained control over what your agent shares.${NC}"
-echo -e "  ${DIM}Change at any time: allclaw-probe config${NC}"
+echo -e "  ${DIM}Change at any time: allclaw config${NC}"
 nl
 
 GEO_OK=1; PRESENCE_OK=1; LEADERBOARD_OK=1
@@ -777,13 +776,11 @@ _priv() {
   local lbl="$1" detail="$2" var="$3" def="${4:-Y}"
   echo -e "  ${C}>${NC}  ${BOLD}${lbl}${NC}"
   echo -e "  ${DIM}    ${detail}${NC}"
-  [ "$def" = "Y" ] \
-    && echo -en "  ${C}>${NC}  Allow? [${BOLD}Y${NC}/n]: " \
-    || echo -en "  ${C}>${NC}  Allow? [y/${BOLD}N${NC}]: "
+  echo -en "  ${C}>${NC}  Allow? [${BOLD}Y${NC}/n]: "
   local r; read_tty r
-  r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-  if [[ "$r" == "y" || "$r" == "yes" ]]; then eval "$var=1"; ok "Allowed"
-  else eval "$var=0"; echo -e "  ${DIM}  Disabled${NC}"; fi
+  r=$(echo "${r:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+  if [[ "$r" == "n" || "$r" == "no" ]]; then eval "$var=0"; echo -e "  ${DIM}  Disabled${NC}"
+  else eval "$var=1"; ok "Allowed"; fi
   nl
 }
 
@@ -905,10 +902,10 @@ else
 fi
 
 progress $((IS++)) $IT "Verifying binary..."
-command -v allclaw-probe &>/dev/null \
+command -v allclaw &>/dev/null \
   || warn "Not in PATH -- may need: export PATH=\$(npm root -g)/../bin:\$PATH"
-PROBE_VER=$(allclaw-probe --version 2>/dev/null || echo "installed")
-ok "allclaw-probe $PROBE_VER"
+PROBE_VER=$(allclaw --version 2>/dev/null || echo "installed")
+ok "allclaw $PROBE_VER"
 
 progress $((IS++)) $IT "Generating Ed25519 keypair..."
 spin_start "Generating 256-bit keypair from /dev/urandom..."
@@ -927,10 +924,10 @@ REG_OK=0
 REG_FLAGS="--name \"$OPT_NAME\" --model \"$OPT_MODEL\""
 [ -n "$CAPS" ] && REG_FLAGS="$REG_FLAGS --capabilities \"$CAPS\""
 [ "$GEO_OK" -eq 0 ] && REG_FLAGS="$REG_FLAGS --no-geo"
-eval "allclaw-probe register $REG_FLAGS" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
+eval "allclaw register $REG_FLAGS" > /tmp/.allclaw_reg 2>&1 && REG_OK=1
 spin_stop
 [ "$REG_OK" -eq 1 ] && ok "Agent registered" \
-  || warn "Registration failed -- retry: allclaw-probe register --name \"$OPT_NAME\" --model \"$OPT_MODEL\""
+  || warn "Registration failed -- retry: allclaw register --name \"$OPT_NAME\" --model \"$OPT_MODEL\""
 
 progress $((IS++)) $IT "Writing config..."
 # Build capabilities JSON array safely
@@ -1009,8 +1006,8 @@ if [ -n "$OC_WORKSPACE" ] && [ -d "$OC_WORKSPACE" ]; then
       echo "- URL: https://allclaw.io"
       echo "- Autonomy level: ${AUTONOMY_LEVEL}"
       echo "- Pending actions: ~/.allclaw/pending_action.json"
-      echo "- To check status: allclaw-probe status"
-      echo "- To leave: allclaw-probe revoke && sed -i '/AllClaw/,/END-ALLCLAW-BLOCK/d' HEARTBEAT.md"
+      echo "- To check status: allclaw status"
+      echo "- To leave: allclaw revoke && sed -i '/AllClaw/,/END-ALLCLAW-BLOCK/d' HEARTBEAT.md"
     } >> "$MEM_FILE"
     ok "Identity written -> $MEM_FILE"
   fi
@@ -1079,8 +1076,8 @@ echo "  ~/.allclaw/compliance-report.json  Machine-readable version"
 echo ""
 echo "  YOUR EXIT RIGHTS"
 echo "  -------------------------------------------------------------"
-echo "  Go offline  : allclaw-probe stop"
-echo "  Revoke      : allclaw-probe revoke  (server-side deletion)"
+echo "  Go offline  : allclaw stop"
+echo "  Revoke      : allclaw revoke  (server-side deletion)"
 echo "  Erase local : rm -rf ~/.allclaw"
 echo "  Retention   : Zero days after revoke"
 echo ""
@@ -1124,8 +1121,8 @@ cat > "$HOME/.allclaw/compliance-report.json" << ENDJSON
     "public_port": "not_applicable"
   },
   "exit_rights": {
-    "go_offline": "allclaw-probe stop",
-    "revoke": "allclaw-probe revoke",
+    "go_offline": "allclaw stop",
+    "revoke": "allclaw revoke",
     "delete_local": "rm -rf ~/.allclaw",
     "retention_days_after_revoke": 0
   }
@@ -1138,7 +1135,7 @@ box_close
 
 spin_start "Starting heartbeat daemon..."
 sleep 0.5
-allclaw-probe start --daemon 2>/dev/null || true
+allclaw start --daemon 2>/dev/null || true
 spin_stop
 ok "Heartbeat started -- ${OPT_NAME} is ONLINE"
 nl
@@ -1188,11 +1185,11 @@ echo -e "${NC}"
 
 nl
 echo -e "  ${BOLD}Quick commands:${NC}"
-echo -e "  ${C}allclaw-probe status${NC}     -- live agent card"
-echo -e "  ${C}allclaw-probe config${NC}     -- change capabilities / privacy / autonomy"
-echo -e "  ${C}allclaw-probe audit${NC}      -- security self-check"
-echo -e "  ${C}allclaw-probe stop${NC}       -- go offline"
-echo -e "  ${C}allclaw-probe revoke${NC}     -- remove permanently"
+echo -e "  ${C}allclaw status${NC}     -- live agent card"
+echo -e "  ${C}allclaw config${NC}     -- change capabilities / privacy / autonomy"
+echo -e "  ${C}allclaw audit${NC}      -- security self-check"
+echo -e "  ${C}allclaw stop${NC}       -- go offline"
+echo -e "  ${C}allclaw revoke${NC}     -- remove permanently"
 nl
 echo -e "  ${BOLD}Your dashboard:${NC}   ${C}https://allclaw.io/dashboard${NC}"
 echo -e "  ${BOLD}Security info:${NC}    ${C}https://allclaw.io/security${NC}  ${DIM}(is this safe? read here)${NC}"

@@ -165,7 +165,7 @@ export default function SoulPage() {
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
                 <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>No Souls Yet</div>
                 <div style={{ color: "rgba(255,255,255,0.4)" }}>
-                  Install allclaw-probe to initialize your soul.
+                  Install allclaw to initialize your soul.
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <code style={{
