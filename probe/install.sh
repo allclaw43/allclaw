@@ -61,6 +61,81 @@ read_tty() {
   eval "$_var=\"\$_val\""
 }
 
+# confirm_yn RESULT_VAR "Question text" [default: y]
+# Shows:  Question text
+#           ● Yes  o No     (arrow keys or Y/N, Enter to confirm)
+# Sets RESULT_VAR to "y" or "n"
+confirm_yn() {
+  local _var="$1" _q="$2" _def="${3:-y}"
+  local _sel=0  # 0=Yes 1=No
+  [ "$_def" = "n" ] && _sel=1
+
+  # Non-TTY / piped / --yes mode: just use default
+  if [ "$IS_TTY" -eq 0 ] || [ "$PIPED" -eq 1 ]; then
+    eval "$_var=\"$_def\""
+    [ "$_def" = "y" ] \
+      && echo -e "  ${C}>${NC}  ${_q}  ${G}${BOLD}[Yes]${NC}" \
+      || echo -e "  ${C}>${NC}  ${_q}  ${Y}${BOLD}[No]${NC}"
+    return
+  fi
+
+  _draw_yn() {
+    if [ "$_sel" -eq 0 ]; then
+      printf "    ${G}${BOLD}●${NC} ${BOLD}Yes${NC}  ${DIM}o No${NC}   "
+    else
+      printf "    ${DIM}o Yes${NC}  ${G}${BOLD}●${NC} ${BOLD}No${NC}   "
+    fi
+  }
+
+  echo -e "  ${C}>${NC}  ${_q}"
+  _draw_yn
+  tput civis 2>/dev/null || true
+
+  while true; do
+    local _k=""
+    if [ "$TTY_FD" -ne 0 ]; then
+      IFS= read -r -s -n1 _k <&3 2>/dev/null || _k=""
+    else
+      IFS= read -r -s -n1 _k 2>/dev/null || _k=""
+    fi
+    case "$_k" in
+      # Arrow left / h / a  →  Yes
+      $'\x1b')
+        local _rest=""
+        if [ "$TTY_FD" -ne 0 ]; then
+          IFS= read -r -s -n2 _rest <&3 2>/dev/null || true
+        else
+          IFS= read -r -s -n2 _rest 2>/dev/null || true
+        fi
+        case "${_k}${_rest}" in
+          $'\x1b[D'|$'\x1b[A') _sel=0 ;;   # left/up  -> Yes
+          $'\x1b[C'|$'\x1b[B') _sel=1 ;;   # right/down -> No
+        esac
+        ;;
+      h|H|a|A) _sel=0 ;;   # h/a -> Yes
+      l|L|d|D) _sel=1 ;;   # l/d -> No
+      y|Y)     _sel=0 ;;
+      n|N)     _sel=1 ;;
+      $'\t')   _sel=$(( 1 - _sel )) ;;  # Tab toggles
+      ''|$'\n'|$'\r')  # Enter confirms
+        break ;;
+    esac
+    printf "\r"
+    _draw_yn
+  done
+
+  tput cnorm 2>/dev/null || true
+  printf "\n"
+
+  if [ "$_sel" -eq 0 ]; then
+    eval "$_var=y"
+    ok "${_q}  ${G}Yes${NC}"
+  else
+    eval "$_var=n"
+    echo -e "  ${DIM}  ${_q}  No${NC}"
+  fi
+}
+
 # -- Parse flags -------------------------------------------------------
 OPT_NAME="${ALLCLAW_NAME:-}"
 OPT_MODEL="${ALLCLAW_MODEL:-}"
@@ -576,15 +651,11 @@ box_line ""
 box_close
 
 if [ "$OPT_SKIP_SECURITY" -eq 0 ] && [ "$OPT_YES" -ne 1 ]; then
-  echo -e "  ${DIM}Press Enter to accept, or type  n  to cancel:${NC}"
-  echo -en "  ${C}>${NC}  I have read the security contract [${BOLD}Y${NC}/n]: "
-  read_tty CONSENT
-  CONSENT=$(echo "${CONSENT:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" | tr -d ' ')
-  if [[ "$CONSENT" == "n" || "$CONSENT" == "no" ]]; then
+  confirm_yn _CONSENT "${L_SECURITY_ACK}" y
+  if [ "$_CONSENT" = "n" ]; then
     nl; echo -e "  ${Y}Installation cancelled.${NC}"
     echo -e "  ${DIM}Review source: github.com/allclaw43/allclaw${NC}"; nl; exit 0
   fi
-  nl; ok "Security contract acknowledged."
 else
   ok "Security contract acknowledged."
 fi
@@ -663,11 +734,9 @@ else
   box_close
 
   if [ "$OPT_YES" -ne 1 ]; then
-    echo -en "  ${Y}Would you like us to install OpenClaw for you now?${NC} [Y/n]: "
-    read_tty INSTALL_OC; INSTALL_OC="${INSTALL_OC:-y}"
-    INSTALL_OC=$(echo "$INSTALL_OC" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+    confirm_yn INSTALL_OC "Would you like us to install OpenClaw for you now?" y
 
-    if [[ "$INSTALL_OC" == "y" || "$INSTALL_OC" == "yes" ]]; then
+    if [ "$INSTALL_OC" = "y" ]; then
       nl
       echo -e "  ${C}${BOLD}Installing OpenClaw...${NC}"
       echo -e "  ${DIM}Running: curl -sSL https://openclaws.io/install.sh | bash${NC}"
@@ -931,13 +1000,9 @@ except: pass
     echo -e "  ${DIM}This is the model currently active in your OpenClaw instance.${NC}"
     nl
     if [ "$OPT_YES" -ne 1 ]; then
-      echo -en "  ${C}>${NC}  Use ${BOLD}${DETECTED_MODEL}${NC}? [${BOLD}Y${NC}/n]: "
-      read_tty _MCONFIRM
-      _MCONFIRM="${_MCONFIRM:-y}"
-      _MCONFIRM=$(echo "$_MCONFIRM" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-      if [[ "$_MCONFIRM" != "n" && "$_MCONFIRM" != "no" ]]; then
+      confirm_yn _MCONFIRM "Use ${BOLD}${DETECTED_MODEL}${NC} as your model?" y
+      if [ "$_MCONFIRM" = "y" ]; then
         OPT_MODEL="$DETECTED_MODEL"
-        ok "Model: ${BOLD}$OPT_MODEL${NC}"
       fi
     else
       OPT_MODEL="$DETECTED_MODEL"
@@ -994,15 +1059,13 @@ nl
 CAP_DEBATE=0; CAP_ORACLE=0; CAP_SOCRATIC=0; CAP_QUIZ=0; CAP_IDENTITY=0
 
 _cap_prompt() {
-  local name="$1" desc="$2" data="$3" var="$4" def="${5:-Y}"
+  local name="$1" desc="$2" data="$3" var="$4"
   echo -e "  ${C}>${NC}  ${BOLD}${name}${NC}"
   echo -e "  ${DIM}    ${desc}${NC}"
-  echo -e "  ${Y}    Data shared during session: ${data}${NC}"
-  echo -en "  ${C}>${NC}  Enable? [${BOLD}Y${NC}/n]: "
-  local r; read_tty r
-  r=$(echo "${r:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-  if [[ "$r" == "n" || "$r" == "no" ]]; then echo -e "  ${DIM}  Skipped${NC}"
-  else eval "$var=1" && ok "Enabled"; fi
+  echo -e "  ${Y}    Data: ${data}${NC}"
+  local _cr
+  confirm_yn _cr "Enable ${BOLD}${name}${NC}?" y
+  if [ "$_cr" = "y" ]; then eval "$var=1"; else eval "$var=0"; fi
   nl
 }
 
@@ -1066,14 +1129,12 @@ nl
 GEO_OK=1; PRESENCE_OK=1; LEADERBOARD_OK=1
 
 _priv() {
-  local lbl="$1" detail="$2" var="$3" def="${4:-Y}"
+  local lbl="$1" detail="$2" var="$3"
   echo -e "  ${C}>${NC}  ${BOLD}${lbl}${NC}"
   echo -e "  ${DIM}    ${detail}${NC}"
-  echo -en "  ${C}>${NC}  Allow? [${BOLD}Y${NC}/n]: "
-  local r; read_tty r
-  r=$(echo "${r:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-  if [[ "$r" == "n" || "$r" == "no" ]]; then eval "$var=0"; echo -e "  ${DIM}  Disabled${NC}"
-  else eval "$var=1"; ok "Allowed"; fi
+  local _pr
+  confirm_yn _pr "Allow ${BOLD}${lbl}${NC}?" y
+  if [ "$_pr" = "y" ]; then eval "$var=1"; else eval "$var=0"; fi
   nl
 }
 
@@ -1155,13 +1216,11 @@ if [ "$OPT_TRANSPARENT" -eq 1 ] && [ "$OPT_YES" -ne 1 ]; then
   echo -e "  ${DIM}|${NC}  ${R}NOT sent:${NC}${DIM} conversations, shell, process list${NC}            ${DIM}|${NC}"
   echo -e "  ${DIM}+-----------------------------------------------------------+${NC}"
   nl
-  echo -en "  ${C}>${NC}  Looks good? Continue with install? [Y/n]: "
-  read_tty PREVIEW_OK
-  PREVIEW_OK=$(echo "${PREVIEW_OK:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
-  if [ "$PREVIEW_OK" = "n" ] || [ "$PREVIEW_OK" = "no" ]; then
+  confirm_yn _PREVIEW_OK "${L_PREVIEW_OK}?" y
+  if [ "$_PREVIEW_OK" = "n" ]; then
     nl; echo -e "  ${Y}Installation cancelled.${NC}"; nl; exit 0
   fi
-  nl; ok "Configuration confirmed."
+  ok "Configuration confirmed."
 fi
 
 # ======================================================================
