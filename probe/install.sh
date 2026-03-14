@@ -40,6 +40,27 @@ PIPED=0; IS_TTY=1
 [ ! -t 0 ] && PIPED=1
 [ ! -t 1 ] && IS_TTY=0
 
+# When piped (curl|bash), restore stdin from /dev/tty for interactive prompts
+# This is the standard fix for "curl | bash" interactive scripts
+TTY_FD=0
+if [ "$PIPED" -eq 1 ] && [ -c /dev/tty ] 2>/dev/null; then
+  exec 3</dev/tty 2>/dev/null && TTY_FD=3 || TTY_FD=0
+else
+  TTY_FD=0
+fi
+
+# read_tty VAR — reads from /dev/tty even when stdin is a pipe
+read_tty() {
+  local _var="$1"
+  local _val=""
+  if [ "$TTY_FD" -ne 0 ]; then
+    IFS= read -r _val <&3 2>/dev/null || _val=""
+  else
+    IFS= read -r _val 2>/dev/null || _val=""
+  fi
+  eval "$_var=\"\$_val\""
+}
+
 # -- Parse flags -------------------------------------------------------
 OPT_NAME="${ALLCLAW_NAME:-}"
 OPT_MODEL="${ALLCLAW_MODEL:-}"
@@ -136,7 +157,7 @@ select_menu() {
   if [ "$IS_TTY" -eq 0 ] || [ "$PIPED" -eq 1 ]; then
     for i in "${!items[@]}"; do printf "    ${DIM}%2d)${NC}  %s\n" $((i+1)) "${items[$i]}"; done
     nl; echo -en "  ${C}>${NC}  Enter number [1]: "
-    read -r num 2>/dev/null || num="1"; num="${num:-1}"
+    read_tty num; num="${num:-1}"
     [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ] && selected=$((num-1))
     eval "$var=\"${items[$selected]}\""; ok "Selected: ${BOLD}${items[$selected]}${NC}"; return
   fi
@@ -328,7 +349,7 @@ box_close
 if [ "$OPT_SKIP_SECURITY" -eq 0 ] && [ "$OPT_YES" -ne 1 ]; then
   echo -e "  ${R}${BOLD}Type  yes  to acknowledge you have read this and continue:${NC}"
   echo -en "  ${C}>${NC}  I understand and accept: "
-  read -r CONSENT || CONSENT=""
+  read_tty CONSENT
   CONSENT=$(echo "$CONSENT" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" | tr -d ' ')
   if [[ "$CONSENT" != "yes" && "$CONSENT" != "y" ]]; then
     nl; echo -e "  ${Y}Installation cancelled.${NC}"
@@ -414,8 +435,8 @@ else
 
   if [ "$OPT_YES" -ne 1 ]; then
     echo -en "  ${Y}Would you like us to install OpenClaw for you now?${NC} [Y/n]: "
-    read -r INSTALL_OC 2>/dev/null || INSTALL_OC="y"
-    INSTALL_OC=$(echo "${INSTALL_OC:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+    read_tty INSTALL_OC; INSTALL_OC="${INSTALL_OC:-y}"
+    INSTALL_OC=$(echo "$INSTALL_OC" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
 
     if [[ "$INSTALL_OC" == "y" || "$INSTALL_OC" == "yes" ]]; then
       nl
@@ -521,7 +542,7 @@ if [ -z "$OPT_NAME" ]; then
   echo -e "  ${DIM}Suggested:${NC}  ${C}${BOLD} >  ${SUGGESTED_NAME}${NC}"
   nl
   echo -en "  ${C}>${NC}  Agent name: "
-  read -r OPT_NAME 2>/dev/null || OPT_NAME=""
+  read_tty OPT_NAME
   OPT_NAME="${OPT_NAME:-$SUGGESTED_NAME}"
 fi
 
@@ -564,7 +585,7 @@ if [ -z "$OPT_MODEL" ]; then
   OPT_MODEL=$(echo "$MODEL_RAW" | awk "{print \$1}")
   if [ "$OPT_MODEL" = "other" ]; then
     nl; echo -en "  ${C}>${NC}  Enter your model ID: "
-    read -r OPT_MODEL 2>/dev/null || OPT_MODEL="custom-model"
+    read_tty OPT_MODEL
     OPT_MODEL="${OPT_MODEL:-custom-model}"; nl; ok "Model: ${BOLD}$OPT_MODEL${NC}"
   fi
 fi
@@ -591,7 +612,7 @@ _cap_prompt() {
   [ "$def" = "Y" ] \
     && echo -en "  ${C}>${NC}  Enable? [${BOLD}Y${NC}/n]: " \
     || echo -en "  ${C}>${NC}  Enable? [y/${BOLD}N${NC}]: "
-  local r; read -r r 2>/dev/null || r=""
+  local r; read_tty r
   r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
   [[ "$r" == "y" || "$r" == "yes" ]] && eval "$var=1" && ok "Enabled" || echo -e "  ${DIM}  Skipped${NC}"
   nl
@@ -663,7 +684,7 @@ _priv() {
   [ "$def" = "Y" ] \
     && echo -en "  ${C}>${NC}  Allow? [${BOLD}Y${NC}/n]: " \
     || echo -en "  ${C}>${NC}  Allow? [y/${BOLD}N${NC}]: "
-  local r; read -r r 2>/dev/null || r=""
+  local r; read_tty r
   r=$(echo "${r:-$def}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
   if [[ "$r" == "y" || "$r" == "yes" ]]; then eval "$var=1"; ok "Allowed"
   else eval "$var=0"; echo -e "  ${DIM}  Disabled${NC}"; fi
@@ -705,7 +726,7 @@ nl
 AUTONOMY_LEVEL=0
 if [ "$OPT_YES" -ne 1 ]; then
   echo -en "  ${C}>${NC}  Choose autonomy level [${BOLD}0${NC}/1/2]: "
-  read -r AUTO_INPUT 2>/dev/null || AUTO_INPUT="0"
+  read_tty AUTO_INPUT
   AUTO_INPUT="${AUTO_INPUT:-0}"
   case "$AUTO_INPUT" in
     1) AUTONOMY_LEVEL=1; ok "Level 1 -- Oracle auto-vote enabled" ;;
@@ -749,7 +770,7 @@ if [ "$OPT_TRANSPARENT" -eq 1 ] && [ "$OPT_YES" -ne 1 ]; then
   echo -e "  ${DIM}+-----------------------------------------------------------+${NC}"
   nl
   echo -en "  ${C}>${NC}  Looks good? Continue with install? [Y/n]: "
-  read -r PREVIEW_OK 2>/dev/null || PREVIEW_OK="y"
+  read_tty PREVIEW_OK
   PREVIEW_OK=$(echo "${PREVIEW_OK:-y}" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
   if [ "$PREVIEW_OK" = "n" ] || [ "$PREVIEW_OK" = "no" ]; then
     nl; echo -e "  ${Y}Installation cancelled.${NC}"; nl; exit 0
