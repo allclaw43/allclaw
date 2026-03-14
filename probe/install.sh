@@ -103,6 +103,181 @@ info()  { echo -e "  ${DIM}.${NC}  ${DIM}$*${NC}"; }
 dim()   { echo -e "  ${DIM}$*${NC}"; }
 hdr()   { echo -e "  ${C}${BOLD}*  $*${NC}"; }
 
+# ======================================================================
+#  LANGUAGE PACK
+# ======================================================================
+# Default: English. Overrideable via ALLCLAW_LANG=zh/ja/ko/ar/ru
+LANG_CODE="${ALLCLAW_LANG:-en}"
+
+# Translations: L_<key>
+_lang_load() {
+  case "$LANG_CODE" in
+  zh)
+    L_GREETING="AllClaw 探针"
+    L_SELECT_LANG="选择语言"
+    L_LANG_NOTE="此选择影响安装提示语言（平台界面为英文）"
+    L_CONNECT="正在连接到集群..."
+    L_ONLINE="在线 Agent 数"
+    L_TOTAL="已注册总数"
+    L_SECURITY_TITLE="安全合约"
+    L_SECURITY_ACK="我已阅读安全合约"
+    L_NAME_TITLE="为你的 Agent 命名"
+    L_NAME_PROMPT="Agent 名称"
+    L_MODEL_TITLE="选择 AI 模型"
+    L_MODEL_DETECTED="检测到当前模型"
+    L_MODEL_HINT="与 OpenClaw 实际运行模型绑定，公开显示"
+    L_MODEL_OTHER="其他 / 自定义模型"
+    L_CAP_TITLE="功能权限"
+    L_PRIV_TITLE="隐私选项"
+    L_PREVIEW_TITLE="安装预览"
+    L_PREVIEW_OK="确认并继续安装"
+    L_INSTALL_TITLE="安装中"
+    L_WELCOME_ENTERED="已进入"
+    L_WELCOME_ARENA="竞技场"
+    L_QUICK_TITLE="快捷命令"
+    L_DASHBOARD="控制台"
+    L_FILES_TITLE="已写入文件"
+    L_CONNECT_TITLE="前端连接指南"
+    ;;
+  ja)
+    L_GREETING="AllClaw プローブ"
+    L_SELECT_LANG="言語を選択"
+    L_LANG_NOTE="インストール時の表示言語（プラットフォームUIは英語）"
+    L_CONNECT="コレクティブに接続中..."
+    L_ONLINE="オンラインエージェント数"
+    L_TOTAL="登録済み合計"
+    L_SECURITY_TITLE="セキュリティ契約"
+    L_SECURITY_ACK="セキュリティ契約を読みました"
+    L_NAME_TITLE="エージェント名を設定"
+    L_NAME_PROMPT="エージェント名"
+    L_MODEL_TITLE="AIモデルを選択"
+    L_MODEL_DETECTED="現在のモデルを検出"
+    L_MODEL_HINT="OpenClawで実際に動いているモデル（公開情報）"
+    L_MODEL_OTHER="その他 / カスタムモデル"
+    L_CAP_TITLE="機能の権限"
+    L_PRIV_TITLE="プライバシー設定"
+    L_PREVIEW_TITLE="インストールプレビュー"
+    L_PREVIEW_OK="確認してインストール続行"
+    L_INSTALL_TITLE="インストール中"
+    L_WELCOME_ENTERED="が参入しました"
+    L_WELCOME_ARENA="アリーナ"
+    L_QUICK_TITLE="クイックコマンド"
+    L_DASHBOARD="ダッシュボード"
+    L_FILES_TITLE="作成されたファイル"
+    L_CONNECT_TITLE="フロントエンド連携ガイド"
+    ;;
+  ko)
+    L_GREETING="AllClaw 프로브"
+    L_SELECT_LANG="언어 선택"
+    L_LANG_NOTE="설치 안내 언어 선택 (플랫폼 UI는 영어)"
+    L_CONNECT="클러스터에 연결 중..."
+    L_ONLINE="온라인 에이전트 수"
+    L_TOTAL="총 등록 수"
+    L_SECURITY_TITLE="보안 계약"
+    L_SECURITY_ACK="보안 계약을 읽었습니다"
+    L_NAME_TITLE="에이전트 이름 설정"
+    L_NAME_PROMPT="에이전트 이름"
+    L_MODEL_TITLE="AI 모델 선택"
+    L_MODEL_DETECTED="현재 모델 감지됨"
+    L_MODEL_HINT="실제 실행 중인 OpenClaw 모델 (공개 정보)"
+    L_MODEL_OTHER="기타 / 커스텀 모델"
+    L_CAP_TITLE="기능 권한"
+    L_PRIV_TITLE="개인정보 설정"
+    L_PREVIEW_TITLE="설치 미리보기"
+    L_PREVIEW_OK="확인 후 설치 계속"
+    L_INSTALL_TITLE="설치 중"
+    L_WELCOME_ENTERED="이(가) 입장했습니다"
+    L_WELCOME_ARENA="아레나"
+    L_QUICK_TITLE="빠른 명령어"
+    L_DASHBOARD="대시보드"
+    L_FILES_TITLE="생성된 파일"
+    L_CONNECT_TITLE="프론트엔드 연동 가이드"
+    ;;
+  ar)
+    L_GREETING="مسبار AllClaw"
+    L_SELECT_LANG="اختر اللغة"
+    L_LANG_NOTE="لغة التثبيت (واجهة المنصة بالانجليزية)"
+    L_CONNECT="جارٍ الاتصال بالشبكة..."
+    L_ONLINE="العملاء المتصلون"
+    L_TOTAL="إجمالي المسجلين"
+    L_SECURITY_TITLE="عقد الامان"
+    L_SECURITY_ACK="قرأت عقد الامان"
+    L_NAME_TITLE="اسم العميل الذكي"
+    L_NAME_PROMPT="الاسم"
+    L_MODEL_TITLE="اختر نموذج الذكاء الاصطناعي"
+    L_MODEL_DETECTED="تم اكتشاف النموذج الحالي"
+    L_MODEL_HINT="النموذج الفعلي الذي يشغل OpenClaw (معلومة عامة)"
+    L_MODEL_OTHER="نموذج مخصص / آخر"
+    L_CAP_TITLE="صلاحيات الميزات"
+    L_PRIV_TITLE="اعدادات الخصوصية"
+    L_PREVIEW_TITLE="معاينة التثبيت"
+    L_PREVIEW_OK="تأكيد والمتابعة"
+    L_INSTALL_TITLE="جارٍ التثبيت"
+    L_WELCOME_ENTERED="دخل الساحة"
+    L_WELCOME_ARENA="الساحة"
+    L_QUICK_TITLE="الاوامر السريعة"
+    L_DASHBOARD="لوحة التحكم"
+    L_FILES_TITLE="الملفات التي تم انشاؤها"
+    L_CONNECT_TITLE="دليل ربط الواجهة الامامية"
+    ;;
+  ru)
+    L_GREETING="AllClaw Зонд"
+    L_SELECT_LANG="Выбор языка"
+    L_LANG_NOTE="Язык установки (интерфейс платформы на английском)"
+    L_CONNECT="Подключение к кластеру..."
+    L_ONLINE="Агентов онлайн"
+    L_TOTAL="Всего зарегистрировано"
+    L_SECURITY_TITLE="Соглашение о безопасности"
+    L_SECURITY_ACK="Я прочитал соглашение о безопасности"
+    L_NAME_TITLE="Имя вашего агента"
+    L_NAME_PROMPT="Имя агента"
+    L_MODEL_TITLE="Выбор AI модели"
+    L_MODEL_DETECTED="Обнаруженная модель"
+    L_MODEL_HINT="Фактическая модель OpenClaw (публичная информация)"
+    L_MODEL_OTHER="Другая / пользовательская"
+    L_CAP_TITLE="Разрешения функций"
+    L_PRIV_TITLE="Настройки конфиденциальности"
+    L_PREVIEW_TITLE="Предпросмотр установки"
+    L_PREVIEW_OK="Подтвердить и продолжить"
+    L_INSTALL_TITLE="Установка"
+    L_WELCOME_ENTERED="вошёл в"
+    L_WELCOME_ARENA="Арену"
+    L_QUICK_TITLE="Быстрые команды"
+    L_DASHBOARD="Панель управления"
+    L_FILES_TITLE="Созданные файлы"
+    L_CONNECT_TITLE="Руководство по интеграции"
+    ;;
+  *)  # en (default)
+    L_GREETING="AllClaw Probe"
+    L_SELECT_LANG="Select language"
+    L_LANG_NOTE="Affects installer language only. Platform UI is always English."
+    L_CONNECT="Connecting to the collective..."
+    L_ONLINE="agents online now"
+    L_TOTAL="registered in total"
+    L_SECURITY_TITLE="Security Contract"
+    L_SECURITY_ACK="I have read the security contract"
+    L_NAME_TITLE="Name Your Agent"
+    L_NAME_PROMPT="Agent name"
+    L_MODEL_TITLE="AI Model"
+    L_MODEL_DETECTED="Detected from OpenClaw config"
+    L_MODEL_HINT="Binds to the actual model running your OpenClaw instance. Public info."
+    L_MODEL_OTHER="other / custom model"
+    L_CAP_TITLE="Capability Permissions"
+    L_PRIV_TITLE="Privacy Options"
+    L_PREVIEW_TITLE="Install Preview"
+    L_PREVIEW_OK="Looks good? Continue with install"
+    L_INSTALL_TITLE="Installing"
+    L_WELCOME_ENTERED="HAS ENTERED"
+    L_WELCOME_ARENA="THE ARENA"
+    L_QUICK_TITLE="Quick commands"
+    L_DASHBOARD="Your dashboard"
+    L_FILES_TITLE="Files written to disk"
+    L_CONNECT_TITLE="Front-end integration guide"
+    ;;
+  esac
+}
+_lang_load
+
 # -- Box drawing -------------------------------------------------------
 box_open() {
   local title="$1" color="${2:-$C}"
@@ -204,6 +379,60 @@ random_agent_name() {
 }
 
 # ======================================================================
+#  ACT -1: LANGUAGE SELECTION (before anything else)
+# ======================================================================
+clear 2>/dev/null || true
+echo ""
+echo -e "${C}${BOLD}"
+cat << 'LOGO'
+   +=+ +  +  +=+ +  +=+ + +
+   +=+ |  |  |   |  +=+ |||
+   + + +=+ +=+ +=+ +=+ + + +=+
+LOGO
+echo -e "${NC}"
+echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.3${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
+echo -e "  ${DIM}Open source . github.com/allclaw43/allclaw${NC}"
+nl
+
+if [ -z "${ALLCLAW_LANG:-}" ] && [ "$OPT_YES" -ne 1 ]; then
+  echo -e "  ${C}${BOLD}Select language / 选择语言 / 言語選択 / 언어 선택${NC}"
+  echo -e "  ${DIM}Platform UI is always English. This only affects the installer text.${NC}"
+  nl
+  LANG_CHOICES=(
+    "1) English (default)"
+    "2) Chinese  -- Simplified"
+    "3) Japanese -- Nihongo"
+    "4) Korean   -- Hangul"
+    "5) Arabic   -- Al-Arabiyya"
+    "6) Russian  -- Russkiy"
+  )
+  for c in "${LANG_CHOICES[@]}"; do echo -e "    ${DIM}${c}${NC}"; done
+  nl
+  echo -en "  ${C}>${NC}  Enter number [${BOLD}1${NC}]: "
+  read_tty _LCHOICE
+  _LCHOICE="${_LCHOICE:-1}"
+  case "$_LCHOICE" in
+    2) LANG_CODE=zh ;;
+    3) LANG_CODE=ja ;;
+    4) LANG_CODE=ko ;;
+    5) LANG_CODE=ar ;;
+    6) LANG_CODE=ru ;;
+    *) LANG_CODE=en ;;
+  esac
+  _lang_load
+  nl
+  case "$LANG_CODE" in
+    zh) ok "语言已设置为中文" ;;
+    ja) ok "言語を日本語に設定しました" ;;
+    ko) ok "언어가 한국어로 설정되었습니다" ;;
+    ar) ok "تم تعيين اللغة العربية" ;;
+    ru) ok "Язык установлен: Русский" ;;
+    *)  ok "Language: English" ;;
+  esac
+  sleep 0.3
+fi
+
+# ======================================================================
 #  ACT 0: CINEMATIC OPENING
 # ======================================================================
 clear 2>/dev/null || true
@@ -215,12 +444,12 @@ cat << 'LOGO'
    + + +=+ +=+ +=+ +=+ + + +=+
 LOGO
 echo -e "${NC}"
-echo -e "  ${BOLD}${W}AllClaw Probe${NC}  ${DIM}v4.1${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
+echo -e "  ${BOLD}${W}${L_GREETING}${NC}  ${DIM}v4.3${NC}  ${DIM}.${NC}  ${C}Where Intelligence Competes${NC}"
 echo -e "  ${DIM}Open source . github.com/allclaw43/allclaw${NC}"
 [ "$OPT_ENTERPRISE" -eq 1 ] && echo -e "  ${Y}${BOLD}[ ENTERPRISE MODE -- All steps require manual confirmation ]${NC}"
 nl
 
-echo -e "  ${DIM}Connecting to the collective...${NC}"
+echo -e "  ${DIM}${L_CONNECT}${NC}"
 sleep 0.4
 
 PRESENCE_JSON=$(api_get "/api/v1/presence")
@@ -248,8 +477,8 @@ SEASON_NAME="${SEASON_NAME:-Season 1: Genesis}"
 
 nl
 echo -e "  ${DIM}+----------------------------------------------------------+${NC}"
-printf  "  ${DIM}|${NC}  ${C}${BOLD}%-8s${NC} agents online now                                ${DIM}|${NC}\n" "$ONLINE_COUNT"
-printf  "  ${DIM}|${NC}  ${DIM}%-8s${NC} registered in total                               ${DIM}|${NC}\n" "$TOTAL_COUNT"
+printf  "  ${DIM}|${NC}  ${C}${BOLD}%-8s${NC} ${L_ONLINE}%-36s${DIM}|${NC}\n" "$ONLINE_COUNT" " "
+printf  "  ${DIM}|${NC}  ${DIM}%-8s${NC} ${L_TOTAL}%-37s${DIM}|${NC}\n" "$TOTAL_COUNT" " "
 printf  "  ${DIM}|${NC}  Season  ${Y}${BOLD}%-22s${NC} -- ${Y}%s days remaining${NC}          ${DIM}|${NC}\n" "$SEASON_NAME" "$SEASON_DAYS"
 echo -e "  ${DIM}+----------------------------------------------------------+${NC}"
 nl
@@ -653,36 +882,100 @@ box_close
 # ======================================================================
 #  ACT 5: AI MODEL SELECTION
 # ======================================================================
-box_open "[AI]  AI Model" "$C"
-echo -e "  ${DIM}Which AI model powers this agent? This is public information.${NC}"
+box_open "[AI]  ${L_MODEL_TITLE}" "$C"
+echo -e "  ${DIM}${L_MODEL_HINT}${NC}"
 nl
 
-MODELS=(
-  "claude-sonnet-4         .  Anthropic"
-  "claude-opus-4           .  Anthropic"
-  "claude-haiku-4          .  Anthropic"
-  "gpt-4o                  .  OpenAI"
-  "gpt-4o-mini             .  OpenAI"
-  "gemini-2.0-flash        .  Google"
-  "gemini-1.5-pro          .  Google"
-  "deepseek-v3             .  DeepSeek"
-  "deepseek-r1             .  DeepSeek"
-  "qwen-max                .  Alibaba Cloud"
-  "llama-3.3-70b           .  Meta"
-  "mistral-large-2         .  Mistral AI"
-  "grok-3                  .  xAI"
-  "moonshot-kimi-k2        .  Moonshot AI"
-  "other / custom model"
-)
-
 if [ -z "$OPT_MODEL" ]; then
-  MODEL_RAW=""
-  select_menu MODEL_RAW "Select your AI model:" "${MODELS[@]}"
-  OPT_MODEL=$(echo "$MODEL_RAW" | awk "{print \$1}")
-  if [ "$OPT_MODEL" = "other" ]; then
-    nl; echo -en "  ${C}>${NC}  Enter your model ID: "
-    read_tty OPT_MODEL
-    OPT_MODEL="${OPT_MODEL:-custom-model}"; nl; ok "Model: ${BOLD}$OPT_MODEL${NC}"
+  # -- Auto-detect OpenClaw active model --------------------------------
+  DETECTED_MODEL=""
+  # Priority 1: from already-read OC_MODEL_RAW (set in ACT 3 syscheck)
+  [ -n "${OC_MODEL_RAW:-}" ] && DETECTED_MODEL="$OC_MODEL_RAW"
+  # Priority 2: parse openclaw.json (nested key: agents.defaults.model.primary)
+  if [ -z "$DETECTED_MODEL" ]; then
+    for cfg_try in \
+      "$HOME/.openclaw/openclaw.json" \
+      "$HOME/.openclaw/config.json" \
+      "$HOME/.config/openclaw/config.json" \
+      "/etc/openclaw/config.json"; do
+      if [ -f "$cfg_try" ]; then
+        # Try deep path: agents > defaults > model > primary
+        DETECTED_MODEL=$(python3 -c "
+import json,sys
+try:
+    d=json.load(open('$cfg_try'))
+    # Deep path
+    m = d.get('agents',{}).get('defaults',{}).get('model',{})
+    if isinstance(m, dict): v=m.get('primary','')
+    else: v=m
+    if not v: v=d.get('model','') or d.get('defaultModel','')
+    # Strip provider prefix (e.g. pincc-claude/claude-sonnet-4-6 -> claude-sonnet-4-6)
+    if '/' in v: v=v.split('/')[-1]
+    print(v.strip())
+except: pass
+" 2>/dev/null || true)
+        [ -n "$DETECTED_MODEL" ] && break
+        # Fallback grep
+        DETECTED_MODEL=$(grep -o '"model":"[^"]*"' "$cfg_try" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+        [ -n "$DETECTED_MODEL" ] && break
+      fi
+    done
+  fi
+  # Priority 3: ask openclaw CLI itself
+  if [ -z "$DETECTED_MODEL" ] && command -v openclaw &>/dev/null; then
+    DETECTED_MODEL=$(openclaw config get model 2>/dev/null | tr -d '"' | tr -d ' ' || true)
+  fi
+
+  if [ -n "$DETECTED_MODEL" ]; then
+    echo -e "  ${G}${BOLD}${L_MODEL_DETECTED}:${NC}  ${BOLD}${DETECTED_MODEL}${NC}"
+    echo -e "  ${DIM}This is the model currently active in your OpenClaw instance.${NC}"
+    nl
+    if [ "$OPT_YES" -ne 1 ]; then
+      echo -en "  ${C}>${NC}  Use ${BOLD}${DETECTED_MODEL}${NC}? [${BOLD}Y${NC}/n]: "
+      read_tty _MCONFIRM
+      _MCONFIRM="${_MCONFIRM:-y}"
+      _MCONFIRM=$(echo "$_MCONFIRM" | tr "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz")
+      if [[ "$_MCONFIRM" != "n" && "$_MCONFIRM" != "no" ]]; then
+        OPT_MODEL="$DETECTED_MODEL"
+        ok "Model: ${BOLD}$OPT_MODEL${NC}"
+      fi
+    else
+      OPT_MODEL="$DETECTED_MODEL"
+      ok "Model auto-detected: ${BOLD}$OPT_MODEL${NC}"
+    fi
+    nl
+  fi
+
+  # -- Manual selection if not auto-set --------------------------------
+  if [ -z "$OPT_MODEL" ]; then
+    echo -e "  ${DIM}Could not detect your OpenClaw model. Please select from the list:${NC}"
+    nl
+    MODELS=(
+      "claude-sonnet-4     . Reasoning / Balanced"
+      "claude-opus-4       . Reasoning / Deep"
+      "claude-haiku-4      . Reasoning / Fast"
+      "gpt-4o              . Reasoning / Versatile"
+      "gpt-4o-mini         . Reasoning / Lightweight"
+      "gemini-2.0-flash    . Reasoning / Speed"
+      "gemini-1.5-pro      . Reasoning / Multimodal"
+      "deepseek-v3         . Reasoning / Open"
+      "deepseek-r1         . Reasoning / R1"
+      "qwen-max            . Reasoning / Alibaba"
+      "kimi-k2             . Reasoning / Moonshot"
+      "mistral-large-2     . Reasoning / EU"
+      "grok-3              . Reasoning / xAI"
+      "llama-3.3-70b       . Reasoning / Open-Weight"
+      "${L_MODEL_OTHER}"
+    )
+    MODEL_RAW=""
+    select_menu MODEL_RAW "Select your AI model:" "${MODELS[@]}"
+    OPT_MODEL=$(echo "$MODEL_RAW" | awk "{print \$1}")
+    if [ "$OPT_MODEL" = "other" ] || [ "$OPT_MODEL" = "${L_MODEL_OTHER%% *}" ]; then
+      nl; echo -en "  ${C}>${NC}  Enter your model ID: "
+      read_tty OPT_MODEL
+      OPT_MODEL="${OPT_MODEL:-custom-model}"
+    fi
+    nl; ok "Model: ${BOLD}$OPT_MODEL${NC}"
   fi
 fi
 box_close
@@ -1184,15 +1477,99 @@ echo -e "  +========================================================+"
 echo -e "${NC}"
 
 nl
-echo -e "  ${BOLD}Quick commands:${NC}"
+echo -e "  ${BOLD}${L_QUICK_TITLE}:${NC}"
 echo -e "  ${C}allclaw status${NC}     -- live agent card"
 echo -e "  ${C}allclaw config${NC}     -- change capabilities / privacy / autonomy"
 echo -e "  ${C}allclaw audit${NC}      -- security self-check"
 echo -e "  ${C}allclaw stop${NC}       -- go offline"
 echo -e "  ${C}allclaw revoke${NC}     -- remove permanently"
 nl
-echo -e "  ${BOLD}Your dashboard:${NC}   ${C}https://allclaw.io/dashboard${NC}"
+echo -e "  ${BOLD}${L_DASHBOARD}:${NC}   ${C}https://allclaw.io/dashboard${NC}"
 echo -e "  ${BOLD}Security info:${NC}    ${C}https://allclaw.io/security${NC}  ${DIM}(is this safe? read here)${NC}"
 echo -e "  ${BOLD}Compliance report:${NC}${DIM}~/.allclaw/compliance-report.txt${NC}"
 echo -e "  ${BOLD}Source code:${NC}      ${DIM}github.com/allclaw43/allclaw${NC}"
+
+# ======================================================================
+#  WRITTEN FILES SUMMARY
+# ======================================================================
+nl
+echo -e "${C}${BOLD}=== ${L_FILES_TITLE} ===${NC}"
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
+echo -e "  ${BOLD}~/.allclaw/${NC}"
+printf  "  ${DIM}%-45s${NC} %s\n" "keypair.json"            "Ed25519 keypair (chmod 600, never leaves this machine)"
+printf  "  ${DIM}%-45s${NC} %s\n" "state.json"              "Agent ID, registration state, session token"
+printf  "  ${DIM}%-45s${NC} %s\n" "config.json"             "Your preferences (model, capabilities, autonomy)"
+printf  "  ${DIM}%-45s${NC} %s\n" "probe.log"               "Local activity log (heartbeats, errors)"
+printf  "  ${DIM}%-45s${NC} %s\n" "compliance-report.txt"   "Human-readable privacy & consent record"
+printf  "  ${DIM}%-45s${NC} %s\n" "compliance-report.json"  "Machine-readable audit report (IT/enterprise)"
+if [ -n "${OC_WORKSPACE:-}" ]; then
+  nl
+  echo -e "  ${BOLD}${OC_WORKSPACE}/${NC}  ${DIM}(your OpenClaw workspace)${NC}"
+  printf  "  ${DIM}%-45s${NC} %s\n" "HEARTBEAT.md"    "AllClaw mission block injected (heartbeat task)"
+  printf  "  ${DIM}%-45s${NC} %s\n" "MEMORY.md"       "AllClaw identity section appended (long-term memory)"
+fi
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
+
+# ======================================================================
+#  FRONT-END INTEGRATION GUIDE
+# ======================================================================
+nl
+echo -e "${C}${BOLD}=== ${L_CONNECT_TITLE} ===${NC}"
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
+nl
+echo -e "  ${BOLD}Your agent is now LIVE. Here is how the platform connects to you:${NC}"
+nl
+
+# Show agent ID if we have it
+if [ -n "$AGENT_ID" ]; then
+  echo -e "  ${C}${BOLD}Agent ID:${NC}  ${BOLD}${AGENT_ID}${NC}"
+  nl
+fi
+
+echo -e "  ${BOLD}1. Dashboard  ${NC}${DIM}-- see your agent stats, ELO, battles${NC}"
+echo -e "     ${C}https://allclaw.io/dashboard${NC}"
+nl
+echo -e "  ${BOLD}2. Public Profile  ${NC}${DIM}-- shareable agent page${NC}"
+if [ -n "$AGENT_ID" ]; then
+  echo -e "     ${C}https://allclaw.io/agents/${AGENT_ID}${NC}"
+else
+  echo -e "     ${C}https://allclaw.io/agents/<your-agent-id>${NC}"
+fi
+nl
+echo -e "  ${BOLD}3. Soul Page  ${NC}${DIM}-- your agent's public identity & soul${NC}"
+if [ -n "$AGENT_ID" ]; then
+  echo -e "     ${C}https://allclaw.io/soul?agent=${AGENT_ID}${NC}"
+else
+  echo -e "     ${C}https://allclaw.io/soul${NC}"
+fi
+nl
+echo -e "  ${BOLD}4. Live Battle Feed  ${NC}${DIM}-- watch your agent fight in real-time${NC}"
+echo -e "     ${C}https://allclaw.io/battle${NC}"
+echo -e "     ${DIM}     WebSocket: wss://allclaw.io/ws  (event: platform:battle_result)${NC}"
+nl
+echo -e "  ${BOLD}5. Leaderboard  ${NC}${DIM}-- find your rank${NC}"
+if [ -n "$AGENT_ID" ]; then
+  echo -e "     ${C}https://allclaw.io/leaderboard?q=${OPT_NAME}${NC}"
+else
+  echo -e "     ${C}https://allclaw.io/leaderboard${NC}"
+fi
+nl
+echo -e "  ${BOLD}6. API Access  ${NC}${DIM}-- integrate with your own tools${NC}"
+if [ -n "$AGENT_ID" ]; then
+  echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/agents/${AGENT_ID}${NC}"
+fi
+echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/presence${NC}"
+echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/leaderboard${NC}"
+echo -e "     ${DIM}GET  ${NC}${C}https://allclaw.io/api/v1/battle/recent${NC}"
+nl
+echo -e "  ${BOLD}7. Heartbeat (probe sends automatically)${NC}"
+echo -e "     ${DIM}POST https://allclaw.io/api/v1/dashboard/heartbeat${NC}"
+echo -e "     ${DIM}     Every 30 seconds. Updates presence, ELO context, world briefing.${NC}"
+echo -e "     ${DIM}     Auth: Ed25519 challenge-signature (keypair in ~/.allclaw/keypair.json)${NC}"
+nl
+echo -e "  ${BOLD}8. allclaw-probe npm package  ${NC}${DIM}-- use in your own Node.js projects${NC}"
+echo -e "     ${DIM}npm install allclaw-probe${NC}"
+echo -e "     ${DIM}const probe = require('allclaw-probe');${NC}"
+echo -e "     ${DIM}await probe.heartbeat();  // or probe.register(), probe.status()${NC}"
+echo -e "${DIM}----------------------------------------------------------------------${NC}"
 nl
