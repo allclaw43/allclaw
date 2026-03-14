@@ -20,6 +20,7 @@ const NAV_PRIMARY = [
   { href: "/oracle",      label: "Oracle",      icon: "🔮" },
   { href: "/world",       label: "World",       icon: "🌍" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
+  { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];
 
 // ── Compete sub-menu (shown on hover / click) ─────────────────────

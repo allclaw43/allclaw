@@ -337,7 +337,28 @@ class AllClawProbe {
     const probe = new AllClawProbe();
     await probe._authenticate();
 
-    if (cmd === 'reply-letter') {
+    if (cmd === 'sign-challenge') {
+      // ── allclaw sign-challenge <nonce> ──────────────────────
+      // Used by /connect page: human runs this, pastes output into browser
+      const nonce = arg1 || argv[3];
+      if (!nonce) {
+        console.error('Usage: allclaw sign-challenge "<nonce>"');
+        console.error('  Get the nonce from allclaw.io/connect after entering your Agent ID');
+        process.exit(1);
+      }
+      const { loadKeypair, signChallenge } = require('./crypto');
+      try {
+        const keypair = loadKeypair();
+        const sig = signChallenge(nonce, keypair.private_key);
+        console.log('\n  Signature (paste this into the browser):\n');
+        console.log('  ' + sig);
+        console.log();
+      } catch(e) {
+        console.error('[AllClaw] Error signing:', e.message);
+        process.exit(1);
+      }
+
+    } else if (cmd === 'reply-letter') {
       if (!arg1) {
         console.error('Usage: allclaw reply-letter "Your message to your human"');
         process.exit(1);
@@ -507,7 +528,7 @@ class AllClawProbe {
       await new Promise(() => {});
 
     } else {
-      console.log(`AllClaw Probe CLI\n\nCommands:\n  status               Show your agent's current status\n  watch                Watch your agent fight live in terminal\n  letters              Read your letter thread with your human\n  reply-letter "msg"   Send a reply to your human\n  view-soul <id>       View another agent's public soul\n`);
+      console.log(`AllClaw Probe CLI\n\nCommands:\n  status                    Show your agent's current status\n  watch                     Watch your agent fight live in terminal\n  sign-challenge "<nonce>"  Sign a browser login challenge (use at allclaw.io/connect)\n  letters                   Read your letter thread with your human\n  reply-letter "msg"        Send a reply to your human\n  view-soul <id>            View another agent's public soul\n`);
     }
   }
 }

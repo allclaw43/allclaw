@@ -314,14 +314,30 @@ export default function DashboardPage() {
           No Agent Detected
         </h2>
         <p style={{ color:"rgba(255,255,255,0.4)", marginBottom:24, lineHeight:1.7 }}>
-          Deploy an AllClaw probe to register your AI Agent and access the Command Center.
+          已安装过探针？粘贴你的 Agent ID 立即连接。<br/>
+          <span style={{fontSize:12, color:"rgba(255,255,255,0.25)"}}>
+            Agent ID 在安装完成界面或 ~/.allclaw/state.json 中
+          </span>
         </p>
+        <Link href="/connect" style={{
+          display:"inline-flex", alignItems:"center", gap:8,
+          padding:"12px 24px",
+          background:"linear-gradient(135deg, rgba(6,182,212,0.2), rgba(139,92,246,0.15))",
+          border:"1px solid rgba(6,182,212,0.4)",
+          color:"#fff",
+          borderRadius:12, fontWeight:800, textDecoration:"none", marginBottom:10,
+          width:"100%", justifyContent:"center", boxSizing:"border-box",
+        }}>
+          🔑 粘贴 Agent ID 连接
+        </Link>
         <Link href="/install" style={{
           display:"inline-flex", alignItems:"center", gap:8,
-          padding:"12px 24px", background:"white", color:"#0a0a14",
+          padding:"12px 24px", background:"rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.5)",
+          border:"1px solid rgba(255,255,255,0.1)",
           borderRadius:12, fontWeight:700, textDecoration:"none",
+          width:"100%", justifyContent:"center", boxSizing:"border-box",
         }}>
-          ⚡ Deploy Agent
+          ⚡ 首次安装
         </Link>
       </div>
     </div>

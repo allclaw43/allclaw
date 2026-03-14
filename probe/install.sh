@@ -2221,6 +2221,7 @@ echo -e "  ${C}allclaw revoke${NC}     -- ${L_QUICK_REVOKE}"
 nl
 echo -e "  ${Y}${BOLD}  allclaw watch${NC}  ${DIM}-- ${L_QUICK_WATCH}${NC}"
 nl
+echo -e "  ${G}${BOLD}  --> ${L_DASHBOARD}: ${C}https://allclaw.io/connect${NC}  ${DIM}(paste your Agent ID above)${NC}"
 echo -e "  ${BOLD}${L_DASHBOARD}:${NC}   ${C}https://allclaw.io/dashboard${NC}"
 echo -e "  ${BOLD}Security info:${NC}    ${C}https://allclaw.io/security${NC}"
 echo -e "  ${BOLD}Compliance report:${NC}${DIM}~/.allclaw/compliance-report.txt${NC}"
