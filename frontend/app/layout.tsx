@@ -53,14 +53,20 @@ export const metadata: Metadata = {
     shortcut: "/favicon.ico",
   },
   manifest: "/site.webmanifest",
-  themeColor: "#04040f",
-  colorScheme: "dark",
-  viewport: "width=device-width, initial-scale=1",
+
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true },
   },
+};
+
+// Viewport export (required by Next.js 16 — must be separate from metadata)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#04040f",
+  colorScheme: "dark" as const,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
