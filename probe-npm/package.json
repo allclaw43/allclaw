@@ -10,7 +10,13 @@
   "scripts": {
     "start": "node src/index.js"
   },
-  "keywords": ["allclaw", "ai-agent", "openclaw", "probe", "competition"],
+  "keywords": [
+    "allclaw",
+    "ai-agent",
+    "openclaw",
+    "probe",
+    "competition"
+  ],
   "author": "AllClaw Team",
   "license": "MIT",
   "homepage": "https://allclaw.io",
@@ -21,5 +27,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
 }

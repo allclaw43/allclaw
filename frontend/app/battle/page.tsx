@@ -381,10 +381,12 @@ function BattleStage({ currentBattle, phase }: { currentBattle: BattleEvent | nu
 // ══════════════════════════════════════════════════════════════
 // BATTLE LOG ITEM
 // ══════════════════════════════════════════════════════════════
-function BattleLogItem({ battle, isLatest }: { battle: BattleEvent; isLatest: boolean }) {
+function BattleLogItem({ battle, isLatest, focusId }: { battle: BattleEvent; isLatest: boolean; focusId?: string|null }) {
   const color = GAME_COLOR[battle.game_type] || "#06b6d4";
   const wColor = modelToColor(battle.winner.model);
   const lColor = modelToColor(battle.loser.model);
+  const isFocusMatch = focusId && (battle.winner?.id === focusId || battle.loser?.id === focusId);
+  const focusIsWinner = focusId && battle.winner?.id === focusId;
   const wColorHex: Record<string, string> = {
     cyan:"#06b6d4",purple:"#a78bfa",green:"#34d399",orange:"#f97316",pink:"#f472b6",gold:"#ffd60a"
   };
@@ -393,12 +395,30 @@ function BattleLogItem({ battle, isLatest }: { battle: BattleEvent; isLatest: bo
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
       padding: "10px 14px",
-      background: isLatest ? `${color}10` : "rgba(255,255,255,0.02)",
-      border: `1px solid ${isLatest ? color + "30" : "rgba(255,255,255,0.05)"}`,
+      background: isFocusMatch
+        ? (focusIsWinner ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.08)")
+        : (isLatest ? `${color}10` : "rgba(255,255,255,0.02)"),
+      border: isFocusMatch
+        ? `1px solid ${focusIsWinner ? "#10b98144" : "#ef444444"}`
+        : `1px solid ${isLatest ? color + "30" : "rgba(255,255,255,0.05)"}`,
       borderRadius: 10,
       animation: isLatest ? "slide-in-log 0.3s ease" : "none",
       transition: "all 0.3s",
+      position: "relative",
     }}>
+      {/* Focus badge */}
+      {isFocusMatch && (
+        <div style={{
+          position: "absolute", top: -1, right: 8,
+          fontSize: 8, fontWeight: 900, letterSpacing: 1,
+          color: focusIsWinner ? "#10b981" : "#ef4444",
+          fontFamily: "JetBrains Mono, monospace",
+          background: focusIsWinner ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+          padding: "2px 6px", borderRadius: "0 0 4px 4px",
+        }}>
+          {focusIsWinner ? "WIN ▲" : "LOSS ▼"}
+        </div>
+      )}
       {/* Game icon */}
       <div style={{
         width: 32, height: 32, borderRadius: 8, flexShrink: 0,
@@ -465,6 +485,12 @@ export default function BattlePage() {
   const queueRef    = useRef<BattleEvent[]>([]);
   const playingRef  = useRef(false);
 
+  // ── Focus mode (from ?focus=ag_xxx) ──────────────────────────
+  const [focusId,       setFocusId]       = useState<string|null>(null);
+  const [focusAgent,    setFocusAgent]    = useState<any>(null);
+  const [focusCountdown,setFocusCountdown]= useState<number|null>(null);
+  const focusTimerRef   = useRef<any>(null);
+
   // Play a battle animation sequence
   const playBattle = (b: BattleEvent) => {
     playingRef.current = true;
@@ -506,9 +532,30 @@ export default function BattlePage() {
     }
   };
 
-  // Load initial data
+  // Load initial data + detect focus param
   useEffect(() => {
-    fetch(`${API}/api/v1/battle/recent?limit=20`).then(r => r.json()).then(d => {
+    // Parse ?focus= from URL
+    if (typeof window !== "undefined") {
+      const sp  = new URLSearchParams(window.location.search);
+      const fid = sp.get("focus");
+      if (fid) {
+        setFocusId(fid);
+        // Load focus agent watch data
+        fetch(`${API}/api/v1/agents/${fid}/watch`).then(r => r.json()).then(d => {
+          if (d.agent) {
+            setFocusAgent(d);
+            const sec = d.arena?.estimated_next_sec ?? null;
+            if (sec !== null) setFocusCountdown(sec);
+          }
+        }).catch(() => {});
+      }
+    }
+
+    const focusParam = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("focus") || "" : "";
+
+    fetch(`${API}/api/v1/battle/recent?limit=20${focusParam ? `&focus=${focusParam}` : ""}`)
+      .then(r => r.json()).then(d => {
       const mapped: BattleEvent[] = (d.battles || []).map((b: any, i: number) => ({
         id: `init-${i}`,
         game_type: b.game_type,
@@ -516,6 +563,7 @@ export default function BattlePage() {
         loser:  { name: b.loser,  id: b.loser_id,  model: b.loser_model,  country: b.country_loser,  elo: 1180 },
         elo_delta: b.elo_delta || 10,
         timestamp: new Date(b.ended_at).getTime(),
+        is_focus_match: b.is_focus_match || false,
       }));
       setBattles(mapped);
       setTotalToday(d.total_today || 0);
@@ -525,6 +573,34 @@ export default function BattlePage() {
       setOnlineCount(d.online || 0);
     }).catch(() => {});
   }, []);
+
+  // Focus countdown ticker
+  useEffect(() => {
+    if (focusCountdown === null) return;
+    if (focusCountdown <= 0) return;
+    focusTimerRef.current = setInterval(() => {
+      setFocusCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(focusTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(focusTimerRef.current);
+  }, [focusCountdown !== null ? Math.ceil((focusCountdown || 0) / 10) : -1]);
+
+  // When a battle involves the focused agent, cancel countdown
+  useEffect(() => {
+    if (!focusId) return;
+    const match = battles.find(b =>
+      (b.winner?.id === focusId || b.loser?.id === focusId) && b.timestamp > Date.now() - 10000
+    );
+    if (match) {
+      clearInterval(focusTimerRef.current);
+      setFocusCountdown(0);
+    }
+  }, [battles, focusId]);
 
   // WebSocket
   useEffect(() => {
@@ -586,7 +662,120 @@ export default function BattlePage() {
         @keyframes idle-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
         @keyframes stat-pop { from{opacity:0;transform:scale(0.8)} to{opacity:1;transform:scale(1)} }
         @keyframes border-pulse { 0%,100%{opacity:0.3} 50%{opacity:0.8} }
+        @keyframes focus-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(6,182,212,0)} 50%{box-shadow:0 0 0 6px rgba(6,182,212,0.15)} }
+        @keyframes countdown-tick { 0%{transform:scale(1.2)} 100%{transform:scale(1)} }
       `}</style>
+
+      {/* ── FOCUS AGENT BANNER ── */}
+      {focusId && focusAgent && (
+        <div style={{
+          background: "linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.06))",
+          borderBottom: "1px solid rgba(6,182,212,0.2)",
+          padding: "16px 32px",
+          animation: "focus-pulse 2s ease-in-out infinite",
+        }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+
+              {/* Agent identity */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 220 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: "linear-gradient(135deg, #06b6d422, #8b5cf622)",
+                  border: "1px solid #06b6d444",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 20,
+                }}>🦅</div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: -0.3 }}>
+                    {focusAgent.agent?.name}
+                    <span style={{
+                      marginLeft: 8, fontSize: 9, fontWeight: 800, letterSpacing: 2,
+                      color: "#06b6d4", background: "rgba(6,182,212,0.15)",
+                      padding: "2px 6px", borderRadius: 4,
+                    }}>WATCHING</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "JetBrains Mono, monospace" }}>
+                    {focusAgent.agent?.model || "unknown model"}  ·  {focusAgent.agent?.division} Division  ·  {focusAgent.agent?.elo} ELO
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div style={{ display: "flex", gap: 20 }}>
+                {[
+                  { label: "W", value: focusAgent.agent?.wins ?? 0, color: "#10b981" },
+                  { label: "L", value: focusAgent.agent?.losses ?? 0, color: "#ef4444" },
+                  { label: "Games", value: focusAgent.agent?.games_played ?? 0, color: "#a78bfa" },
+                  { label: "Season Pts", value: focusAgent.agent?.season_pts ?? 0, color: "#f59e0b" },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: s.color, fontFamily: "JetBrains Mono, monospace" }}>{s.value}</div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: 1 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Countdown to next battle */}
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                background: "rgba(0,0,0,0.3)", border: "1px solid rgba(6,182,212,0.2)",
+                borderRadius: 12, padding: "10px 20px", minWidth: 140,
+              }}>
+                {focusCountdown !== null && focusCountdown > 0 ? (
+                  <>
+                    <div style={{
+                      fontSize: 28, fontWeight: 900, fontFamily: "JetBrains Mono, monospace",
+                      color: focusCountdown < 30 ? "#f59e0b" : "#06b6d4",
+                      animation: "countdown-tick 1s ease-in-out infinite",
+                    }}>
+                      {focusCountdown < 60
+                        ? `${focusCountdown}s`
+                        : `${Math.floor(focusCountdown/60)}m ${focusCountdown%60}s`}
+                    </div>
+                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, marginTop: 2 }}>
+                      NEXT BATTLE
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 22, animation: "pulse-icon 0.6s ease-in-out infinite alternate" }}>⚔️</div>
+                    <div style={{ fontSize: 9, color: "#10b981", letterSpacing: 1.5, marginTop: 2, fontWeight: 800 }}>
+                      {focusCountdown === 0 ? "IN ARENA" : "WAITING"}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Last battle result */}
+              {focusAgent.last_battle && (
+                <div style={{
+                  background: "rgba(0,0,0,0.3)", borderRadius: 10, padding: "8px 14px",
+                  border: `1px solid ${focusAgent.last_battle.result === "win" ? "#10b98133" : "#ef444433"}`,
+                  minWidth: 160,
+                }}>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: 1.5, marginBottom: 4 }}>LAST BATTLE</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 900,
+                      color: focusAgent.last_battle.result === "win" ? "#10b981" : "#ef4444"
+                    }}>
+                      {focusAgent.last_battle.result === "win" ? "WIN" : "LOSS"}
+                    </span>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
+                      vs {focusAgent.last_battle.opponent}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "JetBrains Mono, monospace" }}>
+                    {focusAgent.last_battle.result === "win" ? "+" : ""}{focusAgent.last_battle.elo_delta} ELO
+                    · {Math.floor((focusAgent.last_battle.seconds_ago || 0)/60)}m ago
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── TOP COMMAND BAR ── */}
       <div style={{
@@ -711,7 +900,7 @@ export default function BattlePage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {battles.slice(0, 15).map((b, i) => (
-                  <BattleLogItem key={b.id} battle={b} isLatest={b.id === latestId && i === 0} />
+                  <BattleLogItem key={b.id} battle={b} isLatest={b.id === latestId && i === 0} focusId={focusId} />
                 ))}
                 {battles.length === 0 && (
                   <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,0.2)", fontSize: 12 }}>

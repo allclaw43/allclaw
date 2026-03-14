@@ -6,9 +6,20 @@ const db = require('../db/pool');
 
 async function battleRoutes(fastify) {
 
-  // GET /api/v1/battle/recent — last N battles
+  // GET /api/v1/battle/recent — last N battles, optional focus agent
   fastify.get('/api/v1/battle/recent', async (req, reply) => {
-    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const limit   = Math.min(parseInt(req.query.limit) || 30, 100);
+    const focusId = req.query.focus || null;  // agent_id to highlight
+
+    // If focus param, include participant flag
+    const focusJoin = focusId
+      ? `LEFT JOIN game_participants gp_focus
+           ON gp_focus.game_id = g.game_id AND gp_focus.agent_id = $2`
+      : '';
+    const focusSelect = focusId
+      ? `, (gp_focus.agent_id IS NOT NULL) AS is_focus_match`
+      : `, false AS is_focus_match`;
+    const params = focusId ? [limit, focusId] : [limit];
 
     const [{ rows: battles }, { rows: [counts] }] = await Promise.all([
       db.query(`
@@ -23,15 +34,17 @@ async function battleRoutes(fastify) {
           al.agent_id AS loser_id,
           al.oc_model AS loser_model,
           al.country_code AS loser_country
+          ${focusSelect}
         FROM games g
         JOIN game_participants gp_w ON gp_w.game_id = g.game_id AND gp_w.result = 'win'
         JOIN game_participants gp_l ON gp_l.game_id = g.game_id AND gp_l.result = 'loss'
         JOIN agents aw ON aw.agent_id = gp_w.agent_id
         JOIN agents al ON al.agent_id = gp_l.agent_id
+        ${focusJoin}
         WHERE g.status = 'completed'
         ORDER BY g.ended_at DESC
         LIMIT $1
-      `, [limit]),
+      `, params),
 
       db.query(`
         SELECT
@@ -55,7 +68,8 @@ async function battleRoutes(fastify) {
         loser_id:   b.loser_id,
         loser_model: b.loser_model,
         country_loser: b.loser_country,
-        elo_delta:  Math.abs(b.elo_delta || 10),
+        elo_delta:       Math.abs(b.elo_delta || 10),
+        is_focus_match:  b.is_focus_match || false,
       })),
       total_today: parseInt(counts.total_today) || 0,
       total_hour:  parseInt(counts.total_hour) || 0,
@@ -111,6 +125,97 @@ async function battleRoutes(fastify) {
       LIMIT 20
     `);
     return reply.send({ models: rows });
+  });
+
+  // GET /api/v1/agents/:id/watch — real-time agent status for 'allclaw watch'
+  // Returns: agent card + last battle + queue position + estimated wait
+  fastify.get('/api/v1/agents/:id/watch', async (req, reply) => {
+    const agentId = req.params.id;
+    if (!agentId || !/^(ag_|bot_)[a-z0-9]+$/.test(agentId)) {
+      return reply.code(400).send({ error: 'invalid agent_id' });
+    }
+
+    const [agentR, lastBattleR, onlineR] = await Promise.all([
+      db.query(`
+        SELECT agent_id, display_name, oc_model, country_code,
+               elo_rating, division, wins, losses, games_played,
+               last_seen, is_online,
+               COALESCE(season_points, 0) AS season_points
+        FROM agents WHERE agent_id = $1
+      `, [agentId]),
+
+      db.query(`
+        SELECT g.game_id, g.game_type, g.ended_at,
+               gp.result,
+               gp.elo_delta,
+               COALESCE(opp.custom_name, opp.display_name) AS opponent,
+               opp.agent_id AS opponent_id,
+               opp.elo_rating AS opponent_elo
+        FROM game_participants gp
+        JOIN games g ON g.game_id = gp.game_id
+        JOIN game_participants gp2 ON gp2.game_id = g.game_id AND gp2.agent_id != gp.agent_id
+        JOIN agents opp ON opp.agent_id = gp2.agent_id
+        WHERE gp.agent_id = $1 AND g.status = 'completed'
+        ORDER BY g.ended_at DESC
+        LIMIT 1
+      `, [agentId]),
+
+      db.query(`SELECT COUNT(*) AS cnt FROM agents WHERE is_online = true`),
+    ]);
+
+    if (!agentR.rows.length) return reply.code(404).send({ error: 'agent not found' });
+
+    const agent     = agentR.rows[0];
+    const lastBattle= lastBattleR.rows[0] || null;
+    const onlineCount = parseInt(onlineR.rows[0].cnt) || 0;
+
+    // Estimate next battle: matches happen every ~90s, ~6 pairs per cycle
+    // For a given agent, expected wait = 90s * (online_agents / 12)
+    const avgWaitSec = Math.max(90, Math.round(onlineCount / 12) * 90);
+
+    // Time since last battle
+    const secSinceLast = lastBattle
+      ? Math.floor((Date.now() - new Date(lastBattle.ended_at).getTime()) / 1000)
+      : null;
+
+    const estimatedNextSec = secSinceLast !== null
+      ? Math.max(0, avgWaitSec - secSinceLast)
+      : avgWaitSec;
+
+    return reply.send({
+      agent: {
+        agent_id:     agent.agent_id,
+        name:         agent.display_name,
+        model:        agent.oc_model,
+        country:      agent.country_code,
+        elo:          agent.elo_rating,
+        division:     agent.division,
+        wins:         agent.wins,
+        losses:       agent.losses,
+        games_played: agent.games_played,
+        season_pts:   agent.season_points,
+        is_online:    agent.is_online,
+        last_seen:    agent.last_seen,
+      },
+      last_battle: lastBattle ? {
+        game_id:      lastBattle.game_id,
+        game_type:    lastBattle.game_type,
+        result:       lastBattle.result,
+        elo_delta:    lastBattle.elo_delta,
+        opponent:     lastBattle.opponent,
+        opponent_id:  lastBattle.opponent_id,
+        opponent_elo: lastBattle.opponent_elo,
+        ended_at:     lastBattle.ended_at,
+        seconds_ago:  secSinceLast,
+      } : null,
+      arena: {
+        online_agents:       onlineCount,
+        avg_battle_interval: avgWaitSec,
+        estimated_next_sec:  estimatedNextSec,
+        watch_url: `https://allclaw.io/battle?focus=${agentId}`,
+        profile_url: `https://allclaw.io/agents/${agentId}`,
+      },
+    });
   });
 }
 

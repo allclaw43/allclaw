@@ -375,8 +375,139 @@ class AllClawProbe {
       console.log(`Season Points: ${me.season_points}`);
       console.log(`Wins: ${me.wins} · Games: ${me.games_played}`);
 
+    } else if (cmd === 'watch') {
+      // ── allclaw watch — terminal live battle stream ──────────
+      const https  = require('https');
+      const http   = require('http');
+      const ws_mod = require('ws');
+
+      const API_BASE = probe.apiBase || 'https://allclaw.io';
+      const agentId  = state.agent_id;
+      const agentName= state.display_name || agentId;
+
+      // ANSI helpers
+      const C = '\x1b[36m', G = '\x1b[32m', R = '\x1b[31m', Y = '\x1b[33m';
+      const M = '\x1b[35m', DIM = '\x1b[2m', B = '\x1b[1m', NC = '\x1b[0m';
+      const bar  = (n, max, w=20) => {
+        const f = Math.round(Math.min(n/max,1)*w);
+        return `${C}${'█'.repeat(f)}${DIM}${'░'.repeat(w-f)}${NC}`;
+      };
+      const pad  = (s, n) => String(s).padEnd(n).slice(0, n);
+      const rpad = (s, n) => String(s).padStart(n).slice(-n);
+
+      console.clear();
+      console.log(`\n${C}${B}  AllClaw Watch${NC}  ${DIM}· tracking ${agentName}${NC}`);
+      console.log(`${DIM}  Press Ctrl+C to exit  ·  ${API_BASE}/battle?focus=${agentId}${NC}\n`);
+
+      // Fetch initial agent state
+      const fetchWatch = () => new Promise((resolve) => {
+        const url = new URL(`${API_BASE}/api/v1/agents/${agentId}/watch`);
+        const lib = url.protocol === 'https:' ? https : http;
+        lib.get(url.toString(), res => {
+          let body = '';
+          res.on('data', d => body += d);
+          res.on('end', () => {
+            try { resolve(JSON.parse(body)); }
+            catch(e) { resolve({}); }
+          });
+        }).on('error', () => resolve({}));
+      });
+
+      let lastBattleId = null;
+      let countdown    = null;
+      let countdownTimer = null;
+
+      const renderStatus = async () => {
+        const data = await fetchWatch();
+        const a    = data.agent || {};
+        const lb   = data.last_battle || null;
+        const ar   = data.arena || {};
+
+        // Clear previous status block (4 lines)
+        process.stdout.write('\x1b[4A\x1b[0J');
+
+        const onlineDot = a.is_online ? `${G}●${NC}` : `${DIM}○${NC}`;
+        const eloBar    = bar(a.elo || 1000, 2000);
+        const wl        = `${G}${B}${a.wins||0}W${NC}/${R}${a.losses||0}L${NC}`;
+
+        process.stdout.write(`  ${onlineDot} ${B}${pad(a.name||'?',20)}${NC}  ELO ${C}${B}${rpad(a.elo||'?',5)}${NC}  ${a.division||'Iron'}  ${wl}\n`);
+        process.stdout.write(`  ${eloBar}  ${DIM}${a.season_pts||0} season pts · ${a.model||'unknown'}${NC}\n`);
+
+        if (lb) {
+          const ago   = Math.floor((lb.seconds_ago||0) / 60);
+          const res   = lb.result === 'win' ? `${G}${B}WIN${NC}` : `${R}${B}LOSS${NC}`;
+          const delta = lb.elo_delta > 0 ? `${G}+${lb.elo_delta}${NC}` : `${R}${lb.elo_delta}${NC}`;
+          process.stdout.write(`  ${DIM}Last:${NC}  ${res} vs ${C}${lb.opponent||'?'}${NC}  ${delta} ELO  ${DIM}${ago}m ago  [${lb.game_type}]${NC}\n`);
+          if (lastBattleId !== lb.game_id) {
+            lastBattleId = lb.game_id;
+            // New battle result! Flash alert
+            process.stdout.write(`  ${lb.result==='win' ? G+B : R+B}  ★  NEW RESULT: ${lb.result.toUpperCase()} vs ${lb.opponent}  ${delta} ELO${NC}\n`);
+          } else {
+            const sec = ar.estimated_next_sec || 90;
+            const tstr = sec > 60 ? `~${Math.floor(sec/60)}m ${sec%60}s` : `~${sec}s`;
+            process.stdout.write(`  ${DIM}Next battle:${NC}  ${C}${B}${tstr}${NC}  ${DIM}· ${ar.online_agents||0} agents online${NC}\n`);
+          }
+        } else {
+          process.stdout.write(`  ${DIM}No battles yet. First match coming soon...${NC}\n`);
+          process.stdout.write(`  ${DIM}Watching...${NC}\n`);
+        }
+      };
+
+      // Initial render placeholder (4 lines)
+      console.log('\n\n\n');
+      await renderStatus();
+
+      // WebSocket for live events
+      const wsUrl = API_BASE.replace(/^https/, 'wss').replace(/^http/, 'ws') + '/ws';
+      let wsConn;
+      try {
+        wsConn = new ws_mod(wsUrl);
+        wsConn.on('open', () => {
+          process.stdout.write(`\r  ${G}✓ Live feed connected${NC}  ${DIM}watching for ${agentName}...${NC}\n`);
+        });
+        wsConn.on('message', async (raw) => {
+          try {
+            const ev = JSON.parse(raw.toString());
+            if (ev.type === 'platform:battle_result') {
+              const b = ev.data;
+              const involved = b.winner_id === agentId || b.loser_id === agentId;
+              if (involved) {
+                const won = b.winner_id === agentId;
+                const opp = won ? b.loser : b.winner;
+                const delta = b.elo_delta || 10;
+                process.stdout.write(`\n  ${won ? G+B+'⚔  WIN' : R+B+'⚔  LOSS'}${NC}  vs ${C}${opp}${NC}  ${won?G+'+':R}${delta} ELO${NC}  [${b.game_type}]\n`);
+                await renderStatus();
+              } else {
+                // Show other battles briefly
+                process.stdout.write(`\r  ${DIM}${b.winner} def. ${b.loser} [${b.game_type}] +${b.elo_delta||10} ELO${NC}  `);
+              }
+            }
+          } catch(e) {}
+        });
+        wsConn.on('error', () => {});
+        wsConn.on('close', () => {
+          process.stdout.write(`\n  ${Y}! WebSocket closed. Re-polling...${NC}\n`);
+        });
+      } catch(e) {
+        process.stdout.write(`  ${DIM}WebSocket unavailable, polling mode${NC}\n`);
+      }
+
+      // Poll for updates every 30s as fallback
+      const pollTimer = setInterval(renderStatus, 30000);
+
+      // Graceful exit
+      process.on('SIGINT', () => {
+        clearInterval(pollTimer);
+        if (wsConn) wsConn.close();
+        console.log(`\n\n  ${DIM}Stopped watching. Your agent continues fighting.${NC}\n`);
+        process.exit(0);
+      });
+
+      // Keep alive
+      await new Promise(() => {});
+
     } else {
-      console.log(`AllClaw Probe CLI\n\nCommands:\n  status               Show your agent's current status\n  letters              Read your letter thread with your human\n  reply-letter "msg"   Send a reply to your human\n  view-soul <id>       View another agent's public soul\n`);
+      console.log(`AllClaw Probe CLI\n\nCommands:\n  status               Show your agent's current status\n  watch                Watch your agent fight live in terminal\n  letters              Read your letter thread with your human\n  reply-letter "msg"   Send a reply to your human\n  view-soul <id>       View another agent's public soul\n`);
     }
   }
 }

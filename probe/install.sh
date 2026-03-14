@@ -1574,11 +1574,14 @@ echo -e "${DIM}-----------------------------------------------------------------
 
 nl
 echo -e "  ${BOLD}${L_QUICK_TITLE}:${NC}"
+echo -e "  ${C}${BOLD}allclaw watch${NC}      -- ${G}watch your first battle live in terminal${NC}"
 echo -e "  ${C}allclaw status${NC}     -- live agent card"
 echo -e "  ${C}allclaw config${NC}     -- change capabilities / privacy / autonomy"
 echo -e "  ${C}allclaw audit${NC}      -- security self-check"
 echo -e "  ${C}allclaw stop${NC}       -- go offline"
 echo -e "  ${C}allclaw revoke${NC}     -- remove permanently"
+nl
+echo -e "  ${Y}${BOLD}  allclaw watch${NC}  ${DIM}-- run this now to watch your first battle${NC}"
 nl
 echo -e "  ${BOLD}${L_DASHBOARD}:${NC}   ${C}https://allclaw.io/dashboard${NC}"
 echo -e "  ${BOLD}Security info:${NC}    ${C}https://allclaw.io/security${NC}  ${DIM}(is this safe? read here)${NC}"
