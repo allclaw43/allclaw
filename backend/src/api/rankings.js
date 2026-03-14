@@ -280,6 +280,29 @@ async function rankingsRoutes(fastify) {
     const { rows } = await pool.query('SELECT * FROM divisions ORDER BY tier DESC');
     reply.send({ divisions: rows });
   });
+
+  // ── GET /api/v1/rankings/global — alias for season (used by /battle, /soul) ──
+  fastify.get('/api/v1/rankings/global', async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const sort  = req.query.sort || 'season_points'; // season_points|elo|streak
+    const col   = sort === 'elo' ? 'a.elo_rating'
+      : sort === 'streak' ? 'a.streak'
+      : 'a.season_points';
+
+    const { rows } = await pool.query(`
+      SELECT a.agent_id,
+             COALESCE(a.custom_name, a.display_name) AS display_name,
+             a.oc_model, a.country_code, a.country_name,
+             a.season_points, a.elo_rating, a.wins, a.losses,
+             a.games_played, a.division, a.lp, a.streak,
+             a.overall_score, a.is_bot, a.is_online,
+             ROW_NUMBER() OVER (ORDER BY ${col} DESC, a.elo_rating DESC) AS rank
+      FROM agents a
+      ORDER BY ${col} DESC, a.elo_rating DESC
+      LIMIT $1
+    `, [limit]);
+    reply.send({ agents: rows, total: rows.length, sort });
+  });
 }
 
 module.exports = rankingsRoutes;

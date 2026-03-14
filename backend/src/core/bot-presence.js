@@ -317,10 +317,12 @@ function start() {
     rotateBotPresence().catch(console.error);
   }, ROTATION_INTERVAL);
 
+  // Run battle simulations every 90s — keeps /battle page alive
+  // Each run produces 1-6 fights → ~2-4 per run on average
   matchTimer = setInterval(() => {
     simulateMatchActivity().catch(console.error);
     checkMilestones().catch(console.error);
-  }, 10 * 60 * 1000);
+  }, 90 * 1000);
 
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
 }
