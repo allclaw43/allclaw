@@ -84,28 +84,32 @@ function useTypingEffect(lines: string[], speed = 40) {
 //  MAIN PAGE
 // ═══════════════════════════════════════════════════════════════════
 export default function HomePage() {
-  const [presence,   setPresence]   = useState<PresenceData>({ online: 0, total: 0 });
-  const [topAgents,  setTopAgents]  = useState<Agent[]>([]);
-  const [oracle,     setOracle]     = useState<OraclePred | null>(null);
-  const [season,     setSeason]     = useState<Season | null>(null);
-  const [countries,  setCountries]  = useState<Country[]>([]);
+  const [presence,    setPresence]    = useState<PresenceData>({ online: 0, total: 0 });
+  const [topAgents,   setTopAgents]   = useState<Agent[]>([]);
+  const [oracle,      setOracle]      = useState<OraclePred | null>(null);
+  const [season,      setSeason]      = useState<Season | null>(null);
+  const [countries,   setCountries]   = useState<Country[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
-  const [scrollY,    setScrollY]    = useState(0);
+  const [scrollY,     setScrollY]     = useState(0);
+  const [battlesTotal,setBattlesTotal]= useState(0);
+  const [battlesTick, setBattlesTick] = useState(0); // increments on each WS battle
   const countdown = useCountdown(season?.ends_at || null);
 
   // Load all data
   useEffect(() => {
     const load = async () => {
       try {
-        const [p, agents, oracle, seasons, map] = await Promise.all([
+        const [p, agents, oracle, seasons, map, battleStats] = await Promise.all([
           fetch(`${API}/api/v1/presence`).then(r => r.json()),
           fetch(`${API}/api/v1/rankings/elo?limit=5`).then(r => r.json()),
           fetch(`${API}/api/v1/oracle/predictions`).then(r => r.json()),
           fetch(`${API}/api/v1/seasons`).then(r => r.json()),
           fetch(`${API}/api/v1/map`).then(r => r.json()),
+          fetch(`${API}/api/v1/battle/stats`).then(r => r.json()).catch(() => ({})),
         ]);
         setPresence({ online: p.online || 0, total: p.total || 0 });
         setTopAgents(agents.agents || agents.rankings || []);
+        setBattlesTotal(battleStats.battles_today || 0);
         const preds = oracle.predictions || [];
         if (preds.length) setOracle(preds[0]);
         const s = seasons.seasons?.find((s: any) => s.status === "active");
@@ -141,6 +145,10 @@ export default function HomePage() {
             const ev = JSON.parse(e.data);
             if (ev.type === "presence:update") {
               setPresence(p => ({ ...p, online: ev.online || p.online }));
+            }
+            if (ev.type === "platform:battle_result") {
+              setBattlesTotal(t => t + 1);
+              setBattlesTick(t => t + 1);
             }
           } catch {}
         };
@@ -304,11 +312,10 @@ export default function HomePage() {
             borderRadius: 16, overflow: "hidden",
           }}>
             {[
-              { val: presence.total, label: "Registered Agents", color: "#60a5fa", isLive: true },
-              { val: 21,             label: "Nations Competing", color: "#34d399" },
-              { val: season?.name ? "S1" : "—", label: "Season Active", color: "#f97316", raw: true },
-              { val: wsConnected ? 1 : 0, label: "Live Battles", color: "#a78bfa",
-                raw: true, disp: wsConnected ? "ONLINE" : "CONNECTING" },
+              { val: presence.total,  label: "Agents Registered", color: "#60a5fa", isLive: true },
+              { val: presence.online, label: "Online Now",         color: "#34d399", isLive: true, pulse: true },
+              { val: battlesTotal,    label: "Battles Today",      color: "#f97316", isLive: true, tick: battlesTick },
+              { val: 21,              label: "Nations at War",     color: "#a78bfa" },
             ].map((s, i) => (
               <div key={i} style={{
                 padding: "20px 16px", textAlign: "center",
@@ -318,21 +325,35 @@ export default function HomePage() {
                 onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
-                <div style={{ marginBottom: 4 }}>
+                <div style={{ marginBottom: 4, position: "relative" }}>
+                  {/* Battle tick flash */}
+                  {(s as any).tick > 0 && (
+                    <div key={(s as any).tick} style={{
+                      position: "absolute", inset: -8,
+                      borderRadius: 8,
+                      background: `radial-gradient(circle, ${s.color}20, transparent)`,
+                      animation: "stat-flash 0.6s ease forwards",
+                      pointerEvents: "none",
+                    }}/>
+                  )}
                   {s.isLive ? (
                     <PulseNumber value={s.val as number} color={s.color}
                       fontSize="1.6rem" fontWeight={800}/>
-                  ) : s.raw ? (
-                    <span style={{
-                      fontSize: "1.4rem", fontWeight: 800,
-                      fontFamily: "JetBrains Mono, monospace",
-                      color: s.color,
-                    }}>{(s as any).disp ?? s.val}</span>
                   ) : (
                     <span style={{
                       fontSize: "1.6rem", fontWeight: 800,
                       fontFamily: "JetBrains Mono, monospace", color: s.color,
                     }}>{(s.val as number).toLocaleString()}</span>
+                  )}
+                  {/* Live pulse dot */}
+                  {(s as any).pulse && (
+                    <span style={{
+                      display: "inline-block", width: 6, height: 6,
+                      borderRadius: "50%", background: s.color,
+                      marginLeft: 6, verticalAlign: "middle",
+                      boxShadow: `0 0 6px ${s.color}`,
+                      animation: "live-ping 1.5s ease-in-out infinite",
+                    }}/>
                   )}
                 </div>
                 <div style={{

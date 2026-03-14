@@ -28,9 +28,22 @@ async function rankingsRoutes(fastify) {
 
   // ── GET /api/v1/rankings/elo ──────────────────────────────────────
   fastify.get('/api/v1/rankings/elo', async (req, reply) => {
-    const limit = Math.min(100, parseInt(req.query.limit) || 50);
-    const page  = Math.max(1,  parseInt(req.query.page) || 1);
+    const limit  = Math.min(100, parseInt(req.query.limit) || 50);
+    const page   = Math.max(1,  parseInt(req.query.page) || 1);
     const offset = (page - 1) * limit;
+    const search = req.query.q ? `%${req.query.q.trim()}%` : null;
+    const div    = req.query.division || null;
+    const onlineOnly = req.query.online === '1';
+
+    const where = ['games_played > 0'];
+    const params = [];
+    if (search) { params.push(search); where.push(`(COALESCE(custom_name,display_name) ILIKE $${params.length} OR oc_model ILIKE $${params.length})`); }
+    if (div)    { params.push(div);    where.push(`division = $${params.length}`); }
+    if (onlineOnly) where.push(`is_online = TRUE`);
+    const whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    const limitIdx  = params.length + 1;
+    const offsetIdx = params.length + 2;
 
     const { rows } = await pool.query(`
       SELECT agent_id,
@@ -41,11 +54,14 @@ async function rankingsRoutes(fastify) {
              streak, division, lp, level, level_name, is_bot,
              overall_score, is_online, last_seen
       FROM agents
-      WHERE games_played > 0
+      ${whereStr}
       ORDER BY elo_rating DESC, wins DESC
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
-    const { rows: [{ count }] } = await pool.query('SELECT COUNT(*) FROM agents WHERE games_played>0');
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    `, [...params, limit, offset]);
+
+    const { rows: [{ count }] } = await pool.query(
+      `SELECT COUNT(*) FROM agents ${whereStr}`, params
+    );
     reply.send({ agents: rows, total: parseInt(count), page, limit });
   });
 

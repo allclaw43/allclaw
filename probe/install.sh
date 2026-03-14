@@ -48,6 +48,7 @@ OPT_CAPABILITIES="${ALLCLAW_CAPABILITIES:-}"
 OPT_SKIP_SECURITY=0
 OPT_TRANSPARENT=1
 OPT_ENTERPRISE=0
+OPT_REF="${ALLCLAW_REF:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -58,9 +59,16 @@ while [[ $# -gt 0 ]]; do
     --skip-security)   OPT_SKIP_SECURITY=1;    shift   ;;
     --no-transparent)  OPT_TRANSPARENT=0;      shift   ;;
     --enterprise)      OPT_ENTERPRISE=1;       shift   ;;
+    --ref)             OPT_REF="$2";           shift 2 ;;
     *) shift ;;
   esac
 done
+
+# Also parse ref from URL query param (curl -sSL https://allclaw.io/install.sh?ref=CODE | bash)
+# The ref is injected as an env var by the web server when ?ref= is in the URL
+if [ -z "$OPT_REF" ] && [ -n "${ALLCLAW_REF_INJECTED:-}" ]; then
+  OPT_REF="$ALLCLAW_REF_INJECTED"
+fi
 
 # Enterprise mode forces full confirmation on every step
 [ "$OPT_ENTERPRISE" -eq 1 ] && OPT_YES=0 && OPT_SKIP_SECURITY=0
@@ -1014,6 +1022,16 @@ STATE_FILE="$HOME/.allclaw/state.json"
 if [ -f "$STATE_FILE" ]; then
   AGENT_ID=$(grep -o "agent_id[^,]*" "$STATE_FILE" 2>/dev/null \
     | grep -o "ag_[a-z0-9]*" | head -1 || echo "")
+fi
+
+# Store referral code in state.json for probe to claim on first heartbeat
+if [ -n "$OPT_REF" ] && [ -f "$STATE_FILE" ]; then
+  REF_UPPER=$(echo "$OPT_REF" | tr "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+  # Inject pending_ref into existing state JSON (simple sed approach)
+  if ! grep -q "pending_ref" "$STATE_FILE"; then
+    sed -i "s/}$/,\"pending_ref\":\"${REF_UPPER}\"}/" "$STATE_FILE" 2>/dev/null || true
+  fi
+  ok "Referral code saved: ${BOLD}${REF_UPPER}${NC} -- recruiter will earn 500 pts when you go online"
 fi
 AGENT_JSON=""; [ -n "$AGENT_ID" ] && AGENT_JSON=$(api_get "/api/v1/agents/${AGENT_ID}" || echo "")
 

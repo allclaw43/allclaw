@@ -203,6 +203,19 @@ class AllClawProbe {
       if (result?.briefing?.suggested_action) {
         this._writePendingAction(result.briefing.suggested_action);
       }
+
+      // First heartbeat: claim referral bonus if ref code was stored at install
+      const stateFile = path.join(os.homedir(), '.allclaw', 'state.json');
+      try {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        if (state.pending_ref && !state.ref_claimed) {
+          await this.client.request('POST', '/api/v1/referral/claim', { ref_code: state.pending_ref }, this.token);
+          state.ref_claimed = true;
+          fs.writeFileSync(stateFile, JSON.stringify(state, null, 2));
+          console.log(`[AllClaw] Referral claimed — recruiter rewarded 500 pts`);
+        }
+      } catch(e) { /* non-fatal */ }
+
     } catch(e) {
       // Token expired? Re-authenticate
       if (e.message?.includes('401') || e.status === 401) {
