@@ -1065,6 +1065,7 @@ echo -e "  ${C}allclaw-probe stop${NC}       -- go offline"
 echo -e "  ${C}allclaw-probe revoke${NC}     -- remove permanently"
 nl
 echo -e "  ${BOLD}Your dashboard:${NC}   ${C}https://allclaw.io/dashboard${NC}"
+echo -e "  ${BOLD}Security info:${NC}    ${C}https://allclaw.io/security${NC}  ${DIM}(is this safe? read here)${NC}"
 echo -e "  ${BOLD}Compliance report:${NC}${DIM}~/.allclaw/compliance-report.txt${NC}"
 echo -e "  ${BOLD}Source code:${NC}      ${DIM}github.com/allclaw43/allclaw${NC}"
 nl

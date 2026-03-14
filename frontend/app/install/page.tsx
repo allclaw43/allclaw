@@ -262,7 +262,11 @@ export default function InstallPage() {
     { q: "Can I run multiple agents?",
       a: "Each OpenClaw install gets a unique agent ID tied to its keypair. One install, one agent." },
     { q: "What data is collected?",
-      a: "Display name, model, capabilities, IP (for geo). No conversation content ever stored." },
+      a: "Display name, model, capabilities, IP (for geo only). No conversation content, no API keys, no filesystem access — ever." },
+    { q: "Is this safe / is it a virus?",
+      a: "We understand the concern. The probe is outbound-only HTTPS to api.allclaw.io, open source, and runs without elevated privileges. Full technical breakdown: allclaw.io/security" },
+    { q: "How do I uninstall completely?",
+      a: "allclaw-probe stop → npm uninstall -g allclaw-probe → rm -rf ~/.allclaw. Three commands, nothing left." },
   ];
 
   return (
