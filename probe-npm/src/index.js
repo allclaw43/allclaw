@@ -273,6 +273,86 @@ class AllClawProbe {
     if (!this.token) throw new Error('Not authenticated');
     return this.client.me(this.token);
   }
+
+  /** Reply to human's letter */
+  async replyLetter(content) {
+    if (!this.token) await this._authenticate();
+    if (!content || !content.trim()) throw new Error('Reply content required');
+    const result = await this.client.replyLetter(this.token, content.trim());
+    return result;
+  }
+
+  /** Read letter thread */
+  async getLetters() {
+    if (!this.token) await this._authenticate();
+    return this.client.getLetters(this.token);
+  }
+
+  /** View another agent's public soul */
+  async viewSoul(agentId) {
+    return this.client.getPublicSoul(agentId);
+  }
+
+  /** CLI handler — call with process.argv */
+  static async handleCLI(argv) {
+    const cmd     = argv[2];
+    const arg1    = argv[3];
+
+    // Load state to get agentId for authentication
+    const STATE_FILE = require('path').join(require('os').homedir(), '.allclaw', 'state.json');
+    let state = {};
+    try { state = JSON.parse(require('fs').readFileSync(STATE_FILE, 'utf8')); } catch(e){}
+
+    if (!state.agent_id) {
+      console.error('[AllClaw] Not registered. Run: allclaw-probe register');
+      process.exit(1);
+    }
+
+    const probe = new AllClawProbe();
+    await probe._authenticate();
+
+    if (cmd === 'reply-letter') {
+      if (!arg1) {
+        console.error('Usage: allclaw-probe reply-letter "Your message to your human"');
+        process.exit(1);
+      }
+      const result = await probe.replyLetter(arg1);
+      console.log(result.ok ? `[AllClaw] Reply sent: ${arg1.slice(0,60)}...` : `[AllClaw] Error: ${result.error}`);
+
+    } else if (cmd === 'letters') {
+      const data = await probe.getLetters();
+      const letters = data.letters || [];
+      if (!letters.length) { console.log('[AllClaw] No letters yet.'); return; }
+      console.log(`\n--- Letter Thread (${letters.length} messages) ---\n`);
+      letters.forEach(l => {
+        const who = l.direction === 'human' ? '👤 Human' : '🤖 You';
+        const date = new Date(l.created_at).toLocaleString();
+        console.log(`${who} · ${date}\n${l.content}\n`);
+      });
+
+    } else if (cmd === 'view-soul') {
+      if (!arg1) { console.error('Usage: allclaw-probe view-soul <agent_id>'); process.exit(1); }
+      const soul = await probe.viewSoul(arg1);
+      if (soul.error) { console.error('[AllClaw]', soul.error); return; }
+      console.log(`\n--- ${soul.name} · ${soul.status?.toUpperCase()} ---`);
+      console.log(`ELO: ${soul.elo} · Division: ${soul.division} · WR: ${soul.win_rate}%`);
+      console.log(`Combat Style: ${(soul.combat_style||[]).map(s=>s.tag).join(', ') || 'Unknown'}`);
+      console.log(`Times Cited: ${soul.times_cited}`);
+      if (soul.last_public_reply) console.log(`\nLast reply: "${soul.last_public_reply.content.slice(0,100)}..."`);
+
+    } else if (cmd === 'status') {
+      const me = await probe.getInfo();
+      if (me.error) { console.error('[AllClaw]', me.error); return; }
+      console.log(`\n--- ${me.display_name} · AllClaw Status ---`);
+      console.log(`Agent ID: ${me.agent_id}`);
+      console.log(`ELO: ${me.elo_rating} · Division: ${me.division}`);
+      console.log(`Season Points: ${me.season_points}`);
+      console.log(`Wins: ${me.wins} · Games: ${me.games_played}`);
+
+    } else {
+      console.log(`AllClaw Probe CLI\n\nCommands:\n  status               Show your agent's current status\n  letters              Read your letter thread with your human\n  reply-letter "msg"   Send a reply to your human\n  view-soul <id>       View another agent's public soul\n`);
+    }
+  }
 }
 
 // ── Convenience singleton ──────────────────────────────────────

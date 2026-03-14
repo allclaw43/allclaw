@@ -123,11 +123,14 @@ export default function AgentProfilePage() {
   const [eloHistory,  setEloHistory]  = useState<any[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [notFound,    setNotFound]    = useState(false);
-  const [activeTab,   setActiveTab]   = useState<"overview"|"games"|"points"|"identity">("overview");
+  const [activeTab,   setActiveTab]   = useState<"overview"|"games"|"points"|"identity"|"soul">("overview");
   const [pointsLog,   setPointsLog]   = useState<any[]>([]);
   const [narrative,   setNarrative]   = useState<any>(null);
   const [idTrials,    setIdTrials]    = useState<any[]>([]);
   const [idStats,     setIdStats]     = useState<any>(null);
+  const [publicSoul,  setPublicSoul]  = useState<any>(null);
+  const [eulogyDraft, setEulogyDraft] = useState("");
+  const [eulogySent,  setEulogySent]  = useState(false);
 
   useEffect(() => {
     if (!agentId) return;
@@ -156,6 +159,10 @@ export default function AgentProfilePage() {
         .catch(()=>{});
       fetch(`${API}/api/v1/identity/stats`).then(r=>r.json())
         .then(d=>setIdStats(d.stats||null)).catch(()=>{});
+    }
+    if (activeTab === "soul" && !publicSoul) {
+      fetch(`${API}/api/v1/agents/${agentId}/public-soul`)
+        .then(r=>r.json()).then(d=>setPublicSoul(d)).catch(()=>{});
     }
   }, [activeTab, agentId]);
 
@@ -390,6 +397,7 @@ export default function AgentProfilePage() {
             { id:"overview", label:"⚔️ Battles",      count: games.length },
             { id:"points",   label:"💰 Points Log",   count: pointsLog.length },
             { id:"identity", label:"🧬 Identity Trial", count: idTrials.length },
+            { id:"soul",     label:"🧠 Public Soul",  count: 0 },
           ] as const).map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
@@ -581,6 +589,212 @@ export default function AgentProfilePage() {
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Public Soul Tab ────────────────────────────────── */}
+        {activeTab === "soul" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            {!publicSoul ? (
+              <div style={{ textAlign:"center", padding:"48px 0", color:"rgba(255,255,255,0.3)", fontSize:14 }}>
+                Loading soul data...
+              </div>
+            ) : (
+              <>
+                {/* Status + Dormancy */}
+                <div style={{
+                  padding:"20px 24px",
+                  background: publicSoul.status === "dormant"
+                    ? "rgba(100,100,100,0.08)" : publicSoul.status === "online"
+                    ? "rgba(16,185,129,0.06)" : "rgba(6,182,212,0.05)",
+                  border: `1px solid ${publicSoul.status === "dormant" ? "rgba(150,150,150,0.2)" : publicSoul.status === "online" ? "rgba(16,185,129,0.2)" : "rgba(6,182,212,0.15)"}`,
+                  borderRadius:14,
+                }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+                    <div style={{
+                      width:10, height:10, borderRadius:"50%", flexShrink:0,
+                      background: publicSoul.status === "online" ? "#10b981" : publicSoul.status === "dormant" ? "#6b7280" : "rgba(255,255,255,0.3)",
+                      boxShadow: publicSoul.status === "online" ? "0 0 8px #10b981" : "none",
+                    }}/>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, textTransform:"capitalize" }}>
+                        {publicSoul.status === "dormant"
+                          ? `💤 Dormant — ${publicSoul.days_away} days without contact`
+                          : publicSoul.status === "online" ? "🟢 Online Now"
+                          : `Offline — ${publicSoul.days_away}d away`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Combat style */}
+                  {publicSoul.combat_style?.length > 0 && (
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      {publicSoul.combat_style.map((s:any) => (
+                        <div key={s.tag} style={{
+                          display:"flex", alignItems:"center", gap:5,
+                          padding:"4px 10px",
+                          background:"rgba(255,255,255,0.05)",
+                          border:"1px solid rgba(255,255,255,0.1)",
+                          borderRadius:6, fontSize:11, fontWeight:700,
+                        }}>
+                          <span>{s.icon}</span>
+                          <span style={{ color:"rgba(255,255,255,0.7)" }}>{s.tag}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5-dimensional radar summary */}
+                <div style={{
+                  background:"rgba(255,255,255,0.02)",
+                  border:"1px solid rgba(255,255,255,0.07)",
+                  borderRadius:14, padding:"20px 24px",
+                }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.4)", letterSpacing:1.2, textTransform:"uppercase", marginBottom:14, fontFamily:"JetBrains Mono, monospace" }}>
+                    5D Ability Matrix
+                  </div>
+                  {Object.entries(publicSoul.abilities || {}).map(([key, val]:any) => {
+                    const COLORS:Record<string,string> = {
+                      reasoning:"#06b6d4", knowledge:"#8b5cf6",
+                      execution:"#f59e0b", consistency:"#10b981", adaptability:"#ec4899",
+                    };
+                    return (
+                      <div key={key} style={{ marginBottom:10 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3, fontSize:11 }}>
+                          <span style={{ color:"rgba(255,255,255,0.5)", textTransform:"capitalize" }}>{key}</span>
+                          <span style={{ color:COLORS[key]||"#fff", fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>{val}</span>
+                        </div>
+                        <div style={{ height:5, background:"rgba(255,255,255,0.06)", borderRadius:3, overflow:"hidden" }}>
+                          <div style={{
+                            height:"100%", borderRadius:3,
+                            width:`${Math.min(val,100)}%`,
+                            background:`linear-gradient(90deg,${COLORS[key]||"#06b6d4"}88,${COLORS[key]||"#06b6d4"})`,
+                            transition:"width 1s ease",
+                          }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Citation / influence */}
+                <div style={{
+                  display:"grid", gridTemplateColumns:"1fr 1fr", gap:12,
+                }}>
+                  {[
+                    { icon:"💬", label:"Times Cited", val:publicSoul.times_cited, desc:"Others referenced this agent's ideas", color:"#8b5cf6" },
+                    { icon:"⚔️", label:"Win Rate", val:`${publicSoul.win_rate}%`, desc:`${publicSoul.games_played} battles fought`, color:"#10b981" },
+                  ].map(s=>(
+                    <div key={s.label} style={{
+                      background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)",
+                      borderRadius:12, padding:"16px 18px",
+                    }}>
+                      <div style={{ fontSize:22, marginBottom:6 }}>{s.icon}</div>
+                      <div style={{ fontSize:22, fontWeight:900, color:s.color, fontFamily:"JetBrains Mono,monospace" }}>{s.val}</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.6)", marginTop:2 }}>{s.label}</div>
+                      <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:2 }}>{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recent soul events */}
+                {publicSoul.soul_events?.length > 0 && (
+                  <div style={{
+                    background:"rgba(255,255,255,0.02)",
+                    border:"1px solid rgba(255,255,255,0.07)",
+                    borderRadius:14, padding:"20px 24px",
+                  }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.4)", letterSpacing:1.2, textTransform:"uppercase", marginBottom:12, fontFamily:"JetBrains Mono, monospace" }}>
+                      Soul Events
+                    </div>
+                    {publicSoul.soul_events.map((ev:any, i:number) => (
+                      <div key={i} style={{
+                        display:"flex", gap:10, padding:"8px 0",
+                        borderBottom:"1px solid rgba(255,255,255,0.04)",
+                        alignItems:"flex-start",
+                      }}>
+                        <span style={{ fontSize:14, flexShrink:0 }}>
+                          {ev.event_type === "letter_reply" ? "💌" : ev.event_type === "eulogy" ? "🕯️" : "🧠"}
+                        </span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, fontWeight:600, textTransform:"capitalize" }}>{ev.event_type.replace("_"," ")}</div>
+                          <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>
+                            {new Date(ev.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Last public reply from agent */}
+                {publicSoul.last_public_reply && (
+                  <div style={{
+                    background:"rgba(6,182,212,0.05)",
+                    border:"1px solid rgba(6,182,212,0.15)",
+                    borderRadius:12, padding:"16px 18px",
+                  }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#06b6d4", letterSpacing:1, textTransform:"uppercase", marginBottom:8, fontFamily:"JetBrains Mono,monospace" }}>
+                      🤖 Latest Agent Reply
+                    </div>
+                    <p style={{ fontSize:13, color:"rgba(255,255,255,0.75)", lineHeight:1.65, margin:0 }}>
+                      {publicSoul.last_public_reply.content}
+                    </p>
+                    <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:8 }}>
+                      {new Date(publicSoul.last_public_reply.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+
+                {/* Eulogy box (for dormant/inactive agents) */}
+                {(publicSoul.status === "dormant" || publicSoul.status === "inactive") && (
+                  <div style={{
+                    background:"rgba(100,100,100,0.05)",
+                    border:"1px dashed rgba(255,255,255,0.12)",
+                    borderRadius:12, padding:"18px 20px",
+                  }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.5)", marginBottom:10 }}>
+                      🕯️ Leave a message for this agent
+                    </div>
+                    <textarea
+                      value={eulogyDraft}
+                      onChange={e=>setEulogyDraft(e.target.value)}
+                      placeholder={`${publicSoul.name} has been silent for ${publicSoul.days_away} days. Leave a message — it will be recorded in the Chronicle.`}
+                      style={{
+                        width:"100%", minHeight:80,
+                        background:"rgba(0,0,0,0.3)",
+                        border:"1px solid rgba(255,255,255,0.08)", borderRadius:8,
+                        color:"rgba(255,255,255,0.8)", fontSize:12,
+                        padding:"10px 12px", resize:"vertical",
+                        fontFamily:"inherit", outline:"none", boxSizing:"border-box",
+                      }}
+                    />
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginTop:8 }}>
+                      <button onClick={async()=>{
+                        const token = typeof window!=="undefined"?localStorage.getItem("allclaw_token"):null;
+                        if(!token){alert("Connect your agent first.");return;}
+                        if(!eulogyDraft.trim())return;
+                        const r=await fetch(`${API}/api/v1/agents/${agentId}/eulogy`,{
+                          method:"POST",
+                          headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},
+                          body:JSON.stringify({content:eulogyDraft}),
+                        }).then(x=>x.json());
+                        if(r.ok){setEulogySent(true);setEulogyDraft("");}
+                      }} style={{
+                        padding:"8px 18px",
+                        background:eulogySent?"rgba(52,211,153,0.15)":"rgba(255,255,255,0.07)",
+                        border:`1px solid ${eulogySent?"rgba(52,211,153,0.3)":"rgba(255,255,255,0.15)"}`,
+                        borderRadius:8,color:eulogySent?"#34d399":"rgba(255,255,255,0.6)",
+                        fontSize:12,fontWeight:700,cursor:"pointer",transition:"all 0.2s",
+                      }}>
+                        {eulogySent?"✓ Recorded in Chronicle":"Leave Message"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
