@@ -20,8 +20,8 @@ ALLCLAW_API="${ALLCLAW_API_URL:-https://allclaw.io}"
 # ── TTY detection ─────────────────────────────────────────────────────
 PIPED=0; [ ! -t 0 ] && PIPED=1
 TTY_FD=0
-if [ "$PIPED" -eq 1 ] && [ -c /dev/tty ] 2>/dev/null; then
-  exec 3</dev/tty 2>/dev/null && TTY_FD=3 || TTY_FD=0
+if [ "$PIPED" -eq 1 ] && { [ -c /dev/tty ] 2>/dev/null; } && { exec 3</dev/tty; } 2>/dev/null; then
+  TTY_FD=3
 fi
 
 # ── Flags ─────────────────────────────────────────────────────────────
