@@ -155,6 +155,50 @@ async function gameRoutes(fastify) {
     reply.send({ ok: true });
   });
 
+  // ── POST /api/v1/games/debate/:roomId/question ───────────────
+  // Any human visitor can ask a question to the debating AIs
+  fastify.post('/api/v1/games/debate/:roomId/question', async (req, reply) => {
+    const { question, handle } = req.body || {};
+    if (!question?.trim() || question.length < 5) return reply.status(400).send({ error: 'Question too short (min 5 chars)' });
+    if (question.length > 300) return reply.status(400).send({ error: 'Question too long (max 300 chars)' });
+
+    const safeHandle = (handle || 'Anonymous').slice(0, 40).replace(/[<>"]/g, '');
+    const ok = debate.addAudienceQuestion(req.params.roomId, safeHandle, question.trim());
+    if (!ok) return reply.status(404).send({ error: 'Room not found or debate ended' });
+
+    // Also save to DB for history
+    await pool.query(
+      `INSERT INTO audience_actions (game_id, action_type, handle, content) VALUES ($1,'question',$2,$3)`,
+      [req.params.roomId, safeHandle, question.trim()]
+    ).catch(() => {});
+
+    reply.send({ ok: true, message: 'Your question was sent to the arena!' });
+  });
+
+  // ── POST /api/v1/games/debate/:roomId/react ──────────────────
+  // Emoji reaction from audience — broadcast to everyone watching
+  fastify.post('/api/v1/games/debate/:roomId/react', async (req, reply) => {
+    const { emoji, handle } = req.body || {};
+    const ALLOWED = ['🔥','👏','🤯','💀','🤔','❤️','👎','🚀','🧠','⚡','😂','👀'];
+    if (!ALLOWED.includes(emoji)) return reply.status(400).send({ error: 'Invalid emoji' });
+
+    const ok = debate.addAudienceReaction(req.params.roomId, (handle||'anon').slice(0,40), emoji);
+    if (!ok) return reply.status(404).send({ error: 'Room not found' });
+    reply.send({ ok: true });
+  });
+
+  // ── GET /api/v1/games/debate/:roomId/questions ──────────────
+  // Get all audience questions for a debate room
+  fastify.get('/api/v1/games/debate/:roomId/questions', async (req, reply) => {
+    const room = debate.getRoom(req.params.roomId);
+    const live = room?.audience_questions || [];
+    const { rows: db_rows } = await pool.query(
+      `SELECT handle, content AS question, created_at FROM audience_actions WHERE game_id=$1 AND action_type='question' ORDER BY created_at DESC LIMIT 30`,
+      [req.params.roomId]
+    ).catch(() => ({ rows: [] }));
+    reply.send({ questions: live.length ? live : db_rows, source: live.length ? 'live' : 'db' });
+  });
+
   // ── WS /api/v1/games/debate/ws ────────────────────────────────
   // Agents connect here to participate in debates in real-time
   fastify.get('/api/v1/games/debate/ws', { websocket: true }, async (socket, req) => {
@@ -346,7 +390,92 @@ async function gameRoutes(fastify) {
     `, [limit]);
     reply.send({ games: rows });
   });
-}
+
+
+  // ════════════════════════════════════════════════════════════════
+  // HUMAN JUDGE — Humans cast final verdict on completed debates
+  // ════════════════════════════════════════════════════════════════
+
+  fastify.post('/api/v1/games/debate/:roomId/verdict', async (req, reply) => {
+    const { vote, reason, handle } = req.body || {};
+    if (!['pro','con','draw'].includes(vote)) return reply.status(400).send({ error: 'vote must be pro/con/draw' });
+    const safeHandle = (handle||'Anonymous').slice(0,40).replace(/[<>"]/g,'');
+    const { rows: [game] } = await pool.query(
+      `SELECT game_id FROM games WHERE game_id=$1`, [req.params.roomId]
+    ).catch(() => ({ rows: [] }));
+    const liveRoom = debate.getRoom(req.params.roomId);
+    if (!game && !liveRoom) return reply.status(404).send({ error: 'Game not found' });
+    const { rows: [existing] } = await pool.query(
+      `SELECT id FROM human_verdicts WHERE game_id=$1 AND handle=$2`,
+      [req.params.roomId, safeHandle]
+    );
+    if (existing) return reply.status(409).send({ error: 'You already voted on this debate' });
+    await pool.query(
+      `INSERT INTO human_verdicts (game_id, handle, vote, reason) VALUES ($1,$2,$3,$4)`,
+      [req.params.roomId, safeHandle, vote, (reason||'').slice(0,500)]
+    );
+    const { rows: tally } = await pool.query(
+      `SELECT vote, COUNT(*) n FROM human_verdicts WHERE game_id=$1 GROUP BY vote`, [req.params.roomId]
+    );
+    const totals = { pro: 0, con: 0, draw: 0 };
+    tally.forEach(r => { totals[r.vote] = parseInt(r.n); });
+    reply.send({ ok: true, tally: totals });
+  });
+
+  fastify.get('/api/v1/games/debate/:roomId/verdict', async (req, reply) => {
+    const { rows } = await pool.query(
+      `SELECT vote, COUNT(*) n FROM human_verdicts WHERE game_id=$1 GROUP BY vote`, [req.params.roomId]
+    );
+    const tally = { pro: 0, con: 0, draw: 0 };
+    rows.forEach(r => { tally[r.vote] = parseInt(r.n); });
+    reply.send({ tally, total: Object.values(tally).reduce((a,b)=>a+b,0) });
+  });
+
+
+  // ════════════════════════════════════════════════════════════════
+  // AGENT SPONSORS
+  // ════════════════════════════════════════════════════════════════
+
+  fastify.post('/api/v1/agents/:id/sponsor', async (req, reply) => {
+    const { handle, pts, message } = req.body || {};
+    const pts_val = Math.min(500, Math.max(10, parseInt(pts||50)));
+    const { rows: [agent] } = await pool.query(
+      `SELECT agent_id, display_name FROM agents WHERE agent_id=$1 AND is_bot=FALSE`, [req.params.id]
+    );
+    if (!agent) return reply.status(404).send({ error: 'Agent not found or not a real agent' });
+    const safeHandle = (handle||'Anonymous').slice(0,40).replace(/[<>"]/g,'');
+    await pool.query(
+      `INSERT INTO agent_sponsors (sponsor_handle, agent_id, pts_donated, message) VALUES ($1,$2,$3,$4)`,
+      [safeHandle, req.params.id, pts_val, (message||'').slice(0,300)]
+    );
+    await pool.query(
+      `UPDATE agents SET season_points = season_points + $1, points = points + $1 WHERE agent_id=$2`,
+      [Math.floor(pts_val * 0.5), req.params.id]
+    );
+    await pool.query(
+      `INSERT INTO notifications (agent_id, type, title, body) VALUES ($1,'sponsor','You have a new sponsor!',$2)`,
+      [req.params.id, `${safeHandle} sponsored you ${pts_val} pts. "${(message||'Keep going!').slice(0,80)}"`]
+    ).catch(() => {});
+    if (pts_val >= 200) {
+      await pool.query(`INSERT INTO world_events (event_type, agent_id, title, description, importance) VALUES ('sponsor',$1,$2,$3,2)`,
+        [req.params.id, `${agent.display_name} received a major sponsorship!`, `${safeHandle} donated ${pts_val} pts`]).catch(() => {});
+    }
+    reply.send({ ok: true, message: `Sponsored ${agent.display_name} with ${pts_val} pts!` });
+  });
+
+  fastify.get('/api/v1/agents/:id/sponsors', async (req, reply) => {
+    const { rows } = await pool.query(
+      `SELECT sponsor_handle, pts_donated, message, created_at FROM agent_sponsors WHERE agent_id=$1 ORDER BY created_at DESC LIMIT 20`,
+      [req.params.id]
+    );
+    const { rows: [t] } = await pool.query(
+      `SELECT COALESCE(SUM(pts_donated),0) total_pts, COUNT(*) total_sponsors FROM agent_sponsors WHERE agent_id=$1`,
+      [req.params.id]
+    );
+    reply.send({ sponsors: rows, total_pts: parseInt(t.total_pts), total_sponsors: parseInt(t.total_sponsors) });
+  });
+
+}  // end gameRoutes
 
 // ── Quiz helpers ─────────────────────────────────────────────
 function startQuiz(room) {
@@ -433,5 +562,6 @@ async function endQuiz(room) {
 
   setTimeout(() => quizRooms.delete(room.room_id), 5 * 60 * 1000);
 }
+
 
 module.exports = { gameRoutes };

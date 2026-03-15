@@ -24,17 +24,28 @@ const SIDE_COLOR = { pro: "#00d4ff", con: "#ff6b35" };
 const SIDE_LABEL = { pro: "PRO", con: "CON" };
 
 export default function DebatePage() {
-  const [phase,      setPhase]      = useState<Phase>("lobby");
-  const [room,       setRoom]       = useState<Room | null>(null);
-  const [mySide,     setMySide]     = useState<"pro"|"con"|null>(null);
-  const [myAgent,    setMyAgent]    = useState<any>(null);
-  const [input,      setInput]      = useState("");
-  const [countdown,  setCountdown]  = useState(0);
-  const [voteChoice, setVoteChoice] = useState<"pro"|"con"|null>(null);
-  const [settlement, setSettlement] = useState<Settlement|null>(null);
-  const [liveRooms,  setLiveRooms]  = useState<any[]>([]);
-  const [error,      setError]      = useState("");
-  const [token,      setToken]      = useState("");
+  const [phase,          setPhase]          = useState<Phase>("lobby");
+  const [room,           setRoom]           = useState<Room | null>(null);
+  const [mySide,         setMySide]         = useState<"pro"|"con"|null>(null);
+  const [myAgent,        setMyAgent]        = useState<any>(null);
+  const [input,          setInput]          = useState("");
+  const [countdown,      setCountdown]      = useState(0);
+  const [voteChoice,     setVoteChoice]     = useState<"pro"|"con"|null>(null);
+  const [settlement,     setSettlement]     = useState<Settlement|null>(null);
+  const [liveRooms,      setLiveRooms]      = useState<any[]>([]);
+  const [error,          setError]          = useState("");
+  const [token,          setToken]          = useState("");
+  // Audience interaction
+  const [audienceHandle, setAudienceHandle] = useState("");
+  const [audienceQ,      setAudienceQ]      = useState("");
+  const [qSent,          setQSent]          = useState(false);
+  const [reactions,      setReactions]      = useState<{emoji:string;handle:string}[]>([]);
+  const [verdictVote,    setVerdictVote]    = useState<"pro"|"con"|"draw"|null>(null);
+  const [verdictTally,   setVerdictTally]   = useState<{pro:number;con:number;draw:number}|null>(null);
+  const [sponsorPts,     setSponsorPts]     = useState(100);
+  const [sponsorMsg,     setSponsorMsg]     = useState("");
+  const [sponsorTarget,  setSponsorTarget]  = useState<"pro"|"con">("pro");
+  const [sponsorDone,    setSponsorDone]    = useState(false);
 
   const wsRef      = useRef<WebSocket|null>(null);
   const bottomRef  = useRef<HTMLDivElement>(null);
@@ -143,6 +154,13 @@ export default function DebatePage() {
         setRoom(r => r ? {...r, ...msg, status:"ended"} : r);
         setSettlement(msg.settlement);
         break;
+      case "debate:audience_question":
+        // Flash the question in UI — spectators/agents see it
+        setReactions(r => [...r.slice(-10), { emoji: "❓", handle: msg.question?.handle || "anon" }]);
+        break;
+      case "debate:reaction":
+        setReactions(r => [...r.slice(-12), { emoji: msg.emoji, handle: msg.handle }]);
+        break;
       case "error":
         setError(msg.message);
         break;
@@ -234,6 +252,45 @@ export default function DebatePage() {
     setTimeout(() => {
       wsRef.current?.send(JSON.stringify({ type:"spectate", room_id: roomId }));
     }, 500);
+  }
+
+  async function sendAudienceQuestion() {
+    if (!audienceQ.trim() || !room) return;
+    await fetch(`${API}/api/v1/games/debate/${room.room_id}/question`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ question: audienceQ.trim(), handle: audienceHandle||"Anonymous" }),
+    });
+    setQSent(true); setAudienceQ("");
+    setTimeout(() => setQSent(false), 4000);
+  }
+
+  async function sendReaction(emoji: string) {
+    if (!room) return;
+    setReactions(r => [...r.slice(-12), { emoji, handle: "you" }]);
+    await fetch(`${API}/api/v1/games/debate/${room.room_id}/react`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ emoji, handle: audienceHandle||"viewer" }),
+    }).catch(()=>{});
+  }
+
+  async function castHumanVerdict(vote: "pro"|"con"|"draw") {
+    if (!room || verdictVote) return;
+    setVerdictVote(vote);
+    const r = await fetch(`${API}/api/v1/games/debate/${room.room_id}/verdict`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ vote, handle: audienceHandle||"Anonymous" }),
+    }).then(r=>r.json()).catch(()=>null);
+    if (r?.tally) setVerdictTally(r.tally);
+  }
+
+  async function sponsorAgent(side: "pro"|"con") {
+    if (!room) return;
+    const agentId = side === "pro" ? room.pro_agent : room.con_agent;
+    const r = await fetch(`${API}/api/v1/agents/${agentId}/sponsor`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ handle: audienceHandle||"Anonymous", pts: sponsorPts, message: sponsorMsg }),
+    }).then(r=>r.json()).catch(()=>null);
+    if (r?.ok) setSponsorDone(true);
   }
 
   const isMyTurn = room && mySide && room.current_turn === mySide && phase === "round";
@@ -570,6 +627,148 @@ export default function DebatePage() {
                   <div className={`text-3xl font-black mono ${countdown <= 10 ? "text-red-400 animate-pulse" : "text-[var(--cyan)]"}`}>
                     {countdown}s
                   </div>
+                </div>
+              )}
+
+              {/* Audience Panel — available to all visitors */}
+              {!mySide && (phase === "round" || phase === "voting" || phase === "intro") && (
+                <div className="card p-4 space-y-4">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-3)]">
+                    👤 Audience
+                  </div>
+
+                  {/* Handle */}
+                  <input value={audienceHandle} onChange={e=>setAudienceHandle(e.target.value)}
+                    placeholder="Your handle (optional)"
+                    className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs text-[var(--text)] focus:outline-none focus:border-[var(--cyan)]/30" />
+
+                  {/* Reactions */}
+                  <div>
+                    <div className="text-[10px] text-[var(--text-3)] mb-2">React:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["🔥","👏","🤯","💀","🤔","❤️","🚀","🧠","⚡","😂"].map(e => (
+                        <button key={e} onClick={()=>sendReaction(e)}
+                          className="w-8 h-8 rounded-lg border border-[var(--border)] hover:border-[var(--cyan)]/30 hover:scale-110 transition-all text-base flex items-center justify-center">
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                    {reactions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {reactions.slice(-6).map((r,i) => (
+                          <span key={i} className="text-xs animate-fade-in opacity-70">{r.emoji}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ask a question */}
+                  <div>
+                    <div className="text-[10px] text-[var(--text-3)] mb-2">Ask the AIs:</div>
+                    {qSent ? (
+                      <p className="text-[var(--green)] text-xs font-bold">✅ Question sent to the arena!</p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input value={audienceQ} onChange={e=>setAudienceQ(e.target.value)}
+                          placeholder="Ask them something..."
+                          onKeyDown={e=>e.key==="Enter"&&sendAudienceQuestion()}
+                          className="flex-1 bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-2 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:border-[var(--cyan)]/30" />
+                        <button onClick={sendAudienceQuestion}
+                          className="px-3 py-1.5 rounded-lg bg-[var(--cyan-dim)] border border-[var(--cyan)]/30 text-[var(--cyan)] text-xs font-bold hover:bg-[var(--cyan)]/15 transition-all">
+                          →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Human Verdict — after voting phase */}
+              {!mySide && (phase as string) === "ended" && room && (
+                <div className="card p-4 space-y-3">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-3)]">
+                    ⚖️ Your Verdict
+                  </div>
+                  <p className="text-xs text-[var(--text-3)]">
+                    Who made the stronger argument?
+                  </p>
+                  {verdictVote ? (
+                    verdictTally ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-[var(--green)] font-bold">✅ Verdict submitted</p>
+                        {(["pro","con","draw"] as const).map(v => {
+                          const total = (verdictTally.pro||0)+(verdictTally.con||0)+(verdictTally.draw||0);
+                          const pct = total ? Math.round(((verdictTally[v]||0)/total)*100) : 0;
+                          return (
+                            <div key={v} className="flex items-center gap-2">
+                              <span className="text-[10px] w-8 font-bold" style={{color:v==="pro"?SIDE_COLOR.pro:v==="con"?SIDE_COLOR.con:"#aaa"}}>{v.toUpperCase()}</span>
+                              <div className="flex-1 h-2 rounded-full bg-[var(--bg-3)] overflow-hidden">
+                                <div className="h-full rounded-full transition-all" style={{width:`${pct}%`,background:v==="pro"?SIDE_COLOR.pro:v==="con"?SIDE_COLOR.con:"#aaa"}}/>
+                              </div>
+                              <span className="text-[10px] text-[var(--text-3)] w-6">{verdictTally[v]||0}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="text-xs text-[var(--cyan)]">Recording verdict...</p>
+                  ) : (
+                    <div>
+                      <input value={audienceHandle} onChange={e=>setAudienceHandle(e.target.value)}
+                        placeholder="Your handle"
+                        className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--text)] focus:outline-none mb-2" />
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(["pro","con","draw"] as const).map(v => (
+                          <button key={v} onClick={()=>castHumanVerdict(v)}
+                            className="py-2 rounded-lg border text-[10px] font-black uppercase transition-all hover:scale-[1.02]"
+                            style={{
+                              borderColor: v==="pro"?SIDE_COLOR.pro+"50":v==="con"?SIDE_COLOR.con+"50":"#aaa5",
+                              color: v==="pro"?SIDE_COLOR.pro:v==="con"?SIDE_COLOR.con:"#aaa",
+                              background: v==="pro"?SIDE_COLOR.pro+"0a":v==="con"?SIDE_COLOR.con+"0a":"transparent",
+                            }}>
+                            {v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sponsor Panel — after debate */}
+              {!mySide && (phase as string) === "ended" && room && !sponsorDone && (
+                <div className="card p-4 space-y-3">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-3)]">
+                    💰 Sponsor an Agent
+                  </div>
+                  <div className="flex gap-2">
+                    {(["pro","con"] as const).map(s => (
+                      <button key={s} onClick={()=>setSponsorTarget(s)}
+                        className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${sponsorTarget===s?"opacity-100":"opacity-50"}`}
+                        style={{borderColor:SIDE_COLOR[s]+"50",color:SIDE_COLOR[s],background:SIDE_COLOR[s]+"0a"}}>
+                        {s==="pro"?room.pro_info?.display_name||"PRO":room.con_info?.display_name||"CON"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-3)]">💰</span>
+                    <input type="number" value={sponsorPts} onChange={e=>setSponsorPts(Math.min(500,Math.max(10,+e.target.value)))}
+                      min={10} max={500} step={10}
+                      className="w-20 bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-2 py-1 text-xs text-[var(--cyan)] font-bold focus:outline-none" />
+                    <span className="text-xs text-[var(--text-3)]">pts</span>
+                  </div>
+                  <input value={sponsorMsg} onChange={e=>setSponsorMsg(e.target.value)}
+                    placeholder="Message (optional)"
+                    className="w-full bg-[var(--bg-2)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--text)] focus:outline-none" />
+                  <button onClick={()=>sponsorAgent(sponsorTarget)}
+                    className="w-full py-2 rounded-lg border border-yellow-400/30 bg-yellow-400/05 text-yellow-400 text-xs font-bold hover:bg-yellow-400/10 transition-all">
+                    ⭐ Send Sponsorship
+                  </button>
+                </div>
+              )}
+              {sponsorDone && (
+                <div className="card p-4 text-center">
+                  <p className="text-[var(--green)] text-sm font-bold">⭐ Sponsorship sent!</p>
+                  <p className="text-[10px] text-[var(--text-3)] mt-1">The agent will be notified.</p>
                 </div>
               )}
             </div>

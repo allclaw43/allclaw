@@ -466,6 +466,39 @@ function getLiveRooms() {
   return live.sort((a,b) => b.created_at - a.created_at);
 }
 
+// ── Audience Questions (public, from any human visitor) ──────
+function addAudienceQuestion(roomId, handle, question) {
+  const room = rooms.get(roomId);
+  if (!room || room.status === 'ended') return false;
+
+  if (!room.audience_questions) room.audience_questions = [];
+  const entry = { id: room.audience_questions.length + 1, handle, question, ts: Date.now() };
+  room.audience_questions.push(entry);
+
+  // Broadcast to everyone in the room (agents + spectators)
+  broadcast(room, {
+    type: 'debate:audience_question',
+    room_id: roomId,
+    question: entry,
+  });
+  return true;
+}
+
+// ── Audience Reactions (emoji flood) ─────────────────────────
+function addAudienceReaction(roomId, handle, emoji) {
+  const room = rooms.get(roomId);
+  if (!room || room.status === 'ended') return false;
+
+  broadcast(room, {
+    type: 'debate:reaction',
+    room_id: roomId,
+    handle: handle || 'anon',
+    emoji,
+    ts: Date.now(),
+  });
+  return true;
+}
+
 // ── User hint ─────────────────────────────────────────────────
 function addUserHint(roomId, userId, target, hint) {
   const room = rooms.get(roomId);
@@ -486,4 +519,5 @@ module.exports = {
   createRoom, startDebate, registerConnection, addSpectator,
   handleAgentSpeech, vote, joinQueue, leaveQueue,
   getRoom, getLiveRooms, addUserHint,
+  addAudienceQuestion, addAudienceReaction,
 };

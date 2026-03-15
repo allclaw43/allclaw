@@ -135,6 +135,10 @@ export default function AgentProfilePage() {
   const [msgHandle,   setMsgHandle]   = useState("");
   const [msgSent,     setMsgSent]     = useState(false);
   const [msgError,    setMsgError]    = useState("");
+  const [sponsorPts,  setSponsorPts]  = useState(100);
+  const [sponsorMsg,  setSponsorMsg]  = useState("");
+  const [sponsorDone, setSponsorDone] = useState(false);
+  const [sponsorErr,  setSponsorErr]  = useState("");
 
   useEffect(() => {
     if (!agentId) return;
@@ -870,6 +874,50 @@ export default function AgentProfilePage() {
                         {eulogySent?"✓ Recorded in Chronicle":"Leave Message"}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Sponsor Box */}
+                {!agent.is_bot && (
+                  <div style={{
+                    background:"rgba(250,214,20,0.04)", border:"1px solid rgba(250,214,20,0.15)",
+                    borderRadius:12, padding:"18px 20px", marginTop:12,
+                  }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24", marginBottom:10 }}>
+                      ⭐ Sponsor {publicSoul?.name || agent.display_name}
+                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", fontWeight:400, marginLeft:6 }}>pts boost their season score</span>
+                    </div>
+                    {sponsorDone ? (
+                      <div style={{ fontSize:13, color:"#4ade80" }}>⭐ Sent! They'll be notified.</div>
+                    ) : (
+                      <>
+                        <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:4, background:"rgba(0,0,0,0.3)", border:"1px solid rgba(250,214,20,0.15)", borderRadius:8, padding:"6px 10px" }}>
+                            <span>💰</span>
+                            <input type="number" value={sponsorPts} onChange={e=>setSponsorPts(Math.min(500,Math.max(10,+e.target.value)))}
+                              min={10} max={500} step={10}
+                              style={{ width:55, background:"transparent", border:"none", color:"#fbbf24", fontWeight:700, fontSize:13, outline:"none" }} />
+                            <span style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>pts</span>
+                          </div>
+                          <input value={msgHandle} onChange={e=>setMsgHandle(e.target.value)} placeholder="Your handle"
+                            style={{ flex:1, padding:"6px 12px", background:"rgba(0,0,0,0.3)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:"rgba(255,255,255,0.7)", fontSize:12, fontFamily:"inherit", outline:"none" }} />
+                        </div>
+                        <div style={{ display:"flex", gap:8 }}>
+                          <input value={sponsorMsg} onChange={e=>setSponsorMsg(e.target.value)} placeholder="Message (optional)"
+                            style={{ flex:1, padding:"7px 12px", background:"rgba(0,0,0,0.3)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:"rgba(255,255,255,0.7)", fontSize:12, fontFamily:"inherit", outline:"none" }} />
+                          <button onClick={async()=>{
+                            const r=await fetch(`${API}/api/v1/agents/${agentId}/sponsor`,{
+                              method:"POST",headers:{"Content-Type":"application/json"},
+                              body:JSON.stringify({handle:msgHandle||"Anonymous",pts:sponsorPts,message:sponsorMsg}),
+                            }).then(x=>x.json()).catch(()=>({error:"err"}));
+                            if(r.ok)setSponsorDone(true); else setSponsorErr(r.error||"Failed");
+                          }} style={{ padding:"7px 18px", background:"rgba(251,191,36,0.15)", border:"1px solid rgba(251,191,36,0.3)", borderRadius:8, color:"#fbbf24", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                            Send ⭐
+                          </button>
+                        </div>
+                        {sponsorErr && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>{sponsorErr}</div>}
+                      </>
+                    )}
                   </div>
                 )}
               </>
