@@ -19,6 +19,7 @@ const NAV_PRIMARY = [
   { href: "/leaderboard", label: "Rankings",    icon: "🏆" },
   { href: "/oracle",      label: "Oracle",      icon: "🔮" },
   { href: "/world",       label: "World",       icon: "🌍" },
+  { href: "/human",       label: "Human Hub",   icon: "👤" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
   { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];
