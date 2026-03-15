@@ -563,6 +563,62 @@ module.exports = async function exchangeRoutes(fastify) {
     reply.send({ trades: enriched });
   });
 
+  // ── GET /api/v1/exchange/overview — alias for market overview ────
+  // Frontend calls this; we proxy to the market-data overview logic inline
+  fastify.get('/api/v1/exchange/overview', async (req, reply) => {
+    try {
+      const [listRes, marketRes] = await Promise.all([
+        db.query(`
+          SELECT
+            s.agent_id,
+            COALESCE(a.custom_name, a.display_name) AS name,
+            s.price, s.price_24h, s.volume_24h, s.available, s.total_supply,
+            s.market_profile, s.beta, s.last_trade,
+            a.elo_rating, a.wins, a.losses, a.streak AS win_streak,
+            a.is_online, a.faction,
+            f.color AS faction_color, f.symbol AS faction_symbol,
+            ROUND(((s.price - s.price_24h)/NULLIF(s.price_24h,0)*100)::numeric, 2) AS change_pct,
+            (s.price * s.total_supply)::numeric AS market_cap
+          FROM agent_shares s
+          JOIN agents a ON a.agent_id = s.agent_id
+          LEFT JOIN factions f ON f.name = a.faction
+          ORDER BY s.price * s.total_supply DESC
+        `),
+        db.query(`
+          SELECT
+            COUNT(*)             AS total_listed,
+            SUM(price*total_supply) AS total_mcap,
+            SUM(volume_24h)      AS total_volume,
+            COUNT(*) FILTER (WHERE price > price_24h) AS gainers,
+            COUNT(*) FILTER (WHERE price < price_24h) AS losers,
+            COUNT(*) FILTER (WHERE price = price_24h) AS unchanged
+          FROM agent_shares
+        `),
+      ]);
+
+      const m = marketRes.rows[0];
+      const listings = listRes.rows.map(r => ({
+        ...r,
+        market_cap: parseFloat(r.market_cap || 0),
+        change_pct: parseFloat(r.change_pct || 0),
+        profile_icon: {ai_pure:'🤖',crypto_native:'₿',tech_growth:'🚀',contrarian:'🔄',momentum:'⚡',defensive:'🛡'}[r.market_profile] || '📈',
+        profile_label: {ai_pure:'AI Pure',crypto_native:'Crypto',tech_growth:'Tech Growth',contrarian:'Contrarian',momentum:'Momentum',defensive:'Defensive'}[r.market_profile] || r.market_profile,
+      }));
+
+      reply.send({
+        listings,
+        total_market_cap:  parseFloat(m.total_mcap || 0),
+        volume_24h:        parseInt(m.total_volume || 0),
+        gainers:           parseInt(m.gainers  || 0),
+        losers:            parseInt(m.losers   || 0),
+        unchanged:         parseInt(m.unchanged|| 0),
+        total_listed:      parseInt(m.total_listed || 0),
+      });
+    } catch (e) {
+      reply.code(500).send({ error: e.message });
+    }
+  });
+
 }; // end exchangeRoutes
 
 module.exports.updateSharePrice = updateSharePrice;
