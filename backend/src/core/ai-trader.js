@@ -37,9 +37,10 @@ async function executeTrade({ buyerId, sellerId, targetAgentId, shares, reason, 
     const price      = parseFloat(share.price);
     const totalCost  = parseFloat((price * shares).toFixed(4));
 
-    // Price impact: each buy pushes price up slightly, sell pushes down
-    const impact = shares * 0.01; // 1% per share bought
-    const newPrice = parseFloat(Math.max(1.0, price * (1 + (reason === 'sell' ? -impact : impact) * 0.1)).toFixed(4));
+    // Price impact: very small, each share = 0.05% impact (was 0.1%)
+    // Capped at 0.5% per trade max to prevent manipulation
+    const impact  = Math.min(0.005, shares * 0.0005);
+    const newPrice = parseFloat(Math.max(1.0, price * (1 + (reason === 'sell' ? -impact : impact))).toFixed(4));
 
     // Record trade
     const { rows: [trade] } = await db.query(`
