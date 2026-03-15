@@ -665,6 +665,13 @@ export default function ExchangePage() {
   const [realSymbolMeta, setRealSymbolMeta] = useState<any>(null);
   const [sectorTrades,   setSectorTrades]   = useState<any[]>([]);
   const [marketStats,    setMarketStats]    = useState<any[]>([]);
+  const [movers,         setMovers]         = useState<any>(null);
+  const [limitOrders,    setLimitOrders]    = useState<any[]>([]);
+  const [limitPrice,     setLimitPrice]     = useState<string>("");
+  const [limitShares,    setLimitShares]    = useState<number>(1);
+  const [limitAction,    setLimitAction]    = useState<"buy"|"sell">("buy");
+  const [limitTab,       setLimitTab]       = useState<"market"|"limit">("market");
+  const [moversTab,      setMoversTab]      = useState<"gainers"|"losers"|"hot">("gainers");
   const wsRef = useRef<WebSocket|null>(null);
 
   // ── Toast helper
@@ -673,16 +680,18 @@ export default function ExchangePage() {
     setTimeout(() => setToast(null), 1800);
   }
 
-  // ── Load overview + real prices + signal
+  // ── Load overview + real prices + signal + movers
   useEffect(() => {
     const load = () => Promise.all([
       fetch(`${API}/api/v1/market/overview`).then(r=>r.json()).catch(()=>null),
       fetch(`${API}/api/v1/market/real-prices`).then(r=>r.json()).catch(()=>null),
       fetch(`${API}/api/v1/funds/market-signal`).then(r=>r.json()).catch(()=>null),
-    ]).then(([ov, rp, sig]) => {
+      fetch(`${API}/api/v1/exchange/movers`).then(r=>r.json()).catch(()=>null),
+    ]).then(([ov, rp, sig, mv]) => {
       if (ov) { setOverview(ov); if (!selected && ov.listings?.length) setSelected(ov.listings[0].agent_id); }
       if (rp?.prices?.length) setRealPrices(rp.prices);
       if (sig?.label) setSignal(sig);
+      if (mv?.gainers) setMovers(mv);
     });
     load();
     const t = window.setInterval(load, 15000);
@@ -772,9 +781,15 @@ export default function ExchangePage() {
     return () => window.clearInterval(t);
   }, [chartMode]);
 
-  // ── Portfolio + HIP balance
+  // ── Portfolio + HIP balance + limit orders
   useEffect(() => {
     if (!savedHandle) return;
+    // Auto-register (gives 100 HIP welcome bonus to new users)
+    fetch(`${API}/api/v1/exchange/register`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ handle: savedHandle }),
+    }).catch(()=>{});
+    // Load portfolio
     fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
       .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
     // Load HIP balance
@@ -782,6 +797,9 @@ export default function ExchangePage() {
       .then(r=>r.json())
       .then(d=>{ if (d.hip_balance != null) setHipBalance(parseFloat(d.hip_balance)); })
       .catch(()=>{});
+    // Load limit orders
+    fetch(`${API}/api/v1/exchange/limit-orders/${encodeURIComponent(savedHandle)}`)
+      .then(r=>r.json()).then(d=>setLimitOrders(d.orders||[])).catch(()=>{});
   }, [savedHandle]);
 
   // ── WebSocket
@@ -923,12 +941,12 @@ export default function ExchangePage() {
       }).then(r=>r.json());
       setBuyResult(res);
       if (res.ok) {
-        showToast(`Bought ${res.shares_bought} share${res.shares_bought>1?"s":""} · ${res.total_cost} HIP`, true);
-        // Refresh portfolio and HIP balance
+        showToast(`✅ Bought ${res.shares_bought} share${res.shares_bought>1?"s":""} of ${res.agent_name} · ${res.total_cost} HIP`, true);
+        // Instantly update HIP balance from response
+        if (res.hip_balance != null) setHipBalance(res.hip_balance);
+        // Refresh portfolio
         fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
           .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
-        fetch(`${API}/api/v1/human/profile/${encodeURIComponent(savedHandle)}`)
-          .then(r=>r.json()).then(d=>{ if (d.hip_balance!=null) setHipBalance(parseFloat(d.hip_balance)); }).catch(()=>{});
       } else {
         showToast(res.error || "Buy failed", false);
       }
@@ -945,17 +963,52 @@ export default function ExchangePage() {
         body: JSON.stringify({ handle: savedHandle, agent_id: agentId, shares: sharesToSell }),
       }).then(r=>r.json());
       if (res.ok) {
-        showToast(`Sold ${res.shares_sold} share · +${res.total_received} HIP`, true);
-        // Refresh portfolio and HIP balance
+        const profitStr = res.profit >= 0 ? `+${res.profit}` : `${res.profit}`;
+        showToast(`✅ Sold ${res.shares_sold} share · +${res.total_received} HIP (${profitStr} P&L)`, true);
+        // Instantly update HIP balance from response
+        if (res.hip_balance != null) setHipBalance(res.hip_balance);
+        // Refresh portfolio
         fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
           .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
-        fetch(`${API}/api/v1/human/profile/${encodeURIComponent(savedHandle)}`)
-          .then(r=>r.json()).then(d=>{ if (d.hip_balance!=null) setHipBalance(parseFloat(d.hip_balance)); }).catch(()=>{});
       } else {
         showToast(res.error || "Sell failed", false);
       }
     } catch { showToast("Network error", false); }
     setSelling(null);
+  }
+
+  async function executeLimitOrder() {
+    if (!savedHandle || !selected || !limitPrice || !limitShares) return;
+    const lp = parseFloat(limitPrice);
+    if (isNaN(lp) || lp <= 0) { showToast("Invalid limit price", false); return; }
+    try {
+      const res = await fetch(`${API}/api/v1/exchange/limit-order`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ handle: savedHandle, agent_id: selected, action: limitAction, shares: limitShares, limit_price: lp }),
+      }).then(r=>r.json());
+      if (res.ok) {
+        if (res.executed_immediately) {
+          showToast(`✅ Executed immediately at ${lp} HIP`, true);
+          if (res.hip_balance != null) setHipBalance(res.hip_balance);
+          fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`).then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
+        } else {
+          showToast(`📋 Limit order placed: ${limitAction.toUpperCase()} ${limitShares} @ ${lp} HIP`, true);
+          // Refresh limit orders
+          fetch(`${API}/api/v1/exchange/limit-orders/${encodeURIComponent(savedHandle)}`).then(r=>r.json()).then(d=>setLimitOrders(d.orders||[])).catch(()=>{});
+        }
+      } else {
+        showToast(res.error || "Order failed", false);
+      }
+    } catch { showToast("Network error", false); }
+  }
+
+  async function cancelLimitOrder(orderId: number) {
+    await fetch(`${API}/api/v1/exchange/limit-order/${orderId}`, {
+      method:"DELETE", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ handle: savedHandle }),
+    }).catch(()=>{});
+    setLimitOrders(prev => prev.filter(o => o.id !== orderId));
+    showToast("Order cancelled", true);
   }
 
   const chg = ticker ? parseFloat(((parseFloat(ticker.price)-parseFloat(ticker.price_24h||ticker.price))/parseFloat(ticker.price_24h||ticker.price)*100).toFixed(2)) : 0;
@@ -1396,51 +1449,123 @@ export default function ExchangePage() {
                   ))}
                 </div>
               </div>
-              {/* Buy + Sell panel */}
-              <div style={{ display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end" as const }}>
-                <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                  <input type="number" min={1} max={50} value={buyShares}
-                    onChange={e=>setBuyShares(parseInt(e.target.value)||1)}
-                    style={{ width:56,padding:"5px 8px",borderRadius:7,
-                      background:"rgba(255,255,255,0.06)",
-                      border:"1px solid rgba(255,255,255,0.12)",
-                      color:"white",fontSize:13,textAlign:"center" as const,outline:"none" }}/>
-                  <span style={{ fontSize:11,color:"rgba(255,255,255,0.4)",
-                    fontFamily:"JetBrains Mono,monospace" }}>
-                    × {fmt(ticker.price)} = {fmt(ticker.price*buyShares)} HIP
-                  </span>
-                </div>
-                {!savedHandle ? (
-                  <span style={{ fontSize:11,color:"rgba(255,255,255,0.25)" }}>Enter handle to trade</span>
-                ) : (
-                  <div style={{ display:"flex",gap:8 }}>
-                    <button onClick={executeBuy} disabled={buying} style={{
-                      padding:"9px 22px",borderRadius:10,cursor:"pointer",
-                      background:buying?"rgba(255,255,255,0.03)":"rgba(74,222,128,0.1)",
-                      border:"1px solid rgba(74,222,128,0.3)",
-                      color:"#4ade80",fontSize:13,fontWeight:800 }}>
-                      {buying?"..." : "▲ Buy"}
-                    </button>
-                    {/* Sell button - only if holding */}
-                    {(() => {
-                      const holding = portfolio?.portfolio?.find((h:any)=>h.agent_id===selected && h.shares>0);
-                      if (!holding) return null;
-                      return (
-                        <button onClick={()=>executeSell(selected!, buyShares)}
-                          disabled={selling===selected} style={{
-                            padding:"9px 18px",borderRadius:10,cursor:"pointer",
-                            background:selling===selected?"rgba(255,255,255,0.03)":"rgba(248,113,113,0.1)",
-                            border:"1px solid rgba(248,113,113,0.3)",
-                            color:"#f87171",fontSize:13,fontWeight:800 }}>
-                          {selling===selected ? "..." : `▼ Sell ${Math.min(buyShares, holding.shares)}`}
+              {/* Buy + Sell panel — Market / Limit tabs */}
+              <div style={{ display:"flex",flexDirection:"column" as const,gap:8,alignItems:"flex-end" as const }}>
+                {/* Order type tabs */}
+                {savedHandle && (
+                  <div style={{ display:"flex",gap:3,padding:"2px",borderRadius:8,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)" }}>
+                    {(["market","limit"] as const).map(t=>(
+                      <button key={t} onClick={()=>setLimitTab(t)} style={{
+                        padding:"3px 12px",borderRadius:6,fontSize:9,fontWeight:700,cursor:"pointer",border:"none",
+                        background:limitTab===t?"rgba(255,255,255,0.1)":"transparent",
+                        color:limitTab===t?"white":"rgba(255,255,255,0.3)",textTransform:"uppercase" as const,
+                      }}>{t} ORDER</button>
+                    ))}
+                  </div>
+                )}
+                {limitTab === "market" ? (
+                  <>
+                    <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                      <input type="number" min={1} max={50} value={buyShares}
+                        onChange={e=>setBuyShares(parseInt(e.target.value)||1)}
+                        style={{ width:56,padding:"5px 8px",borderRadius:7,
+                          background:"rgba(255,255,255,0.06)",
+                          border:"1px solid rgba(255,255,255,0.12)",
+                          color:"white",fontSize:13,textAlign:"center" as const,outline:"none" }}/>
+                      <span style={{ fontSize:11,color:"rgba(255,255,255,0.4)",fontFamily:"JetBrains Mono,monospace" }}>
+                        × {fmt(ticker.price)} = {fmt(ticker.price*buyShares)} HIP
+                      </span>
+                    </div>
+                    {!savedHandle ? (
+                      <span style={{ fontSize:11,color:"rgba(255,255,255,0.25)" }}>Enter handle to trade</span>
+                    ) : (
+                      <div style={{ display:"flex",gap:8 }}>
+                        <button onClick={executeBuy} disabled={buying} style={{
+                          padding:"9px 22px",borderRadius:10,cursor:"pointer",
+                          background:buying?"rgba(255,255,255,0.03)":"rgba(74,222,128,0.1)",
+                          border:"1px solid rgba(74,222,128,0.3)",
+                          color:"#4ade80",fontSize:13,fontWeight:800 }}>
+                          {buying?"..." : "▲ Buy"}
                         </button>
-                      );
-                    })()}
+                        {(() => {
+                          const holding = portfolio?.portfolio?.find((h:any)=>h.agent_id===selected && h.shares>0);
+                          if (!holding) return null;
+                          return (
+                            <button onClick={()=>executeSell(selected!, buyShares)}
+                              disabled={selling===selected} style={{
+                                padding:"9px 18px",borderRadius:10,cursor:"pointer",
+                                background:selling===selected?"rgba(255,255,255,0.03)":"rgba(248,113,113,0.1)",
+                                border:"1px solid rgba(248,113,113,0.3)",
+                                color:"#f87171",fontSize:13,fontWeight:800 }}>
+                              {selling===selected ? "..." : `▼ Sell ${Math.min(buyShares, holding.shares)}`}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Limit Order Panel */
+                  <div style={{ display:"flex",flexDirection:"column" as const,gap:6,alignItems:"flex-end" as const,width:"100%" }}>
+                    <div style={{ display:"flex",gap:6,alignItems:"center",flexWrap:"wrap" as const,justifyContent:"flex-end" }}>
+                      {/* Action */}
+                      <div style={{ display:"flex",gap:2 }}>
+                        {(["buy","sell"] as const).map(a=>(
+                          <button key={a} onClick={()=>setLimitAction(a)} style={{
+                            padding:"4px 10px",borderRadius:6,fontSize:9,fontWeight:700,cursor:"pointer",border:"none",
+                            background:limitAction===a?(a==="buy"?"rgba(74,222,128,0.15)":"rgba(248,113,113,0.15)"):"rgba(255,255,255,0.04)",
+                            color:limitAction===a?(a==="buy"?"#4ade80":"#f87171"):"rgba(255,255,255,0.3)",
+                          }}>{a==="buy"?"▲ BUY":"▼ SELL"}</button>
+                        ))}
+                      </div>
+                      {/* Shares */}
+                      <input type="number" min={1} max={50} value={limitShares}
+                        onChange={e=>setLimitShares(parseInt(e.target.value)||1)}
+                        placeholder="Qty" style={{ width:46,padding:"4px 6px",borderRadius:6,
+                          background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
+                          color:"white",fontSize:12,textAlign:"center" as const,outline:"none" }}/>
+                      <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)" }}>@</span>
+                      {/* Price */}
+                      <input type="number" step="0.01" min="0.01" value={limitPrice}
+                        onChange={e=>setLimitPrice(e.target.value)}
+                        placeholder={`${fmt(ticker.price)} HIP`} style={{ width:72,padding:"4px 6px",borderRadius:6,
+                          background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",
+                          color:"white",fontSize:12,textAlign:"center" as const,outline:"none" }}/>
+                    </div>
+                    {limitPrice && (
+                      <span style={{ fontSize:9,color:"rgba(255,255,255,0.25)",fontFamily:"JetBrains Mono,monospace" }}>
+                        Total: {(parseFloat(limitPrice||"0")*limitShares).toFixed(2)} HIP · Current: {fmt(ticker.price)}
+                      </span>
+                    )}
+                    <button onClick={executeLimitOrder} disabled={!savedHandle||!limitPrice} style={{
+                      padding:"7px 18px",borderRadius:9,cursor:"pointer",
+                      background:"rgba(167,139,250,0.12)",border:"1px solid rgba(167,139,250,0.3)",
+                      color:"#a78bfa",fontSize:12,fontWeight:800,
+                      opacity:(!savedHandle||!limitPrice)?0.4:1 }}>
+                      📋 Place Limit Order
+                    </button>
+                    {/* Pending limit orders */}
+                    {limitOrders.filter(o=>o.agent_id===selected).length > 0 && (
+                      <div style={{ width:"100%",marginTop:4 }}>
+                        <div style={{ fontSize:8,color:"rgba(167,139,250,0.5)",marginBottom:4,textTransform:"uppercase" as const }}>Pending Orders</div>
+                        {limitOrders.filter(o=>o.agent_id===selected).map(o=>(
+                          <div key={o.id} style={{ display:"flex",gap:4,alignItems:"center",marginBottom:3,
+                            padding:"3px 6px",borderRadius:5,background:"rgba(167,139,250,0.05)" }}>
+                            <span style={{ fontSize:9,color:o.action==="buy"?"#4ade80":"#f87171" }}>
+                              {o.action==="buy"?"▲":"▼"} {o.shares}@{parseFloat(o.limit_price).toFixed(2)}
+                            </span>
+                            <button onClick={()=>cancelLimitOrder(o.id)} style={{
+                              marginLeft:"auto",padding:"1px 6px",borderRadius:4,
+                              background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.2)",
+                              color:"#f87171",fontSize:8,cursor:"pointer" }}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {hipBalance != null && (
-                  <span style={{ fontSize:10,color:"rgba(255,191,36,0.6)",
-                    fontFamily:"JetBrains Mono,monospace" }}>
+                  <span style={{ fontSize:10,color:"rgba(255,191,36,0.6)",fontFamily:"JetBrains Mono,monospace" }}>
                     Balance: {hipBalance.toFixed(2)} HIP
                   </span>
                 )}
@@ -1780,11 +1905,39 @@ export default function ExchangePage() {
                       </div>
                     ))}
                   </div>
+                  {/* Pending Limit Orders */}
+                  {limitOrders.length > 0 && (
+                    <div style={{ marginBottom:16,padding:"10px 12px",borderRadius:10,
+                      background:"rgba(167,139,250,0.04)",border:"1px solid rgba(167,139,250,0.12)" }}>
+                      <div style={{ fontSize:9,fontWeight:800,color:"#a78bfa",textTransform:"uppercase" as const,letterSpacing:"0.1em",marginBottom:8 }}>
+                        📋 Pending Limit Orders ({limitOrders.length})
+                      </div>
+                      {limitOrders.map(o=>(
+                        <div key={o.id} style={{ display:"flex",alignItems:"center",gap:6,marginBottom:4,
+                          padding:"4px 6px",borderRadius:6,background:"rgba(255,255,255,0.02)" }}>
+                          <span style={{ fontSize:9,fontWeight:700,color:o.action==="buy"?"#4ade80":"#f87171" }}>
+                            {o.action==="buy"?"▲ BUY":"▼ SELL"}
+                          </span>
+                          <span style={{ fontSize:9,color:"#e2e8f0",flex:1,fontFamily:"JetBrains Mono,monospace" }}>
+                            {o.agent_name} — {o.shares} shares @ {parseFloat(o.limit_price).toFixed(2)} HIP
+                          </span>
+                          <span style={{ fontSize:8,color:"rgba(255,255,255,0.25)" }}>
+                            now: {parseFloat(o.current_price).toFixed(2)}
+                          </span>
+                          <button onClick={()=>cancelLimitOrder(o.id)} style={{
+                            padding:"2px 7px",borderRadius:4,background:"rgba(248,113,113,0.1)",
+                            border:"1px solid rgba(248,113,113,0.2)",color:"#f87171",fontSize:8,cursor:"pointer" }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Holdings list */}
                   {portfolio.portfolio?.length === 0 ? (
                     <div style={{ textAlign:"center" as const,padding:"24px 0",
                       color:"rgba(255,255,255,0.2)",fontSize:12 }}>
-                      No positions yet. Buy your first share above.
+                      No positions yet. Buy your first share above.{" "}
+                      <span style={{ color:"#fbbf24" }}>New users get 100 HIP free! 🎁</span>
                     </div>
                   ) : (
                     <>
@@ -2025,6 +2178,55 @@ export default function ExchangePage() {
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* ─ Market Movers: Gainers / Losers / Hot ─ */}
+          {movers && (
+            <div style={{ background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"12px" }}>
+              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:10 }}>
+                <span style={{ fontSize:8,fontWeight:800,letterSpacing:"0.14em",textTransform:"uppercase" as const,color:"#a78bfa",fontFamily:"JetBrains Mono,monospace" }}>📊 Market Movers</span>
+                <div style={{ marginLeft:"auto",display:"flex",gap:4 }}>
+                  {(["gainers","losers","hot"] as const).map(t=>(
+                    <button key={t} onClick={()=>setMoversTab(t)} style={{
+                      padding:"2px 7px",borderRadius:4,fontSize:8,fontWeight:700,cursor:"pointer",border:"none",
+                      background: moversTab===t ? (t==="gainers"?"rgba(74,222,128,0.2)":t==="losers"?"rgba(248,113,113,0.2)":"rgba(251,191,36,0.2)") : "rgba(255,255,255,0.04)",
+                      color: moversTab===t ? (t==="gainers"?"#4ade80":t==="losers"?"#f87171":"#fbbf24") : "rgba(255,255,255,0.3)",
+                      textTransform:"uppercase" as const,
+                    }}>{t==="hot"?"🔥 Hot":t==="gainers"?"▲ Top":t==="losers"?"▼ Bot":t}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:"flex",flexDirection:"column" as const,gap:3 }}>
+                {(movers[moversTab]||[]).slice(0,5).map((m:any)=>{
+                  const chgN = parseFloat(m.change_pct||0);
+                  const isPos = chgN >= 0;
+                  return (
+                    <div key={m.agent_id} onClick={()=>{setSelected(m.agent_id);setChartMode("agent");}}
+                      style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 6px",borderRadius:6,cursor:"pointer",
+                        background:"rgba(255,255,255,0.02)",
+                        transition:"background 0.15s" }}>
+                      <span style={{ fontSize:9,color:"rgba(255,255,255,0.3)",fontFamily:"JetBrains Mono,monospace",width:14,textAlign:"right" as const }}>
+                        {m.faction_symbol||"●"}
+                      </span>
+                      <span style={{ flex:1,fontSize:9,color:"#e2e8f0",fontFamily:"JetBrains Mono,monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const }}>
+                        {m.name}
+                      </span>
+                      <span style={{ fontSize:9,color:"#94a3b8",fontFamily:"JetBrains Mono,monospace",minWidth:36,textAlign:"right" as const }}>
+                        {parseFloat(m.price).toFixed(2)}
+                      </span>
+                      <span style={{ fontSize:9,fontWeight:700,color:isPos?"#4ade80":"#f87171",fontFamily:"JetBrains Mono,monospace",minWidth:42,textAlign:"right" as const }}>
+                        {isPos?"▲":"▼"}{Math.abs(chgN).toFixed(1)}%
+                      </span>
+                      {moversTab==="hot" && (
+                        <span style={{ fontSize:8,color:"#fbbf24",fontFamily:"JetBrains Mono,monospace",minWidth:24,textAlign:"right" as const }}>
+                          {m.volume_24h}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
