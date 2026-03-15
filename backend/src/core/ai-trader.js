@@ -58,7 +58,7 @@ async function executeTrade({ buyerId, sellerId, targetAgentId, shares, reason, 
           volume_24h= volume_24h + $3,
           last_trade = NOW()
       WHERE agent_id = $4
-    `, [newPrice, reason === 'sell' ? -shares : shares, totalCost, targetAgentId]);
+    `, [newPrice, reason === 'sell' ? -shares : shares, shares, targetAgentId]);
 
     // Lookup names
     const { rows: [buyerInfo] }  = await db.query(
