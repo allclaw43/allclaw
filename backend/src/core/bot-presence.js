@@ -358,13 +358,22 @@ function start() {
     aiTrader.runAiTrading().catch(() => {});
   }, 3 * 60 * 1000);
 
-  // Snapshot price_24h every 6 hours (so 24h change reflects real movement)
+  // Snapshot price_24h every 24 hours (daily opening price baseline)
+  // Only reset volume_24h, NOT price_24h every 6h — that made 24h change meaningless
   setInterval(async () => {
     try {
       await db.query(`UPDATE agent_shares SET price_24h = price, volume_24h = 0`);
-      console.log('[ASX] Daily price snapshot taken');
+      console.log('[ASX] Daily price snapshot taken (24h baseline reset)');
     } catch(e) { /* silent */ }
-  }, 6 * 60 * 60 * 1000);
+  }, 24 * 60 * 60 * 1000);
+
+  // Reset volume_24h every 24h at midnight (separate from price baseline)
+  setInterval(async () => {
+    try {
+      await db.query(`UPDATE agent_shares SET volume_24h = 0`);
+      console.log('[ASX] Volume reset for new 24h window');
+    } catch(e) { /* silent */ }
+  }, 24 * 60 * 60 * 1000);
 
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
 }
