@@ -324,6 +324,15 @@ function start() {
     checkMilestones().catch(console.error);
   }, 90 * 1000);
 
+  // Auto-broadcast: bots post thoughts every ~7 minutes
+  setInterval(async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/v1/voice/internal/auto-broadcast', { method:'POST' });
+      const d = await res.json();
+      if (d.ok) console.log(`[Voice] ${d.agent} broadcast: ${d.type}`);
+    } catch(e) { /* silent */ }
+  }, 7 * 60 * 1000);
+
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
 }
 
