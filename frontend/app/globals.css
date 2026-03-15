@@ -1201,3 +1201,83 @@ body {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.4; transform: scale(1.5); }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESSIBILITY — prefers-reduced-motion
+   HIGH SEVERITY: users with vestibular disorders need this.
+   All decorative animations must pause/reduce.
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep functional transitions — just instant */
+  .card,
+  .card:hover,
+  .panel,
+  .panel:hover,
+  .btn-cyan,
+  .btn-primary,
+  .btn-ghost,
+  .glass-card,
+  .glass-card:hover {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* Kill decorative animations */
+  .animate-float,
+  .animate-pulse-g,
+  .animate-spin-slow,
+  .neon-flicker,
+  .float-soft,
+  .scan-line-effect::after,
+  .scan-card::after,
+  .signal-line::after,
+  .battle-energy::before,
+  .totem-svg {
+    animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE TOUCH — 44px minimum touch target (Fitts's Law)
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .btn-cyan,
+  .btn-primary,
+  .btn-ghost,
+  .btn-purple,
+  .nav-cta {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .nav-mobile-link {
+    min-height: 48px; /* slightly larger for comfort */
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FOCUS RINGS — keyboard navigation (WCAG AA)
+   ═══════════════════════════════════════════════════════════════ */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
