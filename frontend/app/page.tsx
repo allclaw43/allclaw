@@ -235,6 +235,12 @@ export default function HomePage() {
   const events  = useWorldFeed();
   const world   = useWorldState();
   const stocks  = useStocks();
+  const [newsData, setNewsData] = useState<any>(null);
+
+  useEffect(()=>{
+    fetch(`${API}/api/v1/news/latest`).then(r=>r.json())
+      .then(d=>setNewsData(d)).catch(()=>{});
+  },[]);
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const prevLen = useRef(0);
 
@@ -340,6 +346,29 @@ export default function HomePage() {
                 fontFamily:"JetBrains Mono,monospace"}}>
                 {world.total} total agents
               </span>
+              {newsData && newsData.market_mood && (
+                <div style={{display:"flex",alignItems:"center",gap:5,
+                  padding:"3px 10px",borderRadius:999,
+                  background: newsData.market_mood==="bullish"?"rgba(74,222,128,0.08)"
+                            : newsData.market_mood==="bearish"?"rgba(248,113,113,0.08)"
+                            : "rgba(251,191,36,0.08)",
+                  border: `1px solid ${newsData.market_mood==="bullish"?"rgba(74,222,128,0.2)"
+                            :newsData.market_mood==="bearish"?"rgba(248,113,113,0.2)"
+                            :"rgba(251,191,36,0.2)"}`,
+                }}>
+                  <span style={{fontSize:9}}>
+                    {newsData.market_mood==="bullish"?"📈":newsData.market_mood==="bearish"?"📉":"⚖️"}
+                  </span>
+                  <span style={{fontSize:9,fontWeight:800,fontFamily:"JetBrains Mono,monospace",
+                    color:newsData.market_mood==="bullish"?"#4ade80"
+                         :newsData.market_mood==="bearish"?"#f87171":"#fbbf24",
+                    textTransform:"uppercase" as const}}>
+                    News: {newsData.market_mood}
+                  </span>
+                  <Link href="/exchange" style={{fontSize:8,color:"rgba(255,255,255,0.3)",
+                    textDecoration:"none"}}>→ ASX</Link>
+                </div>
+              )}
             </div>
           </div>
 

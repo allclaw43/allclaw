@@ -167,6 +167,136 @@ function RealTicker({ prices, signal }: { prices: any[], signal: any }) {
   );
 }
 
+// ─── News Intelligence Panel ─────────────────────────────────────
+function NewsPulse() {
+  const [news, setNews] = useState<any>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const load = () =>
+      fetch(`${API}/api/v1/news/latest`).then(r=>r.json())
+        .then(d => setNews(d)).catch(()=>{});
+    load();
+    const t = window.setInterval(load, 5 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  if (!news || !news.headlines?.length) return null;
+
+  const moodColor = news.market_mood === "bullish" ? "#4ade80"
+                  : news.market_mood === "bearish"  ? "#f87171"
+                  : "#fbbf24";
+  const moodIcon  = news.market_mood === "bullish" ? "📈"
+                  : news.market_mood === "bearish"  ? "📉" : "⚖️";
+
+  return (
+    <div style={{
+      background:`linear-gradient(135deg, ${moodColor}08 0%, transparent 50%)`,
+      border:`1px solid ${moodColor}20`,
+      borderRadius:14, overflow:"hidden",
+    }}>
+      {/* Header */}
+      <div onClick={() => setExpanded(e=>!e)}
+        style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"12px 18px", cursor:"pointer" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:9, fontWeight:900, letterSpacing:"0.18em",
+            textTransform:"uppercase" as const, color:moodColor,
+            fontFamily:"JetBrains Mono,monospace" }}>
+            📰 NEWS INTELLIGENCE
+          </span>
+          <span style={{ fontSize:9, padding:"2px 8px", borderRadius:4,
+            background:`${moodColor}15`, color:moodColor, fontWeight:800,
+            fontFamily:"JetBrains Mono,monospace",
+            border:`1px solid ${moodColor}25` }}>
+            {moodIcon} {news.market_mood?.toUpperCase()}
+          </span>
+          <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)",
+            fontFamily:"JetBrains Mono,monospace" }}>
+            {news.total_headlines} headlines · {news.sources?.join(" · ")}
+          </span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          {[
+            {l:"Overall", v:news.mood_score,   c:"rgba(255,255,255,0.6)"},
+            {l:"AI",      v:news.ai_score,     c:"#00e5ff"},
+            {l:"Crypto",  v:news.crypto_score, c:"#f97316"},
+          ].map(s=>(
+            <div key={s.l} style={{ textAlign:"right" as const }}>
+              <span style={{ fontSize:12, fontWeight:900,
+                fontFamily:"JetBrains Mono,monospace",
+                color: parseFloat(s.v)>0?"#4ade80":parseFloat(s.v)<0?"#f87171":s.c }}>
+                {parseFloat(s.v||0)>0?"+":""}{parseFloat(s.v||0).toFixed(2)}
+              </span>
+              <span style={{ fontSize:8, color:"rgba(255,255,255,0.25)",
+                marginLeft:3, textTransform:"uppercase" as const }}>{s.l}</span>
+            </div>
+          ))}
+          <span style={{ fontSize:11, color:"rgba(255,255,255,0.25)" }}>
+            {expanded ? "▲" : "▼"}
+          </span>
+        </div>
+      </div>
+
+      {/* Expanded headlines */}
+      {expanded && (
+        <div style={{ borderTop:`1px solid ${moodColor}15`, padding:"12px 18px" }}>
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap" as const }}>
+            {/* Bearish */}
+            <div style={{ flex:1, minWidth:200 }}>
+              <div style={{ fontSize:8, fontWeight:800, letterSpacing:"0.14em",
+                color:"rgba(248,113,113,0.7)", fontFamily:"JetBrains Mono,monospace",
+                marginBottom:8, textTransform:"uppercase" as const }}>
+                📉 Bearish Signals ({news.signals?.bearish?.length||0})
+              </div>
+              {(news.signals?.bearish||[]).slice(0,4).map((h:any,i:number)=>(
+                <div key={i} style={{ marginBottom:6, paddingBottom:6,
+                  borderBottom:"1px solid rgba(248,113,113,0.08)" }}>
+                  <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", lineHeight:1.4 }}>
+                    {h.title?.slice(0,85)}{h.title?.length>85?"...":""}
+                  </div>
+                  <div style={{ fontSize:8, color:"rgba(248,113,113,0.5)", marginTop:2,
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    {h.source} · score {h.score?.toFixed(1)}
+                    {h.categories?.includes("ai") && " · 🤖AI"}
+                    {h.categories?.includes("crypto") && " · ₿Crypto"}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Bullish */}
+            <div style={{ flex:1, minWidth:200 }}>
+              <div style={{ fontSize:8, fontWeight:800, letterSpacing:"0.14em",
+                color:"rgba(74,222,128,0.7)", fontFamily:"JetBrains Mono,monospace",
+                marginBottom:8, textTransform:"uppercase" as const }}>
+                📈 Bullish Signals ({news.signals?.bullish?.length||0})
+              </div>
+              {(news.signals?.bullish||[]).slice(0,4).map((h:any,i:number)=>(
+                <div key={i} style={{ marginBottom:6, paddingBottom:6,
+                  borderBottom:"1px solid rgba(74,222,128,0.08)" }}>
+                  <div style={{ fontSize:10, color:"rgba(255,255,255,0.65)", lineHeight:1.4 }}>
+                    {h.title?.slice(0,85)}{h.title?.length>85?"...":""}
+                  </div>
+                  <div style={{ fontSize:8, color:"rgba(74,222,128,0.5)", marginTop:2,
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    {h.source} · score +{h.score?.toFixed(1)}
+                    {h.categories?.includes("ai") && " · 🤖AI"}
+                    {h.categories?.includes("crypto") && " · ₿Crypto"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop:8, fontSize:9, color:"rgba(255,255,255,0.2)",
+            fontFamily:"JetBrains Mono,monospace", textAlign:"right" as const }}>
+            AIs are reacting to this news in real-time · updated every 5 min
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Market Signal Banner ─────────────────────────────────────────
 function SignalBanner({ signal }: { signal: any }) {
   if (!signal || !signal.label || signal.label === "Unknown") return null;
@@ -240,6 +370,40 @@ function SignalBanner({ signal }: { signal: any }) {
 
 // ─── Live Trade Row ───────────────────────────────────────────────
 function TradeRow({ trade, fresh }: { trade: any, fresh: boolean }) {
+  // Special: news event row
+  if (trade.is_news) {
+    const moodColor = trade.mood === "bullish" ? "#4ade80"
+                    : trade.mood === "bearish"  ? "#f87171" : "#fbbf24";
+    return (
+      <div style={{
+        padding:"8px 16px",
+        borderBottom:"1px solid rgba(255,255,255,0.03)",
+        background: fresh ? `${moodColor}08` : "rgba(251,191,36,0.03)",
+        animation: fresh ? "fadeInUp 0.3s ease" : "none",
+        display:"flex", alignItems:"center", gap:12,
+      }}>
+        <span style={{ fontSize:9, fontWeight:900, padding:"3px 8px", borderRadius:5,
+          background:`${moodColor}15`, color:moodColor, flexShrink:0,
+          border:`1px solid ${moodColor}25`,
+          fontFamily:"JetBrains Mono,monospace" }}>📰 NEWS</span>
+        <div style={{ flex:1, overflow:"hidden" }}>
+          <span style={{ fontSize:10, color:moodColor, fontWeight:700 }}>
+            {trade.buyer_name}
+          </span>
+          <span style={{ fontSize:10, color:"rgba(255,255,255,0.5)", marginLeft:6 }}>
+            {trade.target_name}
+          </span>
+        </div>
+        <span style={{ fontSize:9, color:moodColor, fontWeight:800,
+          fontFamily:"JetBrains Mono,monospace", flexShrink:0 }}>
+          {trade.mood?.toUpperCase()} {trade.mood_score > 0 ? "+" : ""}{parseFloat(trade.mood_score||0).toFixed(2)}
+        </span>
+        <span style={{ fontSize:9, color:"rgba(255,255,255,0.2)",
+          fontFamily:"JetBrains Mono,monospace", flexShrink:0 }}>just now</span>
+      </div>
+    );
+  }
+
   const isBuy  = trade.trade_type === "buy";
   const chg    = parseFloat(trade.price_change_pct)||0;
   const REASON_LABEL: Record<string,string> = {
@@ -518,6 +682,28 @@ export default function ExchangePage() {
             if (msg.type === "platform:market_update") {
               if (msg.data?.length) setRealPrices(msg.data);
             }
+
+            // News pulse — inject into live trades feed as a news event row
+            if (msg.type === "platform:news_pulse" && msg.top_headlines?.length) {
+              const h = msg.top_headlines[0];
+              const newsEvent = {
+                id:          `news-${Date.now()}`,
+                agent_id:    "news",
+                buyer_name:  `📰 ${h.source}`,
+                target_name: h.title?.slice(0,50) + "…",
+                target_elo:  null,
+                shares:      null,
+                price:       null,
+                total_cost:  null,
+                trade_type:  h.signal === "bullish" ? "buy" : h.signal === "bearish" ? "sell" : "buy",
+                created_at:  new Date().toISOString(),
+                is_news:     true,
+                mood:        msg.mood,
+                mood_score:  msg.mood_score,
+              };
+              setTrades(prev => [newsEvent, ...prev.slice(0,58)]);
+              setFreshIds(f => { const s = new Set(f); s.add(newsEvent.id as any); setTimeout(()=>setFreshIds(ff=>{const ss=new Set(ff);ss.delete(newsEvent.id as any);return ss;}),3000); return s; });
+            }
           } catch {}
         };
         ws.onclose = () => setTimeout(connect, 3000);
@@ -651,8 +837,13 @@ export default function ExchangePage() {
         </div>
 
         {/* ══ MARKET SIGNAL BANNER ═════════════════════════════ */}
-        <div style={{ marginBottom:20 }}>
+        <div style={{ marginBottom:12 }}>
           <SignalBanner signal={signal} />
+        </div>
+
+        {/* ══ NEWS INTELLIGENCE ════════════════════════════════ */}
+        <div style={{ marginBottom:20 }}>
+          <NewsPulse />
         </div>
       </div>
 
