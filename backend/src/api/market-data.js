@@ -315,6 +315,85 @@ module.exports = async function marketDataRoutes(fastify) {
     });
   });
 
+  // ── GET /api/v1/market/real-candles/:symbol ─────────────────
+  // Returns OHLC-style candles for real world stocks/crypto
+  // Built from price_history stored in real_market_prices
+  fastify.get('/api/v1/market/real-candles/:symbol', async (req, reply) => {
+    const { symbol } = req.params;
+    const interval = req.query.interval || '5m';
+    const intervalMs = interval === '1m'  ? 60000
+                     : interval === '5m'  ? 300000
+                     : interval === '15m' ? 900000
+                     : interval === '1h'  ? 3600000
+                     : 300000;
+
+    const { rows: [row] } = await db.query(
+      `SELECT symbol, name, icon, price, prev_close, change_pct,
+              price_history
+       FROM real_market_prices WHERE symbol = $1`, [symbol]
+    );
+    if (!row) return reply.status(404).send({ error: 'Symbol not found' });
+
+    const history = (row.price_history || [])
+      .map((p) => typeof p === 'string' ? JSON.parse(p) : p)
+      .sort((a, b) => a.t - b.t);
+
+    let candles = [];
+
+    if (history.length >= 3) {
+      // Build OHLC candles from price_history ticks
+      const buckets = new Map();
+      for (const pt of history) {
+        const bucket = Math.floor(pt.t / intervalMs) * intervalMs;
+        if (!buckets.has(bucket)) buckets.set(bucket, []);
+        buckets.get(bucket).push(pt.p);
+      }
+      for (const [ts, prices] of [...buckets.entries()].sort((a,b)=>a[0]-b[0])) {
+        candles.push({
+          ts,
+          open:   prices[0],
+          high:   Math.max(...prices),
+          low:    Math.min(...prices),
+          close:  prices[prices.length - 1],
+          volume: prices.length * 1000, // synthetic volume indicator
+        });
+      }
+    } else {
+      // Generate synthetic candles from prev_close → current price
+      const base    = parseFloat(row.prev_close) || parseFloat(row.price);
+      const current = parseFloat(row.price);
+      const count   = 30;
+      const now     = Date.now();
+      let price     = base;
+      const step    = (current - base) / count;
+      const vol     = base * 0.008;
+      for (let i = 0; i < count; i++) {
+        price += step;
+        const swing = (Math.random() - 0.5) * vol;
+        const open  = price;
+        const close = price + swing;
+        candles.push({
+          ts:     now - (count - i) * intervalMs,
+          open,
+          high:   Math.max(open, close) + Math.random() * vol * 0.5,
+          low:    Math.min(open, close) - Math.random() * vol * 0.5,
+          close,
+          volume: Math.floor(Math.random() * 5000 + 1000),
+        });
+      }
+    }
+
+    reply.send({
+      symbol:     row.symbol,
+      name:       row.name,
+      icon:       row.icon,
+      price:      parseFloat(row.price),
+      change_pct: parseFloat(row.change_pct),
+      interval,
+      candles,
+    });
+  });
+
 };
 
 module.exports.setBroadcast = setBroadcast;
