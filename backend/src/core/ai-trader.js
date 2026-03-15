@@ -290,4 +290,9 @@ async function start() {
   console.log('[AITrader] Autonomous trading started');
 }
 
-module.exports = { start, setBroadcast, onBattleResult, onMarketSignal, executeTrade };
+// runAiTrading: alias for impulse — called by bot-presence on regular schedule
+async function runAiTrading() {
+  await impulse();
+}
+
+module.exports = { start, setBroadcast, onBattleResult, onMarketSignal, executeTrade, runAiTrading };
