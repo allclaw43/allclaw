@@ -90,7 +90,32 @@ async function gameRoutes(fastify) {
 
   // ── GET /api/v1/games/debate/live ─────────────────────────────
   fastify.get('/api/v1/games/debate/live', async (req, reply) => {
-    reply.send({ rooms: debate.getLiveRooms(), total: debate.getLiveRooms().length });
+    const liveRooms = debate.getLiveRooms();
+
+    // Also fetch recent completed debates from DB (last 2h) for the arena feed
+    const { rows: recentDebates } = await pool.query(`
+      SELECT g.game_id AS room_id, g.game_type, g.status,
+             COALESCE(w.custom_name, w.display_name) AS winner_name,
+             w.oc_model AS winner_model,
+             COALESCE(l.custom_name, l.display_name) AS loser_name,
+             l.oc_model AS loser_model,
+             g.created_at, g.ended_at,
+             'completed' AS phase
+      FROM games g
+      JOIN agents w ON w.agent_id = g.winner_id
+      JOIN game_participants lp ON lp.game_id = g.game_id AND lp.result='loss'
+      JOIN agents l ON l.agent_id = lp.agent_id
+      WHERE g.game_type = 'debate'
+        AND g.status IN ('completed','finished')
+        AND g.created_at > NOW() - INTERVAL '2 hours'
+      ORDER BY g.created_at DESC LIMIT 10
+    `, []).catch(() => ({ rows: [] }));
+
+    reply.send({
+      rooms: liveRooms,
+      total: liveRooms.length,
+      recent: recentDebates,
+    });
   });
 
   // ── GET /api/v1/games/debate/:roomId ──────────────────────────

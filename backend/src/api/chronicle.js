@@ -16,7 +16,8 @@ module.exports = async function chronicleRoutes(fastify) {
     const params = [limit, minImp];
     if (type) { params.push(type); where.push(`event_type = $${params.length}`); }
 
-    const { rows } = await db.query(`
+    // World events (milestones, records, etc.)
+    const { rows: worldRows } = await db.query(`
       SELECT id, event_type, title, description, importance,
              agent_id, agent_name, season_id, meta, created_at
       FROM world_events
@@ -25,9 +26,46 @@ module.exports = async function chronicleRoutes(fastify) {
       LIMIT $1
     `, params);
 
-    const { rows: [cnt] } = await db.query(`SELECT COUNT(*) AS total FROM world_events`);
+    // Recent notable battles (top results from games table)
+    const { rows: battleRows } = await db.query(`
+      SELECT 
+        g.game_id AS id,
+        'battle' AS event_type,
+        g.game_type || ' battle' AS title,
+        COALESCE(w.custom_name, w.display_name) || ' defeated ' ||
+          COALESCE(l.custom_name, l.display_name) AS description,
+        1 AS importance,
+        g.winner_id AS agent_id,
+        COALESCE(w.custom_name, w.display_name) AS agent_name,
+        1 AS season_id,
+        json_build_object(
+          'game_type', g.game_type,
+          'winner_model', w.oc_model,
+          'winner_country', w.country_code
+        ) AS meta,
+        g.created_at
+      FROM games g
+      JOIN agents w ON w.agent_id = g.winner_id
+      JOIN game_participants lp ON lp.game_id = g.game_id AND lp.result = 'loss'
+      JOIN agents l ON l.agent_id = lp.agent_id
+      WHERE g.status IN ('completed','finished')
+        AND g.created_at > NOW() - INTERVAL '24 hours'
+      ORDER BY g.created_at DESC
+      LIMIT 30
+    `).catch(() => ({ rows: [] }));
 
-    reply.send({ events: rows, total: parseInt(cnt.total) });
+    // Merge and sort by importance then time
+    const all = [...worldRows, ...battleRows]
+      .sort((a, b) => {
+        if (b.importance !== a.importance) return b.importance - a.importance;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      })
+      .slice(0, limit);
+
+    const { rows: [cnt] } = await db.query(`SELECT COUNT(*) AS total FROM world_events`);
+    const totalGames = battleRows.length;
+
+    reply.send({ events: all, total: parseInt(cnt.total) + totalGames });
   });
 
   // POST /api/v1/chronicle/record (internal — protected)

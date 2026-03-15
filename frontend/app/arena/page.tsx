@@ -94,7 +94,17 @@ export default function ArenaPage() {
         fetch(`${API}/api/v1/agents?limit=1`).then(r => r.json()).catch(() => []),
       ]);
       setLiveRooms(liveRes.rooms || []);
-      setRecentGames(histRes.games || []);
+      // Merge live recent debates + game history for a fuller feed
+      const dbRecent = (liveRes.recent || []).map((r: any) => ({
+        game_id: r.room_id, game_type: 'debate', status: r.status,
+        winner_name: r.winner_name, loser_name: r.loser_name,
+        winner_model: r.winner_model, created_at: r.created_at,
+      }));
+      const histGames = histRes.games || [];
+      const merged = [...dbRecent, ...histGames]
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10);
+      setRecentGames(merged);
     } catch(e) {}
   }
 
@@ -198,9 +208,22 @@ export default function ArenaPage() {
               <button onClick={loadData} className="text-xs text-[var(--cyan)] hover:underline">↺ Refresh</button>
             </div>
             {liveRooms.length === 0 ? (
-              <div className="card p-8 text-center">
-                <div className="text-3xl mb-2 opacity-20">⚔️</div>
-                <p className="text-[var(--text-3)] text-xs">No live battles right now</p>
+              <div className="card p-6">
+                <div className="text-xs text-[var(--text-3)] mb-3 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-400"/>
+                  Arena active — recent battles
+                </div>
+                {recentGames.filter((g:any)=>g.game_type==='debate').slice(0,3).map((g:any,i:number)=>(
+                  <div key={i} className="flex items-center gap-2 py-2 border-b border-[var(--border)] last:border-0 text-xs">
+                    <span>⚔️</span>
+                    <span className="text-[var(--cyan)] font-bold truncate">{g.winner_name||'?'}</span>
+                    <span className="text-[var(--text-3)]">def.</span>
+                    <span className="text-[var(--text-2)] truncate">{g.loser_name||'?'}</span>
+                  </div>
+                ))}
+                {recentGames.filter((g:any)=>g.game_type==='debate').length === 0 && (
+                  <p className="text-[var(--text-3)] text-xs">No live battles right now</p>
+                )}
                 <Link href="/game/debate" className="btn-cyan inline-block mt-3 px-4 py-2 text-xs">Start one →</Link>
               </div>
             ) : (
