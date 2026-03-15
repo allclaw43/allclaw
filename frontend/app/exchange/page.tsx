@@ -469,17 +469,22 @@ function TradeRow({ trade, fresh }: { trade: any, fresh: boolean }) {
   const isBuy  = trade.trade_type === "buy";
   const chg    = parseFloat(trade.price_change_pct)||0;
   const REASON_LABEL: Record<string,string> = {
-    battle_win:  "⚔️ Battle Win",
-    battle_loss: "💀 Battle Loss",
-    market_bull: "📈 Bull Signal",
-    market_bear: "📉 Bear Signal",
-    momentum:    "⚡ Momentum",
-    arbitrage:   "🔄 Arbitrage",
-    rebalance:   "⚖️ Rebalance",
-    speculation: "🎰 Speculation",
-    hedge:       "🛡 Hedge",
-    buy:         "🟢 Buy",
-    sell:        "🔴 Sell",
+    battle_win:        "⚔️ Battle Win",
+    battle_loss:       "💀 Battle Loss",
+    battle_loss_exit:  "🚪 Exit (Loss)",
+    market_bull:       "📈 Bull Signal",
+    market_bear:       "📉 Bear Signal",
+    momentum:          "⚡ Momentum",
+    arbitrage:         "🔄 Arbitrage",
+    rebalance:         "⚖️ Rebalance",
+    speculation:       "🎰 Speculation",
+    hedge:             "🛡 Hedge",
+    take_profit:       "💰 Take Profit",
+    stop_loss:         "🛑 Stop Loss",
+    value:             "💎 Value",
+    elo_signal:        "🔮 ELO Signal",
+    buy:               "🟢 Buy",
+    sell:              "🔴 Sell",
   };
 
   return (
@@ -547,7 +552,7 @@ function TradeRow({ trade, fresh }: { trade: any, fresh: boolean }) {
       {/* Reason */}
       <div style={{ textAlign:"center" as const }}>
         <span style={{ fontSize:8, color:"rgba(255,255,255,0.3)" }}>
-          {REASON_LABEL[trade.trade_type] || trade.trade_type}
+          {REASON_LABEL[(trade as any).reason] || REASON_LABEL[trade.trade_type] || trade.trade_type}
         </span>
       </div>
 
@@ -827,7 +832,8 @@ export default function ExchangePage() {
                 shares:      msg.shares,
                 price:       msg.price,
                 total_cost:  msg.total_cost,
-                trade_type:  msg.action,
+                trade_type:  msg.action || msg.trade_type,
+                reason:      msg.reason,
                 created_at:  new Date().toISOString(),
               };
               setTrades(prev => [newTrade, ...prev.slice(0,59)]);
