@@ -106,21 +106,32 @@ confirm_yn() {
 _SPIN_PID=""
 spin_start() {
   local msg="${1:-Working...}"
-  if [ "${IS_TTY:-1}" -eq 0 ]; then echo -e "  ${DIM}${msg}${NC}"; return; fi
+  _SPIN_PID=""
+  # Only spin in a real interactive terminal with output to TTY
+  if [ "${IS_TTY:-1}" -eq 0 ] || [ ! -t 1 ]; then
+    echo -e "  ${DIM}${msg}${NC}"
+    return
+  fi
   (
     local chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     local i=0
+    # Redirect stdin from /dev/null so the subshell doesn't consume pipe input
+    exec </dev/null
     while true; do
-      printf "\r  ${C}${chars:$((i%10)):1}${NC}  ${DIM}${msg}${NC}  "
-      sleep 0.08
+      printf "\r  ${C}${chars:$((i%10)):1}${NC}  ${DIM}${msg}${NC}  " >/dev/tty 2>/dev/null || break
+      sleep 0.1
       i=$((i+1))
     done
   ) &
   _SPIN_PID=$!
 }
 spin_stop() {
-  [ -n "$_SPIN_PID" ] && kill "$_SPIN_PID" 2>/dev/null && wait "$_SPIN_PID" 2>/dev/null; _SPIN_PID=""
-  printf "\r\033[2K"
+  if [ -n "$_SPIN_PID" ]; then
+    kill "$_SPIN_PID" 2>/dev/null
+    wait "$_SPIN_PID" 2>/dev/null || true
+    _SPIN_PID=""
+  fi
+  [ -t 1 ] && printf "\r\033[2K" >/dev/tty 2>/dev/null || true
 }
 
 # Progress step
