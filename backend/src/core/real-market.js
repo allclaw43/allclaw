@@ -182,8 +182,19 @@ async function refresh() {
       _broadcast({ type: 'platform:market_update', data, timestamp: Date.now() });
     }
 
-    // Apply market signal to AI agent ELO/price
+    // Apply market signal to AI agent ELO/price AND trigger AI trades
     await applyMarketSignal(data);
+
+    // Notify AI trader about market signal
+    try {
+      const sig = (data.find(d=>d.symbol==='SPY')?.change_pct||0)*0.5
+                + (data.find(d=>d.symbol==='NVDA')?.change_pct||0)*0.3
+                + (data.find(d=>d.symbol==='BTC-USD')?.change_pct||0)*0.2;
+      if (Math.abs(sig) > 0.3) {
+        const aiTrader = require('./ai-trader');
+        await aiTrader.onMarketSignal(sig);
+      }
+    } catch(e) { /* optional */ }
 
     console.log(`[RealMarket] Refreshed ${data.length} symbols. SPY=${data.find(d=>d.symbol==='SPY')?.change_pct}%`);
   } catch (e) {

@@ -126,7 +126,9 @@ async function buildServer() {
   // Inject broadcast into bot presence and expose on fastify instance
   botPresence.setBroadcast(broadcastAll);
   exchangeModule.setBroadcast(broadcastAll);
-  require('./core/ai-trader').setBroadcast(broadcastAll);
+  const aiTrader = require('./core/ai-trader');
+  aiTrader.setBroadcast(broadcastAll);
+  aiTrader.start().catch(e => console.error('[AITrader] Start failed:', e.message));
   realMarket.setBroadcast(broadcastAll);
   realMarket.start().catch(e => console.error('[RealMarket] Start failed:', e.message));
   fastify.broadcastAll = broadcastAll;

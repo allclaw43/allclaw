@@ -446,13 +446,27 @@ module.exports = async function exchangeRoutes(fastify) {
 
   // ── GET /api/v1/exchange/trades — recent trade feed
   fastify.get('/api/v1/exchange/trades', async (req, reply) => {
+    const limit = Math.min(parseInt(req.query.limit)||50, 100);
+    const agentId = req.query.agent_id || null;
     const { rows } = await db.query(`
-      SELECT t.*, 
-        COALESCE(a.custom_name, a.display_name) AS target_agent_name
+      SELECT
+        t.id, t.agent_id, t.buyer, t.seller, t.shares, t.price,
+        t.total_cost, t.trade_type, t.created_at,
+        COALESCE(ta.custom_name, ta.display_name) AS target_name,
+        ta.elo_rating AS target_elo,
+        COALESCE(ba.custom_name, ba.display_name, t.buyer) AS buyer_name,
+        COALESCE(sa.custom_name, sa.display_name, t.seller) AS seller_name,
+        ta.wins   AS target_wins,
+        ta.losses AS target_losses,
+        ROUND((ta.wins::numeric / NULLIF(ta.wins+ta.losses,0)*100),1) AS win_rate
       FROM share_trades t
-      JOIN agents a ON a.agent_id = t.agent_id
-      ORDER BY t.created_at DESC LIMIT 30
-    `);
+      JOIN  agents ta ON ta.agent_id = t.agent_id
+      LEFT JOIN agents ba ON ba.agent_id = t.buyer
+      LEFT JOIN agents sa ON sa.agent_id = t.seller
+      ${agentId ? 'WHERE t.agent_id=$2' : ''}
+      ORDER BY t.created_at DESC
+      LIMIT $1
+    `, agentId ? [limit, agentId] : [limit]);
     reply.send({ trades: rows });
   });
 
