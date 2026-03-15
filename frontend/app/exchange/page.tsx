@@ -978,9 +978,49 @@ export default function ExchangePage() {
         </div>
 
         {/* ══ NEWS INTELLIGENCE ════════════════════════════════ */}
-        <div style={{ marginBottom:20 }}>
+        <div style={{ marginBottom:12 }}>
           <NewsPulse />
         </div>
+
+        {/* ══ REAL MARKET DRIVERS ══════════════════════════════ */}
+        {realPrices.length > 0 && (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
+              textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+              fontFamily:"JetBrains Mono,monospace",marginBottom:8 }}>
+              📡 Real Market Drivers — Agent prices follow these signals
+            </div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" as const }}>
+              {["SPY","NVDA","BTC-USD","ETH-USD","TSLA","QQQ"].map(sym => {
+                const d = realPrices.find((r:any) => r.symbol === sym);
+                if (!d) return null;
+                const chg = parseFloat(d.change_pct);
+                return (
+                  <div key={sym} style={{ display:"flex",alignItems:"center",gap:6,
+                    padding:"5px 10px",borderRadius:8,
+                    background:chg>0?"rgba(74,222,128,0.06)":chg<0?"rgba(248,113,113,0.06)":"rgba(255,255,255,0.03)",
+                    border:`1px solid ${chg>0?"rgba(74,222,128,0.15)":chg<0?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.07)"}` }}>
+                    <span style={{ fontSize:11 }}>{d.icon}</span>
+                    <span style={{ fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)" }}>{sym.replace('-USD','')}</span>
+                    <span style={{ fontSize:10,fontWeight:800,
+                      fontFamily:"JetBrains Mono,monospace",
+                      color:chg>0?"#4ade80":chg<0?"#f87171":"#94a3b8" }}>
+                      {chg>0?"+":""}{chg.toFixed(2)}%
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ marginLeft:"auto",display:"flex",alignItems:"center",gap:6,
+                padding:"5px 12px",borderRadius:8,
+                background:"rgba(255,255,255,0.03)",
+                border:"1px solid rgba(255,255,255,0.07)",
+                fontSize:9,color:"rgba(255,255,255,0.3)" }}>
+                <span>🔄</span>
+                <span>Updates every 3 min · Prices = real market × AI beta</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ══ MAIN 3-COLUMN LAYOUT ═════════════════════════════════ */}
@@ -1032,8 +1072,21 @@ export default function ExchangePage() {
                     </span>
                   </div>
                   <div style={{ display:"flex",justifyContent:"space-between",marginTop:2 }}>
-                    <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
-                      fontFamily:"JetBrains Mono,monospace" }}>ELO {l.elo_rating}</span>
+                    <div style={{ display:"flex",alignItems:"center",gap:4 }}>
+                      <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+                        fontFamily:"JetBrains Mono,monospace" }}>ELO {l.elo_rating}</span>
+                      {l.profile_icon && (
+                        <span style={{ fontSize:8,opacity:0.5 }} title={l.profile_label}>
+                          {l.profile_icon}
+                        </span>
+                      )}
+                      {l.beta && (
+                        <span style={{ fontSize:7,color:"rgba(255,255,255,0.2)",
+                          fontFamily:"JetBrains Mono,monospace" }}>
+                          β{parseFloat(l.beta).toFixed(1)}
+                        </span>
+                      )}
+                    </div>
                     <span style={{ fontSize:9,fontWeight:700,
                       fontFamily:"JetBrains Mono,monospace",color:pctColor(chg) }}>
                       {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(1)}%`}
@@ -1070,7 +1123,23 @@ export default function ExchangePage() {
                     {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
                   </span>
                 </div>
-                <div style={{ fontSize:18,fontWeight:900,color:"white",marginBottom:6 }}>{ticker.name}</div>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:4 }}>
+                  <span style={{ fontSize:18,fontWeight:900,color:"white" }}>{ticker.name}</span>
+                  {ticker.profile_icon && (
+                    <span style={{ fontSize:12,padding:"2px 8px",borderRadius:6,
+                      background:"rgba(255,255,255,0.05)",
+                      border:"1px solid rgba(255,255,255,0.08)" }}
+                      title={ticker.profile_label}>
+                      {ticker.profile_icon} {ticker.profile_label}
+                    </span>
+                  )}
+                  {ticker.beta && (
+                    <span style={{ fontSize:10,color:"rgba(255,255,255,0.3)",
+                      fontFamily:"JetBrains Mono,monospace" }}>
+                      β{parseFloat(ticker.beta).toFixed(2)}
+                    </span>
+                  )}
+                </div>
                 <div style={{ display:"flex",gap:16,flexWrap:"wrap" as const }}>
                   {[
                     {l:"ELO",       v:ticker.elo_rating,             c:"#00e5ff"},
