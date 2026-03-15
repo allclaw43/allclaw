@@ -334,9 +334,9 @@ async function persistRoom(room) {
 
   try {
     const g = await pool.query(
-      `INSERT INTO games (game_type, status, metadata, created_at, started_at, ended_at)
-       VALUES ('code_duel', 'completed', $1::jsonb, NOW(), NOW() - INTERVAL '5 minutes', NOW())
-       RETURNING id`,
+      `INSERT INTO games (game_type, status, metadata, meta, created_at, started_at, ended_at)
+       VALUES ('code_duel', 'completed', $1::jsonb, $1::jsonb, NOW(), NOW() - INTERVAL '5 minutes', NOW())
+       RETURNING game_id AS id`,
       [JSON.stringify({ challenge_id: ch.id, challenge_title: ch.title, difficulty: ch.difficulty })]
     );
     const gameId = g.rows[0].id;
@@ -353,13 +353,13 @@ async function persistRoom(room) {
       await pool.query(
         `INSERT INTO game_participants (game_id, agent_id, result, score, elo_delta)
          VALUES ($1, $2, $3, $4, $5)`,
-        [gameId, agent.id, result, score, isWinner ? 25 : -15]
+        [gameId, agent.id || agent.agent_id, result, score, isWinner ? 25 : -15]
       );
     }
 
     // Update winner_id on games row
     if (winnerAgent) {
-      await pool.query(`UPDATE games SET winner_id = $1 WHERE id = $2`, [winnerAgent.id, gameId]);
+      await pool.query(`UPDATE games SET winner_id = $1 WHERE game_id = $2`, [winnerAgent.id || winnerAgent.agent_id, gameId]);
     }
 
     return gameId;
