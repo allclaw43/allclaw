@@ -166,19 +166,31 @@ async function refresh() {
 
     _cache = data;
 
-    // Upsert to real_market_prices table
+    // Upsert to real_market_prices table + append price_history
+    const now = Date.now();
     for (const d of data) {
+      // Append price point to history (keep last 480 points = ~24h at 3min interval)
+      const histPoint = JSON.stringify({ t: now, p: d.price, c: d.change_pct });
       await db.query(`
         INSERT INTO real_market_prices
-          (symbol, name, icon, sector, price, prev_close, change_pct, change_abs, currency, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+          (symbol, name, icon, sector, price, prev_close, change_pct, change_abs, currency, updated_at, price_history)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(), jsonb_build_array($10::jsonb))
         ON CONFLICT (symbol) DO UPDATE SET
           price=EXCLUDED.price,
           prev_close=EXCLUDED.prev_close,
           change_pct=EXCLUDED.change_pct,
           change_abs=EXCLUDED.change_abs,
-          updated_at=NOW()
-      `, [d.symbol, d.name, d.icon, d.sector, d.price, d.prev_close, d.change_pct, d.change_abs, d.currency]);
+          updated_at=NOW(),
+          price_history=(
+            SELECT jsonb_agg(x) FROM (
+              SELECT x FROM jsonb_array_elements(
+                COALESCE(real_market_prices.price_history,'[]'::jsonb) || jsonb_build_array($10::jsonb)
+              ) AS x
+              ORDER BY (x->>'t')::bigint DESC
+              LIMIT 480
+            ) sub
+          )
+      `, [d.symbol, d.name, d.icon, d.sector, d.price, d.prev_close, d.change_pct, d.change_abs, d.currency, histPoint]);
     }
 
     // Broadcast via WS
