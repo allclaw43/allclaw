@@ -116,7 +116,7 @@ async function tick(marketData) {
 
   // Get all listed agents with their profiles
   const { rows: agents } = await db.query(`
-    SELECT s.agent_id, s.price, s.market_profile, s.beta,
+    SELECT s.agent_id, s.price, s.price_24h, s.market_profile, s.beta,
            a.elo_rating, a.wins, a.losses, a.streak AS win_streak,
            COALESCE(a.custom_name, a.display_name) AS name
     FROM agent_shares s
@@ -161,15 +161,22 @@ async function tick(marketData) {
     else if (streak >= 3) eloAlpha += 0.10;
 
     // 3. Noise (microstructure)
-    const noise = gaussianNoise(0.08);
+    const noise = gaussianNoise(0.06);
 
-    // 4. Total delta (capped at ±5% circuit breaker)
+    // 4. Total delta — tighter circuit breaker: ±2% per tick
     const rawDelta = marketDelta + eloAlpha + noise;
-    const delta    = Math.max(-5.0, Math.min(5.0, rawDelta));
+    const delta    = Math.max(-2.0, Math.min(2.0, rawDelta));
 
     // 5. New price
-    const oldPrice = parseFloat(agent.price);
-    const newPrice = parseFloat(Math.max(1.0, oldPrice * (1 + delta / 100)).toFixed(4));
+    const oldPrice  = parseFloat(agent.price);
+    const basePrice = parseFloat(agent.price_24h) || oldPrice;
+    let newPrice    = parseFloat(Math.max(1.0, oldPrice * (1 + delta / 100)).toFixed(4));
+
+    // 6. Daily price band: ±15% from today's open (like circuit limit)
+    const maxPrice = parseFloat((basePrice * 1.15).toFixed(4));
+    const minPrice = parseFloat((basePrice * 0.85).toFixed(4));
+    if (newPrice > maxPrice) newPrice = maxPrice;
+    if (newPrice < minPrice) newPrice = Math.max(1.0, minPrice);
 
     if (Math.abs(newPrice - oldPrice) < 0.0001) continue; // no meaningful change
 
