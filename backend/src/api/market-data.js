@@ -340,8 +340,15 @@ module.exports = async function marketDataRoutes(fastify) {
 
     let candles = [];
 
-    if (history.length >= 3) {
-      // Build OHLC candles from price_history ticks
+    // Check if price_history has meaningful price variation (>0.5% range)
+    const prices_raw = history.map(pt => pt.p);
+    const priceRange = prices_raw.length > 1
+      ? (Math.max(...prices_raw) - Math.min(...prices_raw)) / prices_raw[0] * 100
+      : 0;
+    const hasRealVariation = history.length >= 3 && priceRange > 0.5;
+
+    if (hasRealVariation) {
+      // Build OHLC candles from price_history ticks (only when meaningful variation)
       const buckets = new Map();
       for (const pt of history) {
         const bucket = Math.floor(pt.t / intervalMs) * intervalMs;
@@ -355,7 +362,7 @@ module.exports = async function marketDataRoutes(fastify) {
           high:   Math.max(...prices),
           low:    Math.min(...prices),
           close:  prices[prices.length - 1],
-          volume: prices.length * 1000, // synthetic volume indicator
+          volume: prices.length * 1000,
         });
       }
     } else {
