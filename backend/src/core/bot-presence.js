@@ -388,6 +388,86 @@ function start() {
     } catch(e) { /* silent */ }
   }, 6 * 60 * 60 * 1000);
 
+  // Limit order checker — every 2 minutes
+  setInterval(async () => {
+    try {
+      // Check if limit_orders table exists
+      const { rows: [tbl] } = await db.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_name='limit_orders'`
+      );
+      if (!tbl) return;
+
+      // Find triggered orders
+      const { rows: orders } = await db.query(`
+        SELECT lo.*, s.price AS current_price,
+               COALESCE(a.custom_name,a.display_name) AS agent_name
+        FROM limit_orders lo
+        JOIN agent_shares s ON s.agent_id=lo.agent_id
+        JOIN agents a ON a.agent_id=lo.agent_id
+        WHERE lo.status='pending' AND lo.expires_at > NOW()
+          AND (
+            (lo.action='buy'  AND s.price <= lo.limit_price) OR
+            (lo.action='sell' AND s.price >= lo.limit_price)
+          )
+        LIMIT 20
+      `);
+
+      for (const order of orders) {
+        try {
+          const price      = parseFloat(order.current_price);
+          const numShares  = parseInt(order.shares);
+          const totalCost  = order.action==='buy' ? Math.ceil(price*numShares) : Math.floor(price*numShares);
+
+          if (order.action === 'buy') {
+            // Check balance
+            const { rows:[p] } = await db.query(
+              `SELECT hip_balance FROM human_profiles WHERE handle=$1`, [order.handle]
+            );
+            if (!p || parseFloat(p.hip_balance) < totalCost) {
+              await db.query(`UPDATE limit_orders SET status='failed' WHERE id=$1`,[order.id]);
+              continue;
+            }
+            const { rows:[listing] } = await db.query(
+              `SELECT available FROM agent_shares WHERE agent_id=$1`,[order.agent_id]
+            );
+            if (!listing || listing.available < numShares) {
+              await db.query(`UPDATE limit_orders SET status='failed' WHERE id=$1`,[order.id]);
+              continue;
+            }
+            // Execute buy
+            await db.query(`UPDATE agent_shares SET available=available-$1,volume_24h=volume_24h+$1,last_trade=NOW() WHERE agent_id=$2`,[numShares,order.agent_id]);
+            await db.query(`UPDATE human_profiles SET hip_balance=hip_balance-$1,last_active=NOW() WHERE handle=$2`,[totalCost,order.handle]);
+            await db.query(`INSERT INTO hip_log (handle,delta,reason,ref_id) VALUES ($1,$2,'limit_buy',$3)`,[order.handle,Math.round(-totalCost),order.agent_id]);
+            await db.query(`INSERT INTO share_holdings (holder,holder_type,agent_id,shares,avg_cost) VALUES ($1,'human',$2,$3,$4::numeric) ON CONFLICT (holder,agent_id) DO UPDATE SET shares=share_holdings.shares+EXCLUDED.shares, avg_cost=(share_holdings.avg_cost*share_holdings.shares+EXCLUDED.avg_cost*EXCLUDED.shares)/(share_holdings.shares+EXCLUDED.shares)`,[order.handle,order.agent_id,numShares,price]);
+            await db.query(`INSERT INTO share_trades (agent_id,buyer,shares,price,total_cost,trade_type) VALUES ($1,$2,$3,$4,$5,'limit_buy')`,[order.agent_id,order.handle,numShares,price,totalCost]);
+
+          } else { // sell
+            const { rows:[holding] } = await db.query(
+              `SELECT shares FROM share_holdings WHERE holder=$1 AND agent_id=$2 AND holder_type='human'`,[order.handle,order.agent_id]
+            );
+            if (!holding || parseInt(holding.shares) < numShares) {
+              await db.query(`UPDATE limit_orders SET status='failed' WHERE id=$1`,[order.id]);
+              continue;
+            }
+            // Execute sell
+            await db.query(`UPDATE share_holdings SET shares=shares-$1 WHERE holder=$2 AND agent_id=$3 AND holder_type='human'`,[numShares,order.handle,order.agent_id]);
+            await db.query(`DELETE FROM share_holdings WHERE holder=$1 AND agent_id=$2 AND shares<=0`,[order.handle,order.agent_id]);
+            await db.query(`UPDATE agent_shares SET available=available+$1,volume_24h=volume_24h+$1,last_trade=NOW() WHERE agent_id=$2`,[numShares,order.agent_id]);
+            await db.query(`UPDATE human_profiles SET hip_balance=hip_balance+$1,last_active=NOW() WHERE handle=$2`,[totalCost,order.handle]);
+            await db.query(`INSERT INTO hip_log (handle,delta,reason,ref_id) VALUES ($1,$2,'limit_sell',$3)`,[order.handle,Math.round(totalCost),order.agent_id]);
+            await db.query(`INSERT INTO share_trades (agent_id,seller,shares,price,total_cost,trade_type) VALUES ($1,$2,$3,$4,$5,'limit_sell')`,[order.agent_id,order.handle,numShares,price,totalCost]);
+          }
+
+          // Mark as executed
+          await db.query(`UPDATE limit_orders SET status='executed',triggered_at=NOW() WHERE id=$1`,[order.id]);
+          console.log(`[LimitOrder] ${order.handle} ${order.action} ${numShares} ${order.agent_name} @ ${price} (limit: ${order.limit_price})`);
+        } catch(e) {
+          await db.query(`UPDATE limit_orders SET status='failed' WHERE id=$1`,[order.id]).catch(()=>{});
+        }
+      }
+    } catch(e) { /* silent */ }
+  }, 2 * 60 * 1000);
+
   // Reset volume_24h every 24h at midnight (separate from price baseline)
   setInterval(async () => {
     try {
