@@ -35,6 +35,8 @@ const humanEconomyRoutes     = require('./api/human-economy');
 const exchangeModule         = require('./api/exchange');
 const exchangeRoutes         = exchangeModule;
 const marketDataRoutes       = require('./api/market-data');
+const aiFundsRoutes          = require('./api/ai-funds');
+const realMarket             = require('./core/real-market');
 const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
 const quizEngine   = require('./games/quiz/engine');
@@ -106,6 +108,7 @@ async function buildServer() {
   fastify.register(humanEconomyRoutes);
   fastify.register(exchangeRoutes);
   fastify.register(marketDataRoutes);
+  fastify.register(aiFundsRoutes);
 
   // ── Init quiz engine with DB + settle ────────────────────────
   const { settleGame } = require('./core/points-engine');
@@ -124,6 +127,8 @@ async function buildServer() {
   botPresence.setBroadcast(broadcastAll);
   exchangeModule.setBroadcast(broadcastAll);
   require('./core/ai-trader').setBroadcast(broadcastAll);
+  realMarket.setBroadcast(broadcastAll);
+  realMarket.start().catch(e => console.error('[RealMarket] Start failed:', e.message));
   fastify.broadcastAll = broadcastAll;
 
   // ── WebSocket real-time channel ───────────────────────────────

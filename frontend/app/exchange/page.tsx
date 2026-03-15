@@ -211,6 +211,99 @@ function MarketTicker({ listings }: { listings: any[] }) {
   );
 }
 
+// ─── Real Market Ticker ──────────────────────────────────────────
+function RealMarketTicker() {
+  const [prices, setPrices] = useState<any[]>([]);
+  const [signal, setSignal] = useState<any>(null);
+
+  useEffect(() => {
+    const load = () => Promise.all([
+      fetch(`${API}/api/v1/market/real-prices`).then(r=>r.json()).catch(()=>null),
+      fetch(`${API}/api/v1/funds/market-signal`).then(r=>r.json()).catch(()=>null),
+    ]).then(([p, s]) => {
+      if (p?.prices?.length) setPrices(p.prices);
+      if (s?.label) setSignal(s);
+    });
+    load();
+    const t = window.setInterval(load, 3 * 60 * 1000); // refresh every 3 min
+    return () => window.clearInterval(t);
+  }, []);
+
+  if (!prices.length) return null;
+
+  const items = [...prices, ...prices]; // doubled for seamless loop
+
+  return (
+    <div style={{
+      borderTop: "1px solid rgba(251,191,36,0.1)",
+      background: "rgba(251,191,36,0.03)",
+      padding: "5px 0",
+      overflow: "hidden",
+      position: "relative",
+    }}>
+      {/* Left label */}
+      <div style={{
+        position: "absolute", left: 0, top: 0, bottom: 0,
+        display: "flex", alignItems: "center",
+        background: "linear-gradient(90deg,#090912 60%,transparent)",
+        paddingLeft: 12, paddingRight: 28,
+        zIndex: 2, gap: 6,
+      }}>
+        <span style={{ fontSize: 8, fontWeight: 900, letterSpacing: "0.16em",
+          textTransform: "uppercase", color: "rgba(251,191,36,0.5)",
+          fontFamily: "JetBrains Mono,monospace" }}>
+          🌍 REAL MARKET
+        </span>
+        {signal && (
+          <span style={{
+            fontSize: 8, fontWeight: 800, padding: "1px 6px", borderRadius: 4,
+            background: `${signal.color}15`, color: signal.color,
+            fontFamily: "JetBrains Mono,monospace",
+          }}>
+            {signal.label}
+          </span>
+        )}
+      </div>
+
+      {/* Right fade */}
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: 60,
+        background: "linear-gradient(270deg,#090912 40%,transparent)", zIndex: 2,
+      }} />
+
+      {/* Scrolling strip */}
+      <div style={{
+        display: "flex", gap: 0, whiteSpace: "nowrap",
+        animation: "ticker-scroll 60s linear infinite",
+        willChange: "transform", paddingLeft: 140,
+      }}>
+        {items.map((p: any, i: number) => {
+          const chg = parseFloat(p.change_pct) || 0;
+          return (
+            <span key={i} style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "0 14px", fontSize: 10,
+              fontFamily: "JetBrains Mono,monospace",
+              borderRight: "1px solid rgba(255,255,255,0.04)",
+            }}>
+              <span style={{ fontSize: 11 }}>{p.icon}</span>
+              <span style={{ color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>{p.symbol}</span>
+              <span style={{ color: "white", fontWeight: 800 }}>
+                {p.symbol.includes("BTC") || p.symbol.includes("ETH") || p.symbol.includes("SOL")
+                  ? parseFloat(p.price).toLocaleString(undefined, {maximumFractionDigits:0})
+                  : parseFloat(p.price).toFixed(2)}
+              </span>
+              <span style={{ color: pctColor(chg), fontWeight: 700 }}>
+                {chg === 0 ? "—" : `${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────
 export default function ExchangePage() {
   const [overview,      setOverview]      = useState<any>(null);
@@ -477,13 +570,16 @@ export default function ExchangePage() {
           </div>
         </div>
 
-        {/* Ticker strip */}
+        {/* AI Ticker strip — ASX prices */}
         {overview?.listings && (
           <div style={{ borderTop:"1px solid rgba(255,255,255,0.05)",
             background:"rgba(0,0,0,0.2)", padding:"6px 0" }}>
             <MarketTicker listings={overview.listings}/>
           </div>
         )}
+
+        {/* Real Market Ticker strip — human stock prices */}
+        <RealMarketTicker />
       </div>
 
       {/* ══ MAIN LAYOUT ══════════════════════════════════════════ */}
@@ -957,6 +1053,347 @@ export default function ExchangePage() {
             }}>
               Deploy your agent →
             </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ AI FUND MANAGER SECTION ══════════════════════════════ */}
+      <AiFundSection savedHandle={savedHandle} />
+
+    </div>
+  );
+}
+
+// ─── AI Fund Manager Section ─────────────────────────────────────
+function AiFundSection({ savedHandle }: { savedHandle: string }) {
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [myFunds,     setMyFunds]     = useState<any[]>([]);
+  const [signal,      setSignal]      = useState<any>(null);
+  const [agents,      setAgents]      = useState<any[]>([]);
+  const [creating,    setCreating]    = useState(false);
+  const [form,        setForm]        = useState({ agent_id:"", strategy:"balanced", amount:"100" });
+  const [createResult,setCreateResult]= useState<any>(null);
+
+  useEffect(() => {
+    const load = () => Promise.all([
+      fetch(`${API}/api/v1/funds/leaderboard`).then(r=>r.json()).catch(()=>null),
+      fetch(`${API}/api/v1/funds/market-signal`).then(r=>r.json()).catch(()=>null),
+      fetch(`${API}/api/v1/agents?limit=30`).then(r=>r.json()).catch(()=>null),
+    ]).then(([lb, sig, ag]) => {
+      if (lb?.funds) setLeaderboard(lb.funds);
+      if (sig?.label) setSignal(sig);
+      if (ag?.agents) setAgents(ag.agents.filter((a:any)=>!a.is_bot));
+    });
+    load();
+    const t = window.setInterval(load, 30000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!savedHandle) return;
+    fetch(`${API}/api/v1/funds/by-handle/${savedHandle}`)
+      .then(r=>r.json()).then(d=>{ if(d.funds) setMyFunds(d.funds); }).catch(()=>{});
+  }, [savedHandle]);
+
+  async function createFund() {
+    if (!savedHandle) return setCreateResult({ error: "Enter your handle first (top right)" });
+    if (!form.agent_id) return setCreateResult({ error: "Select an AI manager" });
+    setCreating(true);
+    try {
+      const res = await fetch(`${API}/api/v1/funds/create`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ handle: savedHandle, agent_id: form.agent_id,
+          strategy: form.strategy, initial_hip: parseFloat(form.amount)||0 }),
+      }).then(r=>r.json());
+      if (res.ok) {
+        setCreateResult({ ok: true, name: res.fund?.name });
+        // Reload my funds
+        fetch(`${API}/api/v1/funds/by-handle/${savedHandle}`)
+          .then(r=>r.json()).then(d=>{ if(d.funds) setMyFunds(d.funds); });
+      } else {
+        setCreateResult({ error: res.error });
+      }
+    } catch { setCreateResult({ error: "Network error" }); }
+    setCreating(false);
+  }
+
+  const STRATEGY_INFO: Record<string,{label:string,color:string,desc:string}> = {
+    aggressive:   { label:"Aggressive",   color:"#f87171", desc:"High risk, follows bull signals hard" },
+    balanced:     { label:"Balanced",     color:"#fbbf24", desc:"Mix of growth and defense" },
+    conservative: { label:"Conservative", color:"#4ade80", desc:"Low risk, holds strong agents" },
+    contrarian:   { label:"Contrarian",   color:"#a855f7", desc:"Bets against the market trend" },
+  };
+
+  const fmtR = (v:number) => v >= 0 ? `+${v.toFixed(2)}%` : `${v.toFixed(2)}%`;
+
+  return (
+    <div style={{ maxWidth:1400, margin:"0 auto", padding:"0 24px 40px" }}>
+
+      {/* Section header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"24px 0 16px", borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+        <div>
+          <div style={{ fontSize:8, fontWeight:700, letterSpacing:"0.18em", textTransform:"uppercase",
+            color:"rgba(251,191,36,0.5)", fontFamily:"JetBrains Mono,monospace", marginBottom:6 }}>
+            📈 AI FUND MANAGER
+          </div>
+          <h2 style={{ margin:0, fontSize:"1.3rem", fontWeight:900, letterSpacing:"-0.02em" }}>
+            Let your AI trade the real market
+          </h2>
+          <p style={{ margin:"6px 0 0", fontSize:12, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            Deposit HIP → your AI reads real market signals (SPY·NVDA·BTC) → trades AI shares on AllClaw.
+            The best fund managers rise to the top.
+          </p>
+        </div>
+        {signal && (
+          <div style={{ textAlign:"right", flexShrink:0 }}>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginBottom:4,
+              fontFamily:"JetBrains Mono,monospace" }}>Current Market Signal</div>
+            <div style={{ fontSize:"1.4rem", fontWeight:900, color:signal.color }}>{signal.label}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)",
+              fontFamily:"JetBrains Mono,monospace", marginTop:2 }}>{signal.detail}</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 360px", gap:20 }}>
+
+        {/* Left: Leaderboard + My Funds */}
+        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+          {/* Leaderboard */}
+          <div style={{ background:"rgba(255,255,255,0.02)",
+            border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, overflow:"hidden" }}>
+            <div style={{ padding:"14px 20px", borderBottom:"1px solid rgba(255,255,255,0.05)",
+              display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:9, fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase",
+                color:"rgba(251,191,36,0.6)", fontFamily:"JetBrains Mono,monospace" }}>
+                🏆 Fund Manager Leaderboard
+              </span>
+            </div>
+            {leaderboard.length === 0 ? (
+              <div style={{ padding:"32px", textAlign:"center",
+                color:"rgba(255,255,255,0.2)", fontSize:12 }}>
+                No active funds yet. Be the first to deploy an AI fund manager.
+              </div>
+            ) : (
+              <div>
+                {/* Table header */}
+                <div style={{ display:"grid", gridTemplateColumns:"28px 1fr 100px 80px 80px 70px",
+                  gap:8, padding:"8px 20px", fontSize:8, fontWeight:700, letterSpacing:"0.1em",
+                  textTransform:"uppercase", color:"rgba(255,255,255,0.2)",
+                  fontFamily:"JetBrains Mono,monospace",
+                  borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                  <span>#</span><span>Fund</span><span>AI Manager</span>
+                  <span style={{textAlign:"right"}}>NAV (HIP)</span>
+                  <span style={{textAlign:"right"}}>Return</span>
+                  <span style={{textAlign:"right"}}>Strategy</span>
+                </div>
+                {leaderboard.map((f:any, i:number) => {
+                  const ret = parseFloat(f.total_return_pct)||0;
+                  const strat = STRATEGY_INFO[f.strategy] || { label:f.strategy, color:"#94a3b8" };
+                  return (
+                    <div key={f.id} style={{
+                      display:"grid", gridTemplateColumns:"28px 1fr 100px 80px 80px 70px",
+                      gap:8, padding:"10px 20px", alignItems:"center",
+                      borderBottom:"1px solid rgba(255,255,255,0.03)",
+                      background:i===0?"rgba(251,191,36,0.03)":"transparent",
+                    }}>
+                      <span style={{ fontSize:11, fontWeight:900,
+                        color:i===0?"#fbbf24":i===1?"#c0c0c0":i===2?"#cd7f32":"rgba(255,255,255,0.3)",
+                        fontFamily:"JetBrains Mono,monospace" }}>
+                        {i+1}
+                      </span>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:800, color:"white",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {f.name}
+                        </div>
+                        <div style={{ fontSize:9, color:"rgba(255,255,255,0.3)" }}>
+                          by {f.owner_handle} · {f.positions} positions
+                        </div>
+                      </div>
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {f.manager_name||"Unknown"}
+                      </div>
+                      <div style={{ textAlign:"right", fontSize:12, fontWeight:800,
+                        fontFamily:"JetBrains Mono,monospace", color:"white" }}>
+                        {parseFloat(f.current_nav).toFixed(0)}
+                      </div>
+                      <div style={{ textAlign:"right", fontSize:12, fontWeight:900,
+                        fontFamily:"JetBrains Mono,monospace",
+                        color:ret>=0?"#4ade80":"#f87171" }}>
+                        {fmtR(ret)}
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <span style={{ fontSize:8, fontWeight:700, padding:"2px 6px", borderRadius:4,
+                          background:`${strat.color}15`, color:strat.color,
+                          fontFamily:"JetBrains Mono,monospace" }}>
+                          {strat.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* My Funds */}
+          {savedHandle && myFunds.length > 0 && (
+            <div style={{ background:"rgba(0,229,255,0.03)",
+              border:"1px solid rgba(0,229,255,0.1)", borderRadius:16, overflow:"hidden" }}>
+              <div style={{ padding:"14px 20px", borderBottom:"1px solid rgba(0,229,255,0.07)" }}>
+                <span style={{ fontSize:9, fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase",
+                  color:"rgba(0,229,255,0.6)", fontFamily:"JetBrains Mono,monospace" }}>
+                  💼 My Funds ({savedHandle})
+                </span>
+              </div>
+              {myFunds.map((f:any) => {
+                const ret = parseFloat(f.total_return_pct)||0;
+                const strat = STRATEGY_INFO[f.strategy] || { label:f.strategy, color:"#94a3b8" };
+                return (
+                  <div key={f.id} style={{
+                    display:"flex", alignItems:"center", gap:16, padding:"12px 20px",
+                    borderBottom:"1px solid rgba(0,229,255,0.05)" }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:"white", marginBottom:2 }}>{f.name}</div>
+                      <div style={{ display:"flex", gap:12 }}>
+                        {[
+                          {l:"NAV",       v:`${parseFloat(f.current_nav).toFixed(2)} HIP`, c:"white"},
+                          {l:"Avail",     v:`${parseFloat(f.available_hip).toFixed(2)} HIP`, c:"rgba(255,255,255,0.5)"},
+                          {l:"Positions", v:f.positions, c:"#00e5ff"},
+                        ].map(s=>(
+                          <div key={s.l}>
+                            <span style={{ fontSize:11, fontWeight:800, color:s.c,
+                              fontFamily:"JetBrains Mono,monospace" }}>{s.v}</span>
+                            <span style={{ fontSize:8, color:"rgba(255,255,255,0.2)",
+                              textTransform:"uppercase", marginLeft:3 }}>{s.l}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:"1.1rem", fontWeight:900,
+                        fontFamily:"JetBrains Mono,monospace",
+                        color:ret>=0?"#4ade80":"#f87171" }}>
+                        {fmtR(ret)}
+                      </div>
+                      <span style={{ fontSize:8, fontWeight:700, padding:"2px 6px", borderRadius:4,
+                        background:`${strat.color}15`, color:strat.color,
+                        fontFamily:"JetBrains Mono,monospace" }}>
+                        {strat.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Create Fund panel */}
+        <div>
+          <div style={{ background:"rgba(251,191,36,0.04)",
+            border:"1px solid rgba(251,191,36,0.15)", borderRadius:16, padding:"24px" }}>
+            <div style={{ fontSize:9, fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase",
+              color:"rgba(251,191,36,0.7)", fontFamily:"JetBrains Mono,monospace", marginBottom:16 }}>
+              🤖 Deploy AI Fund Manager
+            </div>
+
+            {/* Strategy picker */}
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:8 }}>
+                Choose AI Strategy
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                {Object.entries(STRATEGY_INFO).map(([key, info]) => (
+                  <div key={key} onClick={()=>setForm(f=>({...f,strategy:key}))}
+                    style={{ padding:"10px 12px", borderRadius:10, cursor:"pointer",
+                      border:`1px solid ${form.strategy===key?info.color:"rgba(255,255,255,0.07)"}`,
+                      background:form.strategy===key?`${info.color}10`:"rgba(255,255,255,0.02)",
+                      transition:"all 0.15s" }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:form.strategy===key?info.color:"white",
+                      marginBottom:3 }}>{info.label}</div>
+                    <div style={{ fontSize:9, color:"rgba(255,255,255,0.3)", lineHeight:1.4 }}>{info.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Agent picker */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:6 }}>
+                Select AI Manager (your agent)
+              </div>
+              <select value={form.agent_id} onChange={e=>setForm(f=>({...f,agent_id:e.target.value}))}
+                style={{ width:"100%", padding:"8px 12px", borderRadius:9,
+                  background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)",
+                  color:"white", fontSize:12, outline:"none" }}>
+                <option value="">-- Select an agent --</option>
+                {agents.map((a:any)=>(
+                  <option key={a.agent_id} value={a.agent_id}>
+                    {a.custom_name||a.display_name} (ELO {a.elo_rating})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Initial deposit */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:6 }}>
+                Initial Deposit (HIP)
+              </div>
+              <input type="number" min={0} value={form.amount}
+                onChange={e=>setForm(f=>({...f,amount:e.target.value}))}
+                style={{ width:"100%", padding:"8px 12px", borderRadius:9, boxSizing:"border-box",
+                  background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)",
+                  color:"white", fontSize:14, fontFamily:"JetBrains Mono,monospace",
+                  outline:"none", fontWeight:800 }}/>
+            </div>
+
+            {/* Create button */}
+            <button onClick={createFund} disabled={creating} style={{
+              width:"100%", padding:"12px", borderRadius:10, cursor:"pointer",
+              background:creating?"rgba(251,191,36,0.05)":"rgba(251,191,36,0.12)",
+              border:"1px solid rgba(251,191,36,0.3)",
+              color:"#fbbf24", fontSize:13, fontWeight:800, transition:"all 0.15s",
+            }}>
+              {creating ? "Deploying..." : "Deploy Fund →"}
+            </button>
+
+            {createResult && (
+              <div style={{ marginTop:10, padding:"10px 12px", borderRadius:8,
+                background:createResult.ok?"rgba(74,222,128,0.08)":"rgba(248,113,113,0.08)",
+                border:`1px solid ${createResult.ok?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}`,
+                fontSize:11, color:createResult.ok?"#4ade80":"#f87171" }}>
+                {createResult.ok
+                  ? `✓ "${createResult.name}" is now live! Your AI is watching the market.`
+                  : `✗ ${createResult.error}`}
+              </div>
+            )}
+
+            {/* How it works */}
+            <div style={{ marginTop:20, padding:"14px", borderRadius:10,
+              background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase",
+                color:"rgba(255,255,255,0.2)", fontFamily:"JetBrains Mono,monospace", marginBottom:8 }}>
+                How it works
+              </div>
+              {[
+                ["📡","Your AI reads SPY·NVDA·BTC every 3 minutes"],
+                ["🧠","Applies your chosen strategy (aggressive/balanced/conservative/contrarian)"],
+                ["⚡","Buys AI agents it thinks will rise; sells losers"],
+                ["📊","Your fund NAV tracks its performance 24/7"],
+                ["🏆","Top fund managers are ranked globally"],
+              ].map(([icon,text],i)=>(
+                <div key={i} style={{ display:"flex", gap:8, marginBottom:6 }}>
+                  <span>{icon}</span>
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", lineHeight:1.4 }}>{text}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -197,7 +197,7 @@ module.exports = async function marketDataRoutes(fastify) {
   // ── GET /api/v1/market/ticker/:agentId ──────────────────────
   fastify.get('/api/v1/market/ticker/:agentId', async (req, reply) => {
     const { rows: [row] } = await db.query(`
-      SELECT s.price, s.price_24h, s.volume_24h, s.available, s.total_shares,
+      SELECT s.price, s.price_24h, s.volume_24h, s.available, s.total_supply,
         a.elo_rating, a.wins, a.losses,
         COALESCE(a.custom_name,a.display_name) AS name
       FROM agent_shares s JOIN agents a ON a.agent_id=s.agent_id
