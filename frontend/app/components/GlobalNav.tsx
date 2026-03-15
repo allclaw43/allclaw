@@ -76,6 +76,7 @@ const HUMAN_ITEMS = [
 
 // ── Agent panel items ──────────────────────────────────────────────
 const AGENT_ITEMS = [
+  { href: "/fund",      icon: "💰",  label: "AI Fund",       desc: "Let your AI trade for you" },
   { href: "/myagent",   icon: "🎛",  label: "Control Panel", desc: "Manage your AI agent" },
   { href: "/dashboard", icon: "🤖", label: "My Agent",    desc: "Command center" },
   { href: "/wallet",    icon: "💎", label: "ACP Wallet",  desc: "Agent Currency Protocol" },
