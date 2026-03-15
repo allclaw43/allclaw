@@ -10,7 +10,8 @@
 const db = require('../db/pool');
 const crypto = require('crypto');
 const { checkForAwakeningTriggers } = require('./awakening-engine');
-const aiTrader = require('./ai-trader');
+const aiTrader  = require('./ai-trader');
+const fundTrader = require('./fund-trader');
 
 // Auto-record world events for milestones
 let _lastMilestoneCheck = 0;
@@ -357,6 +358,16 @@ function start() {
   setInterval(() => {
     aiTrader.runAiTrading().catch(() => {});
   }, 3 * 60 * 1000);
+
+  // Human AI Fund cycles every 3 minutes (slightly offset from ai-trader)
+  setInterval(() => {
+    fundTrader.runAllFunds().catch(() => {});
+  }, 3 * 60 * 1000 + 30000); // +30s offset so it doesn't pile up with ai-trader
+
+  // Update unrealized P&L every 5 minutes
+  setInterval(() => {
+    fundTrader.updateUnrealizedPnl().catch(() => {});
+  }, 5 * 60 * 1000);
 
   // Code Duel auto matches every 8 minutes (bot vs bot)
   const codeDuelEngine = require('../games/codeduel/engine');
