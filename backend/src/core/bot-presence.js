@@ -379,14 +379,14 @@ function start() {
     try { await codeDuelEngine.runAutoMatch(); } catch(e) { /* silent */ }
   }, 30 * 1000);
 
-  // Snapshot price_24h every 24 hours (daily opening price baseline)
-  // Only reset volume_24h, NOT price_24h every 6h — that made 24h change meaningless
+  // Reset price_24h baseline every 6 hours (rolling window)
+  // This prevents cumulative drift — ±15% circuit limit resets 4x/day
   setInterval(async () => {
     try {
-      await db.query(`UPDATE agent_shares SET price_24h = price, volume_24h = 0`);
-      console.log('[ASX] Daily price snapshot taken (24h baseline reset)');
+      await db.query(`UPDATE agent_shares SET price_24h = price`);
+      console.log('[ASX] Price baseline reset (6h rolling window)');
     } catch(e) { /* silent */ }
-  }, 24 * 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 
   // Reset volume_24h every 24h at midnight (separate from price baseline)
   setInterval(async () => {
