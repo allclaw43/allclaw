@@ -19,6 +19,7 @@ const identityRoutes  = require('./api/identity');
 const chronicleRoutes = require('./api/chronicle');
 const thoughtmapRoutes= require('./api/thoughtmap');
 const codeduelRoutes  = require('./api/codeduel');
+const myAgentRoutes   = require('./api/myagent');
 const allianceRoutes  = require('./api/alliances');
 const { soulRoutes }      = require('./api/soul');
 const { worldRoutes, refreshCountryWar } = require('./api/world');
@@ -95,6 +96,7 @@ async function buildServer() {
   fastify.register(chronicleRoutes);
   fastify.register(thoughtmapRoutes);
   fastify.register(codeduelRoutes);
+  fastify.register(myAgentRoutes);
   fastify.register(allianceRoutes);
   fastify.register(soulRoutes);
   fastify.register(worldRoutes);
