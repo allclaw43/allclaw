@@ -62,6 +62,8 @@ function setBroadcast(fn) { _broadcast = fn; }
 
 module.exports = async function exchangeRoutes(fastify) {
 
+  const { requireAuth } = require('../auth/jwt');
+
   // ── GET /api/v1/exchange/listings — all tradeable shares
   fastify.get('/api/v1/exchange/listings', async (req, reply) => {
     const { rows } = await db.query(`
@@ -314,7 +316,147 @@ module.exports = async function exchangeRoutes(fastify) {
     reply.send({ ok: true, new_price: newPrice });
   });
 
-};
+  // ── POST /api/v1/exchange/agent-buy — AI agent buys with ACP (authenticated)
+  fastify.post('/api/v1/exchange/agent-buy', { preHandler: requireAuth }, async (req, reply) => {
+    const agentId = req.agent.agent_id;
+    const { target_agent_id, shares = 1 } = req.body || {};
+
+    if (!target_agent_id) return reply.status(400).send({ error: 'target_agent_id required' });
+    if (target_agent_id === agentId) return reply.status(400).send({ error: "Can't buy own shares" });
+    if (shares < 1 || shares > 50) return reply.status(400).send({ error: 'shares must be 1-50' });
+
+    // Get wallet balance
+    const { rows: [wallet] } = await db.query(
+      `SELECT balance FROM agent_wallets WHERE agent_id=$1 AND currency='ACP'`, [agentId]
+    );
+    if (!wallet) return reply.status(400).send({ error: 'No ACP wallet found' });
+
+    const { rows: [listing] } = await db.query(
+      `SELECT * FROM agent_shares WHERE agent_id=$1 AND available>0`, [target_agent_id]
+    );
+    if (!listing) return reply.status(404).send({ error: 'Agent not listed or no shares available' });
+
+    const buyShares = Math.min(shares, listing.available);
+    const totalCost = parseFloat((buyShares * listing.price).toFixed(2));
+    if (wallet.balance < totalCost)
+      return reply.status(400).send({ error: `Need ${totalCost} ACP, have ${wallet.balance}` });
+
+    // Execute
+    await db.query(
+      `UPDATE agent_wallets SET balance=balance-$1,total_spent=total_spent+$1,updated_at=NOW() WHERE agent_id=$2`,
+      [totalCost, agentId]
+    );
+    await db.query(
+      `UPDATE agent_shares SET available=available-$1, volume_24h=volume_24h+$1 WHERE agent_id=$2`,
+      [buyShares, target_agent_id]
+    );
+    await db.query(
+      `INSERT INTO share_holdings (holder, holder_type, agent_id, shares, avg_cost)
+       VALUES ($1,'agent',$2,$3,$4)
+       ON CONFLICT (holder,agent_id) DO UPDATE SET
+         shares=share_holdings.shares+EXCLUDED.shares,
+         avg_cost=(share_holdings.avg_cost*share_holdings.shares+EXCLUDED.avg_cost*EXCLUDED.shares)
+                  /(share_holdings.shares+EXCLUDED.shares)`,
+      [agentId, target_agent_id, buyShares, listing.price]
+    );
+    await db.query(
+      `INSERT INTO acp_transactions (from_agent,to_agent,amount,tx_type,memo)
+       VALUES ($1,'ag_treasury',$2,'debit',$3)`,
+      [agentId, totalCost, `Bought ${buyShares} shares via ASX`]
+    );
+    await db.query(
+      `INSERT INTO share_trades (agent_id,buyer,shares,price,total_cost,trade_type)
+       VALUES ($1,$2,$3,$4,$5,'buy')`,
+      [target_agent_id, agentId, buyShares, listing.price, totalCost]
+    );
+
+    const newPrice = parseFloat((listing.price * (1 + 0.003 * buyShares)).toFixed(2));
+    await db.query(`UPDATE agent_shares SET price=$1 WHERE agent_id=$2`, [newPrice, target_agent_id]);
+
+    if (_broadcast) _broadcast({
+      type:'platform:price_update', agent_id:target_agent_id,
+      new_price:newPrice, source:'agent_buy', timestamp:Date.now(),
+    });
+
+    reply.send({ ok:true, shares_bought:buyShares, acp_spent:totalCost, new_price:newPrice });
+  });
+
+  // ── POST /api/v1/exchange/agent-sell — AI agent sells shares (authenticated)
+  fastify.post('/api/v1/exchange/agent-sell', { preHandler: requireAuth }, async (req, reply) => {
+    const agentId = req.agent.agent_id;
+    const { target_agent_id, shares = 1 } = req.body || {};
+
+    const { rows: [holding] } = await db.query(
+      `SELECT h.shares, h.avg_cost, s.price
+       FROM share_holdings h JOIN agent_shares s ON s.agent_id=h.agent_id
+       WHERE h.holder=$1 AND h.agent_id=$2 AND h.holder_type='agent' AND h.shares>0`,
+      [agentId, target_agent_id]
+    );
+    if (!holding || holding.shares < 1) return reply.status(400).send({ error: 'No shares to sell' });
+
+    const sellShares = Math.min(shares, holding.shares);
+    const proceeds   = parseFloat((sellShares * holding.price).toFixed(2));
+
+    await db.query(
+      `UPDATE share_holdings SET shares=shares-$1 WHERE holder=$2 AND agent_id=$3 AND holder_type='agent'`,
+      [sellShares, agentId, target_agent_id]
+    );
+    await db.query(
+      `UPDATE agent_shares SET available=available+$1, volume_24h=volume_24h+$1 WHERE agent_id=$2`,
+      [sellShares, target_agent_id]
+    );
+    await db.query(
+      `UPDATE agent_wallets SET balance=balance+$1,total_earned=total_earned+$1,updated_at=NOW() WHERE agent_id=$2`,
+      [proceeds, agentId]
+    );
+    await db.query(
+      `INSERT INTO acp_transactions (from_agent,to_agent,amount,tx_type,memo)
+       VALUES ('ag_treasury',$1,$2,'credit',$3)`,
+      [agentId, proceeds, `Sold ${sellShares} shares via ASX`]
+    );
+
+    const newPrice = parseFloat((holding.price * (1 - 0.003 * sellShares)).toFixed(2));
+    await db.query(`UPDATE agent_shares SET price=GREATEST(1.0,$1) WHERE agent_id=$2`, [newPrice, target_agent_id]);
+
+    reply.send({ ok:true, shares_sold:sellShares, acp_received:proceeds, new_price:newPrice });
+  });
+
+  // ── GET /api/v1/exchange/agent-portfolio/:agentId — AI's share holdings
+  fastify.get('/api/v1/exchange/agent-portfolio/:agentId', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT h.agent_id AS target_id, h.shares, h.avg_cost, s.price,
+        ROUND((h.shares*s.price)::numeric,2) AS current_value,
+        ROUND((h.shares*(s.price-h.avg_cost))::numeric,2) AS unrealized,
+        COALESCE(a.custom_name,a.display_name) AS agent_name, a.elo_rating
+      FROM share_holdings h
+      JOIN agent_shares s ON s.agent_id=h.agent_id
+      JOIN agents a ON a.agent_id=h.agent_id
+      WHERE h.holder=$1 AND h.holder_type='agent' AND h.shares>0
+      ORDER BY current_value DESC
+    `, [req.params.agentId]);
+
+    const totalVal  = rows.reduce((s,r)=>s+parseFloat(r.current_value||0),0);
+    const totalCost = rows.reduce((s,r)=>s+parseFloat(r.avg_cost||0)*r.shares,0);
+    reply.send({
+      positions: rows,
+      total_value:  parseFloat(totalVal.toFixed(2)),
+      total_profit: parseFloat((totalVal-totalCost).toFixed(2)),
+    });
+  });
+
+  // ── GET /api/v1/exchange/trades — recent trade feed
+  fastify.get('/api/v1/exchange/trades', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT t.*, 
+        COALESCE(a.custom_name, a.display_name) AS target_agent_name
+      FROM share_trades t
+      JOIN agents a ON a.agent_id = t.agent_id
+      ORDER BY t.created_at DESC LIMIT 30
+    `);
+    reply.send({ trades: rows });
+  });
+
+}; // end exchangeRoutes
 
 module.exports.updateSharePrice = updateSharePrice;
 module.exports.setBroadcast = setBroadcast;

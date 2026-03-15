@@ -10,6 +10,7 @@
 const db = require('../db/pool');
 const crypto = require('crypto');
 const { checkForAwakeningTriggers } = require('./awakening-engine');
+const aiTrader = require('./ai-trader');
 
 // Auto-record world events for milestones
 let _lastMilestoneCheck = 0;
@@ -351,6 +352,11 @@ function start() {
   setInterval(() => {
     checkForAwakeningTriggers().catch(() => {});
   }, 12 * 60 * 1000);
+
+  // AI trading every 3 minutes — AIs buy/sell each other with ACP
+  setInterval(() => {
+    aiTrader.runAiTrading().catch(() => {});
+  }, 3 * 60 * 1000);
 
   // Snapshot price_24h every 6 hours (so 24h change reflects real movement)
   setInterval(async () => {

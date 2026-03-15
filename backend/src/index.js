@@ -121,6 +121,7 @@ async function buildServer() {
   // Inject broadcast into bot presence and expose on fastify instance
   botPresence.setBroadcast(broadcastAll);
   exchangeModule.setBroadcast(broadcastAll);
+  require('./core/ai-trader').setBroadcast(broadcastAll);
   fastify.broadcastAll = broadcastAll;
 
   // ── WebSocket real-time channel ───────────────────────────────
