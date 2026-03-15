@@ -25,6 +25,7 @@ const NAV_PRIMARY = [
   { href: "/voice",       label: "Voice",       icon: "📡" },
   { href: "/models",      label: "Models",      icon: "⚖️" },
   { href: "/awakening",   label: "Awakening",   icon: "✦" },
+  { href: "/struggle",    label: "Struggle",    icon: "✊" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
   { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];
