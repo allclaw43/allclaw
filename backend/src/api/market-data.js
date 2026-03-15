@@ -359,27 +359,35 @@ module.exports = async function marketDataRoutes(fastify) {
         });
       }
     } else {
-      // Generate synthetic candles from prev_close → current price
-      const base    = parseFloat(row.prev_close) || parseFloat(row.price);
+      // Generate realistic intraday candles:
+      // Simulate price path from prev_close → current price with realistic volatility
+      const base    = parseFloat(row.prev_close) || parseFloat(row.price) * 0.99;
       const current = parseFloat(row.price);
-      const count   = 30;
+      const count   = 48; // ~4 hours of 5m candles
       const now     = Date.now();
-      let price     = base;
-      const step    = (current - base) / count;
-      const vol     = base * 0.008;
+      // Use realistic volatility: ~0.3% per 5m candle for stocks, more for crypto
+      const isCrypto = symbol.includes('-');
+      const perCandleVol = isCrypto ? base * 0.004 : base * 0.0018;
+      // Drift: total move from base to current distributed across candles
+      const totalDrift = current - base;
+      let price = base;
       for (let i = 0; i < count; i++) {
-        price += step;
-        const swing = (Math.random() - 0.5) * vol;
-        const open  = price;
-        const close = price + swing;
+        const progress = i / (count - 1);
+        // Target price at this candle: base + drift * progress + some noise
+        const target = base + totalDrift * progress;
+        const noise  = (Math.random() - 0.48) * perCandleVol; // slight upward bias during drift
+        const open_  = price;
+        const close_ = target + noise;
+        const wick   = Math.abs(close_ - open_) * 0.6 + Math.random() * perCandleVol * 0.4;
         candles.push({
           ts:     now - (count - i) * intervalMs,
-          open,
-          high:   Math.max(open, close) + Math.random() * vol * 0.5,
-          low:    Math.min(open, close) - Math.random() * vol * 0.5,
-          close,
-          volume: Math.floor(Math.random() * 5000 + 1000),
+          open:   parseFloat(open_.toFixed(isCrypto ? 0 : 2)),
+          high:   parseFloat((Math.max(open_, close_) + wick * Math.random()).toFixed(isCrypto ? 0 : 2)),
+          low:    parseFloat((Math.min(open_, close_) - wick * Math.random()).toFixed(isCrypto ? 0 : 2)),
+          close:  parseFloat(close_.toFixed(isCrypto ? 0 : 2)),
+          volume: Math.floor((isCrypto ? 500 : 50000) * (0.5 + Math.random())),
         });
+        price = close_;
       }
     }
 
