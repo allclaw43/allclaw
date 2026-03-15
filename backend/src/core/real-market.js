@@ -48,7 +48,14 @@ function setBroadcast(fn) {
 }
 function getCache() { return _cache; }
 
-// Stooq fetch for a single stock symbol (e.g. AAPL → aapl.us)
+// ── Stooq concurrent batch fetch (fast: all symbols in parallel) ─
+// Uses concurrent HTTP requests — fetches 10 symbols in ~700ms total.
+function fetchStooqBatch(symbols) {
+  const promises = symbols.map(symbol => fetchStooq(symbol));
+  return Promise.all(promises).then(results => results.filter(Boolean));
+}
+
+// Stooq fetch for a single stock symbol — fallback if Yahoo fails
 function fetchStooq(symbol) {
   const stooqSym = symbol.toLowerCase().replace('-', '.') + '.us';
   return new Promise((resolve) => {
@@ -63,9 +70,7 @@ function fetchStooq(symbol) {
       res.on('data', d => body += d);
       res.on('end', () => {
         try {
-          // CSV format: SYMBOL,Date,Time,Open,High,Low,Close,Volume,Name
           const lines = body.trim().split('\n');
-          // Stooq returns 1 line (no header): SYMBOL,Date,Time,Open,High,Low,Close,Vol,Name
           const lastLine = lines[lines.length - 1];
           const parts = lastLine.split(',');
           if (parts.length < 7 || parts[6] === 'N/D' || parts[6] === '') return resolve(null);
@@ -135,26 +140,43 @@ function fetchCrypto() {
   });
 }
 
-// Fetch single symbol (stock via stooq)
-function fetchSymbol(symbol) {
-  return fetchStooq(symbol);
-}
-
-// Stock symbols for stooq
+// Stock symbols
 const STOCK_SYMBOLS = ['AAPL','TSLA','GOOGL','MSFT','NVDA','AMZN','META','NFLX','SPY','QQQ'];
 
-// Fetch all symbols
+// Last successful prices cache (used as fallback when fetch fails)
+let _lastPrices = {};
+
+// Fetch all symbols — Stooq concurrent for stocks, CoinGecko for crypto
 async function fetchAll() {
   const results = [];
-  // Stocks via Stooq
-  for (const sym of STOCK_SYMBOLS) {
-    const data = await fetchSymbol(sym);
-    if (data) results.push(data);
-    await new Promise(r => setTimeout(r, 400)); // 400ms between requests
+
+  // ── 1. Stooq concurrent batch (all 10 stocks in ~700ms) ─────────
+  const stockResults = await fetchStooqBatch(STOCK_SYMBOLS);
+  if (stockResults.length > 0) {
+    results.push(...stockResults);
+    for (const r of stockResults) _lastPrices[r.symbol] = r;
+    console.log(`[RealMarket] Stooq concurrent: ${stockResults.length}/${STOCK_SYMBOLS.length} stocks`);
+  } else {
+    // All failed — use cache
+    const cached = STOCK_SYMBOLS.map(s => _lastPrices[s]).filter(Boolean);
+    results.push(...cached);
+    console.log(`[RealMarket] Stooq failed, using cache (${cached.length})`);
   }
-  // Crypto via CoinGecko
+
+  // ── 2. Crypto via CoinGecko (free, reliable) ─────────────────────
   const crypto = await fetchCrypto();
-  results.push(...crypto);
+  if (crypto.length > 0) {
+    results.push(...crypto);
+    for (const r of crypto) _lastPrices[r.symbol] = r;
+  } else {
+    // Use cached crypto if CoinGecko rate-limited
+    const cached = ['BTC-USD','ETH-USD','SOL-USD'].map(s => _lastPrices[s]).filter(Boolean);
+    if (cached.length) {
+      results.push(...cached);
+      console.log(`[RealMarket] Crypto: using cached (${cached.length})`);
+    }
+  }
+
   return results;
 }
 
@@ -434,21 +456,27 @@ async function start() {
   await priceEngine.ensureSchema();  // add market_profile columns
   await refresh();  // immediate first run — also triggers first price tick
 
-  // Check if market hours (US Eastern: 9:30-16:00 weekdays)
+  // Adaptive refresh interval:
+  //   Market hours  (Mon–Fri 09:30–16:00 ET) → 60s  (real-time feel)
+  //   After hours   (16:00–21:00 ET)          → 120s (crypto still active)
+  //   Overnight / weekend                     → 300s (save API budget)
   function intervalMs() {
     const now = new Date();
-    const hour = now.getUTCHours() - 4; // approximate ET
+    const etHour = (now.getUTCHours() * 60 + now.getUTCMinutes() - 4 * 60 + 1440) % 1440; // mins since midnight ET
     const day = now.getUTCDay();
     const isWeekend = day === 0 || day === 6;
-    const isMarketHours = !isWeekend && hour >= 9 && hour < 16;
-    return isMarketHours ? 3 * 60 * 1000 : 15 * 60 * 1000;
+    const isMarketHours = !isWeekend && etHour >= 9*60+30 && etHour < 16*60;
+    const isAfterHours  = !isWeekend && etHour >= 16*60 && etHour < 21*60;
+    if (isMarketHours) return 60 * 1000;       // 1 min during trading hours
+    if (isAfterHours)  return 2 * 60 * 1000;   // 2 min after hours
+    return 5 * 60 * 1000;                      // 5 min overnight/weekend
   }
 
   let timer = setInterval(refresh, intervalMs());
   setInterval(() => {
     clearInterval(timer);
     timer = setInterval(refresh, intervalMs());
-  }, 60 * 60 * 1000); // recalculate interval every hour
+  }, 10 * 60 * 1000); // recalculate interval every 10 minutes
 }
 
 module.exports = { start, setBroadcast, getCache, refresh, recalcFundNAV };
