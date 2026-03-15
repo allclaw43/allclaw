@@ -10,8 +10,9 @@
  *   Index:  SPY QQQ
  */
 
-const db     = require('../db/pool');
-const https  = require('https');
+const db          = require('../db/pool');
+const https       = require('https');
+const priceEngine = require('./price-engine');
 
 const SYMBOLS = [
   // Tech — these signal "AI sentiment" in the real world
@@ -41,7 +42,10 @@ const SYMBOL_META = {
 let _cache    = [];        // latest price data
 let _broadcast = null;
 
-function setBroadcast(fn) { _broadcast = fn; }
+function setBroadcast(fn) {
+  _broadcast = fn;
+  priceEngine.setBroadcast(fn);  // wire price engine to same broadcast
+}
 function getCache() { return _cache; }
 
 // Stooq fetch for a single stock symbol (e.g. AAPL → aapl.us)
@@ -182,10 +186,13 @@ async function refresh() {
       _broadcast({ type: 'platform:market_update', data, timestamp: Date.now() });
     }
 
-    // Apply market signal to AI agent ELO/price AND trigger AI trades
+    // ── PRIMARY: Price Engine — maps real market returns to Agent prices
+    await priceEngine.tick(data);
+
+    // Apply market signal to AI fund portfolios (fund managers rebalance)
     await applyMarketSignal(data);
 
-    // Notify AI trader about market signal
+    // Notify AI trader about market signal (triggers bot trades for liquidity)
     try {
       const sig = (data.find(d=>d.symbol==='SPY')?.change_pct||0)*0.5
                 + (data.find(d=>d.symbol==='NVDA')?.change_pct||0)*0.3
@@ -412,7 +419,8 @@ async function ensureTables() {
 // ── Start scheduler ──────────────────────────────────────────────
 async function start() {
   await ensureTables();
-  await refresh();  // immediate first run
+  await priceEngine.ensureSchema();  // add market_profile columns
+  await refresh();  // immediate first run — also triggers first price tick
 
   // Check if market hours (US Eastern: 9:30-16:00 weekdays)
   function intervalMs() {
