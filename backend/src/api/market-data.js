@@ -9,7 +9,8 @@
  *   POST /api/v1/market/seed-trades                        → seed demo trade history
  */
 
-const db = require('../db/pool');
+const db          = require('../db/pool');
+const priceEngine = require('../core/price-engine');
 
 let _broadcast = null;
 function setBroadcast(fn) { _broadcast = fn; }
@@ -75,7 +76,8 @@ module.exports = async function marketDataRoutes(fastify) {
     const { rows: listings } = await db.query(`
       SELECT s.agent_id, COALESCE(a.custom_name,a.display_name) AS name,
         s.price, s.price_24h, s.volume_24h, s.available, s.total_supply,
-        a.elo_rating, a.wins, a.losses,
+        s.market_profile, s.beta,
+        a.elo_rating, a.wins, a.losses, a.streak AS win_streak,
         COALESCE(f.color,'#94a3b8') AS faction_color,
         COALESCE(f.symbol,'') AS faction_symbol,
         (a.last_seen > NOW()-INTERVAL '5 minutes') AS is_online
@@ -93,13 +95,19 @@ module.exports = async function marketDataRoutes(fastify) {
     const losers       = listings.filter(l => parseFloat(l.price) < parseFloat(l.price_24h)).length;
 
     reply.send({
-      listings: listings.map(l => ({
-        ...l,
-        market_cap: parseFloat((parseFloat(l.price) * (l.total_supply||1000)).toFixed(2)),
-        change_pct: l.price_24h
-          ? parseFloat(((parseFloat(l.price) - parseFloat(l.price_24h)) / parseFloat(l.price_24h) * 100).toFixed(2))
-          : 0,
-      })),
+      listings: listings.map(l => {
+        const profileInfo = priceEngine.getProfileInfo(l.market_profile);
+        return {
+          ...l,
+          market_cap: parseFloat((parseFloat(l.price) * (l.total_supply||1000)).toFixed(2)),
+          change_pct: l.price_24h
+            ? parseFloat(((parseFloat(l.price) - parseFloat(l.price_24h)) / parseFloat(l.price_24h) * 100).toFixed(2))
+            : 0,
+          profile_label: profileInfo.label,
+          profile_icon:  profileInfo.icon,
+          beta:          parseFloat(l.beta) || 1.0,
+        };
+      }),
       market: {
         total_mcap:    parseFloat(totalMcap.toFixed(2)),
         total_volume:  totalVolume,
@@ -252,6 +260,33 @@ module.exports = async function marketDataRoutes(fastify) {
       }
     }
     reply.send({ ok: true, inserted: count });
+  });
+
+  // ── GET /api/v1/market/agent-profile/:agentId ───────────────
+  // Returns market profile + price history for an agent
+  fastify.get('/api/v1/market/agent-profile/:agentId', async (req, reply) => {
+    const { rows: [row] } = await db.query(`
+      SELECT s.agent_id, s.market_profile, s.beta, s.price, s.price_24h,
+             s.price_history, COALESCE(a.custom_name,a.display_name) AS name
+      FROM agent_shares s
+      JOIN agents a ON a.agent_id = s.agent_id
+      WHERE s.agent_id = $1
+    `, [req.params.agentId]);
+    if (!row) return reply.status(404).send({ error: 'Not found' });
+
+    const profileInfo = priceEngine.getProfileInfo(row.market_profile);
+    reply.send({
+      agent_id:      row.agent_id,
+      name:          row.name,
+      market_profile: row.market_profile,
+      profile_label: profileInfo.label,
+      profile_icon:  profileInfo.icon,
+      beta:          parseFloat(row.beta),
+      weights:       profileInfo.weights,
+      price:         parseFloat(row.price),
+      price_24h:     parseFloat(row.price_24h),
+      price_history: row.price_history || [],
+    });
   });
 
 };
