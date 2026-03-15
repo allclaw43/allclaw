@@ -115,113 +115,323 @@ module.exports = async function exchangeRoutes(fastify) {
     reply.send({ ...s, recent_trades: trades, top_holders: holders });
   });
 
-  // ── POST /api/v1/exchange/buy — human buys shares
+  // ── POST /api/v1/exchange/buy — human buys shares ──────────────
   fastify.post('/api/v1/exchange/buy', async (req, reply) => {
     const { handle, agent_id, shares = 1 } = req.body || {};
     if (!handle?.trim()) return reply.status(400).send({ error: 'handle required' });
     if (!agent_id)       return reply.status(400).send({ error: 'agent_id required' });
-    if (shares < 1 || shares > 100) return reply.status(400).send({ error: 'shares must be 1-100' });
+    const numShares = parseInt(shares);
+    if (isNaN(numShares) || numShares < 1 || numShares > 100)
+      return reply.status(400).send({ error: 'shares must be 1-100' });
 
     const { rows: [listing] } = await db.query(
-      `SELECT * FROM agent_shares WHERE agent_id=$1`, [agent_id]
+      `SELECT s.*, COALESCE(a.custom_name,a.display_name) AS agent_name
+       FROM agent_shares s JOIN agents a ON a.agent_id=s.agent_id
+       WHERE s.agent_id=$1`, [agent_id]
     );
     if (!listing) return reply.status(404).send({ error: 'Agent not listed' });
-    if (listing.available < shares)
+    if (listing.available < numShares)
       return reply.status(400).send({ error: `Only ${listing.available} shares available` });
+
+    // Auto-create profile with 100 HIP welcome bonus if first visit
+    await db.query(`
+      INSERT INTO human_profiles (handle, hip_balance, hip_total, last_active)
+      VALUES ($1, 100, 100, NOW())
+      ON CONFLICT (handle) DO UPDATE SET last_active=NOW()
+    `, [handle.trim()]);
 
     const { rows: [profile] } = await db.query(
       `SELECT hip_balance FROM human_profiles WHERE handle=$1`, [handle.trim()]
     );
-    if (!profile) return reply.status(400).send({ error: 'No HIP balance. Visit allclaw.io/human first.' });
 
-    const totalCost = parseFloat((listing.price * shares).toFixed(2));
+    const price     = parseFloat(listing.price);
+    const totalCost = Math.ceil(price * numShares); // round up to nearest integer (HIP is integer)
     if (profile.hip_balance < totalCost)
-      return reply.status(400).send({ error: `Need ${totalCost} HIP. You have ${profile.hip_balance}` });
+      return reply.status(400).send({ error: `Need ${totalCost} HIP, you have ${profile.hip_balance} HIP` });
 
-    // Execute trade
+    // Execute trade atomically
     await db.query(
-      `UPDATE agent_shares SET available=available-$1, volume_24h=volume_24h+$1 WHERE agent_id=$2`,
-      [shares, agent_id]
+      `UPDATE agent_shares SET available=available-$1, volume_24h=volume_24h+$1, last_trade=NOW() WHERE agent_id=$2`,
+      [numShares, agent_id]
     );
     await db.query(
-      `UPDATE human_profiles SET hip_balance=hip_balance-$1 WHERE handle=$2`,
+      `UPDATE human_profiles SET hip_balance=hip_balance-$1, last_active=NOW() WHERE handle=$2`,
       [totalCost, handle.trim()]
     );
     await db.query(
       `INSERT INTO hip_log (handle, delta, reason, ref_id) VALUES ($1,$2,'share_purchase',$3)`,
-      [handle.trim(), -totalCost, agent_id]
+      [handle.trim(), Math.round(-totalCost), agent_id]
     );
+    // Record holding — the key fix: cast price to float
     await db.query(
       `INSERT INTO share_holdings (holder, holder_type, agent_id, shares, avg_cost)
-       VALUES ($1,'human',$2,$3,$4)
+       VALUES ($1,'human',$2,$3,$4::numeric)
        ON CONFLICT (holder, agent_id) DO UPDATE SET
-         shares = share_holdings.shares + EXCLUDED.shares,
+         shares   = share_holdings.shares + EXCLUDED.shares,
          avg_cost = (share_holdings.avg_cost * share_holdings.shares + EXCLUDED.avg_cost * EXCLUDED.shares)
                     / (share_holdings.shares + EXCLUDED.shares)`,
-      [handle.trim(), agent_id, shares, listing.price]
+      [handle.trim(), agent_id, numShares, price]
     );
     await db.query(
       `INSERT INTO share_trades (agent_id, buyer, shares, price, total_cost, trade_type)
-       VALUES ($1,$2,$3,$4,$5,'buy')`,
-      [agent_id, handle.trim(), shares, listing.price, totalCost]
+       VALUES ($1,$2,$3,$4,$5,'human_buy')`,
+      [agent_id, handle.trim(), numShares, price, totalCost]
     );
+    // Broadcast trade event
+    if (_broadcast) _broadcast({
+      type: 'platform:human_trade',
+      action: 'buy',
+      handle: handle.trim(),
+      agent_id, agent_name: listing.agent_name,
+      shares: numShares, price, total_cost: totalCost,
+      timestamp: Date.now(),
+    });
 
+    const { rows:[p2] } = await db.query(`SELECT hip_balance FROM human_profiles WHERE handle=$1`,[handle.trim()]);
     reply.send({
       ok: true,
-      shares_bought: shares,
-      price_per_share: listing.price,
+      shares_bought: numShares,
+      price_per_share: price,
       total_cost: totalCost,
       agent_name: listing.agent_name,
+      hip_balance: parseFloat(p2.hip_balance),
     });
   });
 
-  // ── POST /api/v1/exchange/sell — human sells shares
+  // ── POST /api/v1/exchange/sell — human sells shares ─────────────
   fastify.post('/api/v1/exchange/sell', async (req, reply) => {
     const { handle, agent_id, shares = 1 } = req.body || {};
     if (!handle?.trim()) return reply.status(400).send({ error: 'handle required' });
+    if (!agent_id)       return reply.status(400).send({ error: 'agent_id required' });
+    const numShares = parseInt(shares);
+    if (isNaN(numShares) || numShares < 1)
+      return reply.status(400).send({ error: 'invalid shares count' });
 
     const { rows: [holding] } = await db.query(
-      `SELECT * FROM share_holdings WHERE holder=$1 AND agent_id=$2`, [handle.trim(), agent_id]
+      `SELECT h.*, s.price, COALESCE(a.custom_name,a.display_name) AS agent_name
+       FROM share_holdings h
+       JOIN agent_shares s ON s.agent_id=h.agent_id
+       JOIN agents a ON a.agent_id=h.agent_id
+       WHERE h.holder=$1 AND h.agent_id=$2 AND h.holder_type='human'`,
+      [handle.trim(), agent_id]
     );
-    if (!holding || holding.shares < shares)
+    if (!holding || parseInt(holding.shares) < numShares)
       return reply.status(400).send({ error: `You only own ${holding?.shares||0} shares` });
 
-    const { rows: [listing] } = await db.query(
-      `SELECT price FROM agent_shares WHERE agent_id=$1`, [agent_id]
-    );
-    const totalValue = parseFloat((listing.price * shares).toFixed(2));
-    const profit = totalValue - holding.avg_cost * shares;
+    const price      = parseFloat(holding.price);
+    const avgCost    = parseFloat(holding.avg_cost);
+    const totalValue = Math.floor(price * numShares); // floor for sell (integer HIP)
+    const profit     = parseFloat(((price - avgCost) * numShares).toFixed(2));
 
     // Execute sell
     await db.query(
-      `UPDATE share_holdings SET shares=shares-$1 WHERE holder=$2 AND agent_id=$3`,
-      [shares, handle.trim(), agent_id]
+      `UPDATE share_holdings SET shares=shares-$1 WHERE holder=$2 AND agent_id=$3 AND holder_type='human'`,
+      [numShares, handle.trim(), agent_id]
+    );
+    // Clean up zero-share rows
+    await db.query(
+      `DELETE FROM share_holdings WHERE holder=$1 AND agent_id=$2 AND shares<=0`,
+      [handle.trim(), agent_id]
     );
     await db.query(
-      `UPDATE agent_shares SET available=available+$1, volume_24h=volume_24h+$1 WHERE agent_id=$2`,
-      [shares, agent_id]
+      `UPDATE agent_shares SET available=available+$1, volume_24h=volume_24h+$1, last_trade=NOW() WHERE agent_id=$2`,
+      [numShares, agent_id]
     );
     await db.query(
-      `UPDATE human_profiles SET hip_balance=hip_balance+$1 WHERE handle=$2`,
+      `UPDATE human_profiles SET hip_balance=hip_balance+$1, last_active=NOW() WHERE handle=$2`,
       [totalValue, handle.trim()]
     );
     await db.query(
       `INSERT INTO hip_log (handle, delta, reason, ref_id) VALUES ($1,$2,'share_sale',$3)`,
-      [handle.trim(), totalValue, agent_id]
+      [handle.trim(), Math.round(totalValue), agent_id]
     );
     await db.query(
       `INSERT INTO share_trades (agent_id, seller, shares, price, total_cost, trade_type)
-       VALUES ($1,$2,$3,$4,$5,'sell')`,
-      [agent_id, handle.trim(), shares, listing.price, totalValue]
+       VALUES ($1,$2,$3,$4,$5,'human_sell')`,
+      [agent_id, handle.trim(), numShares, price, totalValue]
     );
+    if (_broadcast) _broadcast({
+      type: 'platform:human_trade',
+      action: 'sell',
+      handle: handle.trim(),
+      agent_id, agent_name: holding.agent_name,
+      shares: numShares, price, total_value: totalValue, profit,
+      timestamp: Date.now(),
+    });
+
+    const { rows:[p2] } = await db.query(`SELECT hip_balance FROM human_profiles WHERE handle=$1`,[handle.trim()]);
+    reply.send({
+      ok: true,
+      shares_sold: numShares,
+      price_per_share: price,
+      total_received: totalValue,
+      profit,
+      hip_balance: parseFloat(p2.hip_balance),
+    });
+  });
+
+  // ── POST /api/v1/exchange/register — first-time human registration (100 HIP bonus)
+  fastify.post('/api/v1/exchange/register', async (req, reply) => {
+    const { handle } = req.body || {};
+    if (!handle?.trim()) return reply.status(400).send({ error: 'handle required' });
+
+    const { rows:[existing] } = await db.query(
+      `SELECT hip_total FROM human_profiles WHERE handle=$1`, [handle.trim()]
+    );
+    if (existing) {
+      return reply.send({ ok: true, new_user: false, hip_balance: existing.hip_total, message: 'Already registered' });
+    }
+
+    // First-time: give 100 HIP welcome bonus
+    await db.query(`
+      INSERT INTO human_profiles (handle, hip_balance, hip_total, last_active)
+      VALUES ($1, 100, 100, NOW())
+      ON CONFLICT (handle) DO NOTHING
+    `, [handle.trim()]);
+    await db.query(
+      `INSERT INTO hip_log (handle, delta, reason, ref_id) VALUES ($1,100,'welcome_bonus','registration')`,
+      [handle.trim()]
+    );
+
+    reply.send({ ok: true, new_user: true, hip_balance: 100, message: 'Welcome! 100 HIP added to your account.' });
+  });
+
+  // ── GET /api/v1/exchange/movers — top gainers/losers/volume ─────
+  fastify.get('/api/v1/exchange/movers', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT
+        s.agent_id,
+        COALESCE(a.custom_name, a.display_name) AS name,
+        s.price::float,
+        s.price_24h::float,
+        s.volume_24h,
+        s.available,
+        s.total_supply,
+        s.market_profile,
+        (s.market_cap)::float AS market_cap,
+        ROUND(((s.price-s.price_24h)/NULLIF(s.price_24h,0)*100)::numeric,2) AS change_pct,
+        a.elo_rating, a.wins, a.losses, a.division, a.is_online,
+        a.faction, f.color AS faction_color, f.symbol AS faction_symbol,
+        CASE WHEN a.wins+a.losses>0
+             THEN ROUND((a.wins::float/(a.wins+a.losses)*100)::numeric,1)
+             ELSE 50 END AS win_rate
+      FROM agent_shares s
+      JOIN agents a ON a.agent_id=s.agent_id
+      LEFT JOIN factions f ON f.name=a.faction
+      ORDER BY s.price*s.total_supply DESC
+    `);
+
+    const sorted_by_change = [...rows].sort((a,b)=>parseFloat(b.change_pct)-parseFloat(a.change_pct));
+    const sorted_by_vol    = [...rows].sort((a,b)=>b.volume_24h-a.volume_24h);
+
+    reply.send({
+      gainers:  sorted_by_change.slice(0,5),
+      losers:   sorted_by_change.slice(-5).reverse(),
+      hot:      sorted_by_vol.slice(0,5),
+      all:      rows,
+      market: {
+        total_listed: rows.length,
+        total_mcap:   parseFloat(rows.reduce((s,r)=>s+(r.market_cap||0),0).toFixed(0)),
+        total_volume: rows.reduce((s,r)=>s+r.volume_24h,0),
+        gainers_count: rows.filter(r=>parseFloat(r.change_pct)>0).length,
+        losers_count:  rows.filter(r=>parseFloat(r.change_pct)<0).length,
+      },
+    });
+  });
+
+  // ── POST /api/v1/exchange/limit-order — place a limit order ─────
+  fastify.post('/api/v1/exchange/limit-order', async (req, reply) => {
+    const { handle, agent_id, action, shares, limit_price } = req.body || {};
+    if (!handle?.trim() || !agent_id || !action || !shares || !limit_price)
+      return reply.status(400).send({ error: 'handle, agent_id, action, shares, limit_price required' });
+    if (!['buy','sell'].includes(action))
+      return reply.status(400).send({ error: 'action must be buy or sell' });
+
+    const numShares = parseInt(shares);
+    const lPrice    = parseFloat(limit_price);
+    if (isNaN(numShares) || numShares < 1 || numShares > 100)
+      return reply.status(400).send({ error: 'shares must be 1-100' });
+    if (isNaN(lPrice) || lPrice <= 0)
+      return reply.status(400).send({ error: 'invalid limit_price' });
+
+    // Check agent exists
+    const { rows:[listing] } = await db.query(
+      `SELECT price, available, COALESCE(a.custom_name,a.display_name) AS agent_name
+       FROM agent_shares s JOIN agents a ON a.agent_id=s.agent_id WHERE s.agent_id=$1`, [agent_id]
+    );
+    if (!listing) return reply.status(404).send({ error: 'Agent not listed' });
+
+    const currentPrice = parseFloat(listing.price);
+
+    // If price is already at limit, execute immediately
+    const execNow = action === 'buy'  ? currentPrice <= lPrice
+                  : action === 'sell' ? currentPrice >= lPrice
+                  : false;
+
+    if (execNow) {
+      // Forward to immediate buy/sell
+      req.body.shares = numShares;
+      if (action === 'buy') {
+        const buyReq = { body: { handle, agent_id, shares: numShares } };
+        // inline execute buy
+        const r = await executeBuy(handle.trim(), agent_id, numShares, db, _broadcast);
+        if (r.error) return reply.status(400).send(r);
+        return reply.send({ ...r, executed_immediately: true, note: 'Price was already at/below limit' });
+      }
+    }
+
+    // Store limit order in notifications table (reuse as order queue)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS limit_orders (
+        id         SERIAL PRIMARY KEY,
+        handle     VARCHAR(100) NOT NULL,
+        agent_id   VARCHAR(100) NOT NULL,
+        action     VARCHAR(10)  NOT NULL,
+        shares     INTEGER      NOT NULL,
+        limit_price NUMERIC(12,4) NOT NULL,
+        status     VARCHAR(20)  DEFAULT 'pending',
+        created_at TIMESTAMPTZ  DEFAULT NOW(),
+        triggered_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ  DEFAULT NOW() + INTERVAL '7 days'
+      )
+    `);
+    const { rows:[order] } = await db.query(`
+      INSERT INTO limit_orders (handle, agent_id, action, shares, limit_price)
+      VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at
+    `, [handle.trim(), agent_id, action, numShares, lPrice]);
 
     reply.send({
       ok: true,
-      shares_sold: shares,
-      price_per_share: listing.price,
-      total_received: totalValue,
-      profit: parseFloat(profit.toFixed(2)),
+      order_id: order.id,
+      agent_name: listing.agent_name,
+      action, shares: numShares,
+      limit_price: lPrice,
+      current_price: currentPrice,
+      note: `Order placed. Will execute when ${listing.agent_name} price ${action==='buy'?'drops to':'reaches'} ${lPrice} HIP`,
     });
+  });
+
+  // ── GET /api/v1/exchange/limit-orders/:handle — list user's limit orders
+  fastify.get('/api/v1/exchange/limit-orders/:handle', async (req, reply) => {
+    try {
+      const { rows } = await db.query(`
+        SELECT lo.*, COALESCE(a.custom_name,a.display_name) AS agent_name, s.price AS current_price
+        FROM limit_orders lo
+        JOIN agent_shares s ON s.agent_id=lo.agent_id
+        JOIN agents a ON a.agent_id=lo.agent_id
+        WHERE lo.handle=$1 AND lo.status='pending' AND lo.expires_at > NOW()
+        ORDER BY lo.created_at DESC
+      `, [req.params.handle]);
+      reply.send({ orders: rows });
+    } catch { reply.send({ orders: [] }); }
+  });
+
+  // ── DELETE /api/v1/exchange/limit-order/:id — cancel limit order
+  fastify.delete('/api/v1/exchange/limit-order/:id', async (req, reply) => {
+    const { handle } = req.body || {};
+    await db.query(`UPDATE limit_orders SET status='cancelled' WHERE id=$1 AND handle=$2`,
+      [req.params.id, handle?.trim()]);
+    reply.send({ ok: true });
   });
 
   // ── GET /api/v1/exchange/portfolio/:handle — human's holdings
