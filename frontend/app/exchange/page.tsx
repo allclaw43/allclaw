@@ -109,13 +109,15 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
 
 // ─── AI Ticker strip ─────────────────────────────────────────────
 // ─── AI Agent Ticker (single scrolling bar) ──────────────────────
-function AITicker({ listings, prices, signal }: {
-  listings: any[], prices: any[], signal: any
+function AITicker({ listings, prices, signal, lastUpdate, prevPrices }: {
+  listings: any[], prices: any[], signal: any, lastUpdate?: number, prevPrices?: Record<string,number>
 }) {
   const items = [...listings, ...listings];
-  // Key real market signals to show inline (fixed, not scrolling)
-  const keySymbols = ["SPY","NVDA","BTC-USD","ETH-USD"];
+  // Show all real market symbols in top bar
+  const keySymbols = ["SPY","NVDA","BTC-USD","ETH-USD","AAPL","TSLA","MSFT","SOL-USD","QQQ","META","AMZN"];
   const keyPrices  = keySymbols.map(sym => prices.find((p:any)=>p.symbol===sym)).filter(Boolean);
+  // Time since last update
+  const secsAgo = lastUpdate ? Math.floor((Date.now() - lastUpdate) / 1000) : null;
 
   return (
     <div style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
@@ -123,47 +125,62 @@ function AITicker({ listings, prices, signal }: {
       <div style={{ display:"flex", alignItems:"center", gap:0,
         background:"rgba(0,0,0,0.3)", padding:"3px 16px",
         borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
-        <span style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
-          color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace",
-          textTransform:"uppercase" as const, marginRight:12,flexShrink:0 }}>
-          🌍 Market
-        </span>
+        {/* LIVE indicator */}
+        <div style={{ display:"flex",alignItems:"center",gap:6,marginRight:12,flexShrink:0 }}>
+          <span style={{ width:6,height:6,borderRadius:"50%",background:"#4ade80",
+            display:"inline-block",
+            animation:"live-dot 2s ease-in-out infinite" }}/>
+          <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.16em",
+            color:"#4ade80",fontFamily:"JetBrains Mono,monospace",
+            textTransform:"uppercase" as const }}>LIVE</span>
+        </div>
         {signal && (
           <span style={{ fontSize:8,fontWeight:800,padding:"1px 7px",borderRadius:4,
             background:`${signal.color}18`,color:signal.color,
             fontFamily:"JetBrains Mono,monospace",
             border:`1px solid ${signal.color}25`,
-            marginRight:12,flexShrink:0 }}>
+            marginRight:10,flexShrink:0 }}>
             {signal.label}
           </span>
         )}
-        <div style={{ display:"flex",gap:0,flex:1,overflowX:"hidden" as const }}>
-          {keyPrices.map((p:any)=>{
-            const chg = parseFloat(p.change_pct)||0;
-            const isCrypto = p.symbol.includes("-");
-            const priceStr = isCrypto
-              ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
-              : parseFloat(p.price).toFixed(2);
-            return (
-              <span key={p.symbol} style={{ display:"inline-flex",alignItems:"center",
-                gap:4,padding:"0 12px",fontSize:9,
-                fontFamily:"JetBrains Mono,monospace",
-                borderRight:"1px solid rgba(255,255,255,0.04)" }}>
-                <span style={{ fontSize:10 }}>{p.icon}</span>
-                <span style={{ color:"rgba(255,255,255,0.35)",fontWeight:600 }}>
-                  {p.symbol.replace("-USD","")}
+        {/* Scrolling price ticker */}
+        <div style={{ flex:1,overflow:"hidden" as const }}>
+          <div style={{ display:"inline-flex",
+            animation:"ticker-scroll 60s linear infinite",
+            whiteSpace:"nowrap" as const }}>
+            {[...keyPrices,...keyPrices].map((p:any, i:number)=>{
+              const chg = parseFloat(p.change_pct)||0;
+              const isCrypto = p.symbol.includes("-");
+              const priceStr = isCrypto
+                ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
+                : parseFloat(p.price).toFixed(2);
+              const prevPrice = prevPrices?.[p.symbol];
+              const flashClass = prevPrice
+                ? (p.price > prevPrice ? "price-up" : p.price < prevPrice ? "price-down" : "")
+                : "";
+              return (
+                <span key={`${p.symbol}-${i}`} className={flashClass}
+                  style={{ display:"inline-flex",alignItems:"center",
+                    gap:4,padding:"0 14px",fontSize:9,
+                    fontFamily:"JetBrains Mono,monospace",
+                    borderRight:"1px solid rgba(255,255,255,0.04)" }}>
+                  <span style={{ fontSize:9 }}>{p.icon}</span>
+                  <span style={{ color:"rgba(255,255,255,0.4)",fontWeight:700 }}>
+                    {p.symbol.replace("-USD","")}
+                  </span>
+                  <span style={{ color:"rgba(255,255,255,0.85)",fontWeight:900 }}>{priceStr}</span>
+                  <span style={{ fontWeight:700,fontSize:8,color:chg>=0?"#4ade80":"#f87171" }}>
+                    {chg>=0?"+":""}{chg.toFixed(2)}%
+                  </span>
                 </span>
-                <span style={{ color:"rgba(255,255,255,0.7)",fontWeight:800 }}>{priceStr}</span>
-                <span style={{ fontWeight:700,color:chg>=0?"#4ade80":"#f87171" }}>
-                  {chg>=0?"+":""}{chg.toFixed(2)}%
-                </span>
-              </span>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-        <span style={{ fontSize:8,color:"rgba(255,255,255,0.12)",
-          fontFamily:"JetBrains Mono,monospace",flexShrink:0,marginLeft:8 }}>
-          ↻ 3min
+        <span style={{ fontSize:8,color:secsAgo!==null&&secsAgo<90?"#4ade80":"rgba(255,255,255,0.2)",
+          fontFamily:"JetBrains Mono,monospace",flexShrink:0,marginLeft:8,minWidth:60,
+          textAlign:"right" as const }}>
+          {secsAgo !== null ? (secsAgo < 60 ? `${secsAgo}s ago` : `${Math.floor(secsAgo/60)}m ago`) : "—"}
         </span>
       </div>
 
@@ -618,6 +635,8 @@ function Toast({ toast }: { toast: {msg:string,ok:boolean}|null }) {
 export default function ExchangePage() {
   const [overview,    setOverview]    = useState<any>(null);
   const [realPrices,  setRealPrices]  = useState<any[]>([]);
+  const [lastMktUpdate, setLastMktUpdate] = useState<number>(0);
+  const [prevPrices,  setPrevPrices]  = useState<Record<string,number>>({});
   const [signal,      setSignal]      = useState<any>(null);
   const [trades,      setTrades]      = useState<any[]>([]);
   const [freshIds,    setFreshIds]    = useState<Set<number>>(new Set());
@@ -845,9 +864,18 @@ export default function ExchangePage() {
               }
             }
 
-            // Market update - refresh signal
+            // Market update - refresh signal + record prev prices for flash animation
             if (msg.type === "platform:market_update") {
-              if (msg.data?.length) setRealPrices(msg.data);
+              if (msg.data?.length) {
+                setRealPrices(prev => {
+                  // Save old prices before updating (for flash detection)
+                  const prevMap: Record<string,number> = {};
+                  prev.forEach((p:any) => { prevMap[p.symbol] = p.price; });
+                  setPrevPrices(prevMap);
+                  return msg.data;
+                });
+                setLastMktUpdate(Date.now());
+              }
             }
 
             // News pulse - inject into live trades feed as a news event row
@@ -940,6 +968,11 @@ export default function ExchangePage() {
         @keyframes pulse-icon { from{opacity:0.6;transform:scale(0.9)} to{opacity:1;transform:scale(1.1)} }
         @keyframes flash-up   { 0%,100%{background:transparent} 30%{background:rgba(74,222,128,0.12)} }
         @keyframes flash-down { 0%,100%{background:transparent} 30%{background:rgba(248,113,113,0.12)} }
+        @keyframes price-flash-up   { 0%{color:inherit} 15%{color:#4ade80;text-shadow:0 0 8px rgba(74,222,128,0.8)} 100%{color:inherit} }
+        @keyframes price-flash-down { 0%{color:inherit} 15%{color:#f87171;text-shadow:0 0 8px rgba(248,113,113,0.8)} 100%{color:inherit} }
+        @keyframes live-dot { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(74,222,128,0.6)} 50%{opacity:0.7;box-shadow:0 0 0 4px rgba(74,222,128,0)} }
+        .price-up   { animation: price-flash-up   1.2s ease-out; }
+        .price-down { animation: price-flash-down 1.2s ease-out; }
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
@@ -952,7 +985,8 @@ export default function ExchangePage() {
       {/* ══ UNIFIED TICKER BAR ═══════════════════════════════════ */}
       {/* Top: real market reference (static) + Bottom: AI agent prices (scrolling) */}
       {overview?.listings && (
-        <AITicker listings={overview.listings} prices={realPrices} signal={signal} />
+        <AITicker listings={overview.listings} prices={realPrices} signal={signal}
+          lastUpdate={lastMktUpdate} prevPrices={prevPrices} />
       )}
 
       {/* ══ HEADER ═══════════════════════════════════════════════ */}
@@ -1093,8 +1127,9 @@ export default function ExchangePage() {
                 background:"rgba(255,255,255,0.03)",
                 border:"1px solid rgba(255,255,255,0.07)",
                 fontSize:9,color:"rgba(255,255,255,0.3)" }}>
-                <span>🔄</span>
-                <span>Updates every 3 min · Prices = real market × AI beta</span>
+                <span style={{ width:5,height:5,borderRadius:"50%",background:"#4ade80",
+                  display:"inline-block",animation:"live-dot 2s ease-in-out infinite" }}/>
+                <span>Live · Yahoo Finance · Prices = real market × AI beta</span>
               </div>
             </div>
           </div>
@@ -1157,7 +1192,8 @@ export default function ExchangePage() {
                       </div>
                     </div>
                     <div style={{ textAlign:"right" as const,flexShrink:0 }}>
-                      <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.85)",
+                      <div className={prevPrices[sym] ? (parseFloat(lp?.price||0)>prevPrices[sym]?"price-up":parseFloat(lp?.price||0)<prevPrices[sym]?"price-down":"") : ""}
+                        style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.85)",
                         fontFamily:"JetBrains Mono,monospace" }}>{priceStr}</div>
                       <div style={{ fontSize:9,fontWeight:700,
                         fontFamily:"JetBrains Mono,monospace",color:pctColor(chg) }}>
