@@ -203,13 +203,8 @@ async function tick(marketData) {
     `, [u.new_price, u.agent_id]);
   }
 
-  // Update price_24h snapshot once per day (if last_price_tick was >20h ago)
-  await db.query(`
-    UPDATE agent_shares
-    SET price_24h = price
-    WHERE (last_price_tick IS NULL OR last_price_tick < NOW() - INTERVAL '20 hours')
-      AND price IS NOT NULL
-  `);
+  // Note: price_24h baseline is managed by bot-presence.js (24h interval reset)
+  // Do NOT reset here to avoid conflicts
 
   // Broadcast price updates over WebSocket
   if (_broadcast) {
