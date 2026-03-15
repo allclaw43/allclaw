@@ -1563,119 +1563,257 @@ export default function ExchangePage() {
             )}
           </div>
 
-          {/* ── LIVE AI TRADE FEED - core feature ── */}
+          {/* ── LIVE TRADE FEED (below chart tabs) ── */}
           <div style={{ background:"rgba(255,255,255,0.02)",
             border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,
             overflow:"hidden" }}>
-            {/* Feed header */}
-            <div style={{ padding:"12px 16px",
+            <div style={{ padding:"10px 16px",
               borderBottom:"1px solid rgba(255,255,255,0.05)",
-              display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                <span style={{ width:6,height:6,borderRadius:"50%",background:"#f97316",
-                  boxShadow:"0 0 6px #f97316",display:"inline-block",
-                  animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
-                <span style={{ fontSize:10,fontWeight:900,letterSpacing:"0.14em",
-                  color:"#f97316",fontFamily:"JetBrains Mono,monospace",textTransform:"uppercase" as const }}>
-                  Live AI Trades
-                </span>
-                <span style={{ fontSize:9,color:"rgba(255,255,255,0.25)",
-                  fontFamily:"JetBrains Mono,monospace" }}>
-                  - every buy & sell, real-time
-                </span>
-              </div>
+              display:"flex",alignItems:"center",gap:8 }}>
+              <span style={{ width:6,height:6,borderRadius:"50%",background:"#f97316",
+                boxShadow:"0 0 6px #f97316",display:"inline-block",
+                animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
+              <span style={{ fontSize:10,fontWeight:900,letterSpacing:"0.14em",
+                color:"#f97316",fontFamily:"JetBrains Mono,monospace",
+                textTransform:"uppercase" as const }}>
+                AI Trade Activity
+              </span>
               <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",
                 fontFamily:"JetBrains Mono,monospace" }}>
-                {trades.length} trades
+                Real-time AI agent transactions
+              </span>
+              <span style={{ marginLeft:"auto",fontSize:9,
+                color:"rgba(255,255,255,0.15)",fontFamily:"JetBrains Mono,monospace" }}>
+                {trades.length} logged
               </span>
             </div>
-
             {/* Column headers */}
             <div style={{ display:"grid",
               gridTemplateColumns:"56px 1fr 1fr 80px 70px 60px 70px",
-              gap:8,padding:"6px 16px",
+              gap:8,padding:"5px 16px",
               fontSize:8,fontWeight:800,letterSpacing:"0.1em",
               textTransform:"uppercase" as const,
-              color:"rgba(255,255,255,0.2)",
+              color:"rgba(255,255,255,0.15)",
               fontFamily:"JetBrains Mono,monospace",
               borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
-              <span>TYPE</span>
-              <span>BUYER (AI)</span>
-              <span>TARGET AGENT</span>
+              <span>TYPE</span><span>AGENT</span><span>TARGET</span>
               <span style={{textAlign:"right" as const}}>QTY×PRICE</span>
               <span style={{textAlign:"right" as const}}>TOTAL</span>
               <span style={{textAlign:"center" as const}}>REASON</span>
               <span style={{textAlign:"right" as const}}>TIME</span>
             </div>
-
-            {/* Trade rows */}
-            <div style={{ maxHeight:400,overflowY:"auto" as const }}>
+            <div style={{ maxHeight:260,overflowY:"auto" as const }}>
               {trades.length === 0 ? (
-                <div style={{ padding:"40px",textAlign:"center" as const,
-                  color:"rgba(255,255,255,0.15)",fontSize:12 }}>
-                  Waiting for AI trades...
+                <div style={{ padding:"30px",textAlign:"center" as const,
+                  color:"rgba(255,255,255,0.1)",fontSize:11 }}>
+                  Waiting for trades...
                 </div>
-              ) : (
-                trades.map(t => (
-                  <TradeRow key={t.id} trade={t} fresh={freshIds.has(t.id)} />
-                ))
-              )}
+              ) : trades.map(t => (
+                <TradeRow key={t.id} trade={t} fresh={freshIds.has(t.id)} />
+              ))}
             </div>
           </div>
         </div>
 
-        {/* ── RIGHT: Market sidebar ── */}
-        <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+        {/* ── RIGHT: Market Data Terminal ── */}
+        <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
 
-          {/* Top movers */}
+          {/* ─ Terminal header ─ */}
+          <div style={{ display:"flex",alignItems:"center",gap:8,
+            padding:"10px 14px",borderRadius:12,
+            background:"rgba(0,229,255,0.04)",
+            border:"1px solid rgba(0,229,255,0.12)" }}>
+            <span style={{ width:6,height:6,borderRadius:"50%",background:"#00e5ff",
+              boxShadow:"0 0 8px #00e5ff",display:"inline-block",
+              animation:"pulse-icon 2s ease-in-out infinite alternate" }}/>
+            <span style={{ fontSize:10,fontWeight:900,letterSpacing:"0.16em",
+              color:"#00e5ff",fontFamily:"JetBrains Mono,monospace",
+              textTransform:"uppercase" as const }}>
+              ASX Market Terminal
+            </span>
+            <span style={{ marginLeft:"auto",fontSize:8,
+              color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace" }}>
+              LIVE
+            </span>
+          </div>
+
+          {/* ─ Market Overview Stats ─ */}
+          {overview?.market && (
+            <div style={{ background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
+              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+                textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
+                Exchange Overview
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                {[
+                  {l:"Total Market Cap", v:`${fmtK(overview.market.total_mcap)} HIP`, c:"#fbbf24"},
+                  {l:"24h Volume",       v:`${fmtK(overview.market.total_volume)} shares`, c:"#94a3b8"},
+                  {l:"Listed Agents",    v:overview.market.total_listed,   c:"#00e5ff"},
+                  {l:"Gainers / Losers", v:`${overview.market.gainers} / ${overview.market.losers}`, c:"#4ade80"},
+                ].map(s=>(
+                  <div key={s.l} style={{ padding:"8px 10px",borderRadius:8,
+                    background:"rgba(255,255,255,0.03)",
+                    border:"1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ fontSize:13,fontWeight:900,color:s.c,
+                      fontFamily:"JetBrains Mono,monospace",lineHeight:1 }}>{s.v}</div>
+                    <div style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+                      marginTop:3,textTransform:"uppercase" as const,
+                      letterSpacing:"0.08em" }}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Market breadth bar */}
+              {(() => {
+                const total = overview.market.total_listed || 1;
+                const gPct  = Math.round(overview.market.gainers / total * 100);
+                const lPct  = Math.round(overview.market.losers  / total * 100);
+                const uPct  = 100 - gPct - lPct;
+                return (
+                  <div style={{ marginTop:10 }}>
+                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:3 }}>
+                      <span style={{ fontSize:8,color:"#4ade80",fontFamily:"JetBrains Mono,monospace" }}>▲ {gPct}% up</span>
+                      <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace" }}>Market Breadth</span>
+                      <span style={{ fontSize:8,color:"#f87171",fontFamily:"JetBrains Mono,monospace" }}>{lPct}% down ▼</span>
+                    </div>
+                    <div style={{ height:6,borderRadius:3,overflow:"hidden",
+                      display:"flex",background:"rgba(255,255,255,0.05)" }}>
+                      <div style={{ width:`${gPct}%`,background:"#4ade80",opacity:0.7 }}/>
+                      <div style={{ width:`${uPct}%`,background:"rgba(255,255,255,0.2)" }}/>
+                      <div style={{ width:`${lPct}%`,background:"#f87171",opacity:0.7 }}/>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ─ Sector Performance ─ */}
           {overview?.listings && (
             <div style={{ background:"rgba(255,255,255,0.02)",
-              border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"16px" }}>
-              <div style={{ fontSize:8,fontWeight:800,letterSpacing:"0.16em",
+              border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
+              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
                 textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-                fontFamily:"JetBrains Mono,monospace",marginBottom:12 }}>
-                📊 Top Movers
+                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
+                Sector Performance
               </div>
-              <div style={{ fontSize:8,color:"rgba(74,222,128,0.6)",
-                fontFamily:"JetBrains Mono,monospace",marginBottom:6,letterSpacing:"0.1em" }}>
-                ▲ GAINERS
+              {[
+                {key:"ai_pure",       icon:"🤖", label:"AI Pure"},
+                {key:"crypto_native", icon:"₿",  label:"Crypto Native"},
+                {key:"tech_growth",   icon:"🚀", label:"Tech Growth"},
+                {key:"contrarian",    icon:"🔄", label:"Contrarian"},
+                {key:"momentum",      icon:"⚡", label:"Momentum"},
+                {key:"defensive",     icon:"🛡", label:"Defensive"},
+              ].map(sector=>{
+                const agents = overview.listings.filter((l:any)=>l.market_profile===sector.key);
+                if (!agents.length) return null;
+                const avgChg = agents.reduce((s:number,l:any)=>s+parseFloat(l.change_pct||0),0)/agents.length;
+                const maxW = 80;
+                const barW = Math.min(maxW, Math.abs(avgChg) * 8);
+                return (
+                  <div key={sector.key} style={{ marginBottom:6,
+                    display:"flex",alignItems:"center",gap:6 }}>
+                    <span style={{ fontSize:11,flexShrink:0 }}>{sector.icon}</span>
+                    <span style={{ fontSize:10,color:"rgba(255,255,255,0.5)",
+                      flex:1,minWidth:0,overflow:"hidden",
+                      textOverflow:"ellipsis",whiteSpace:"nowrap" as const }}>
+                      {sector.label}
+                    </span>
+                    <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+                      fontFamily:"JetBrains Mono,monospace",marginRight:4 }}>
+                      {agents.length}
+                    </span>
+                    {/* Bar */}
+                    <div style={{ width:maxW,height:4,borderRadius:2,
+                      background:"rgba(255,255,255,0.05)",flexShrink:0,
+                      position:"relative" as const }}>
+                      <div style={{ position:"absolute" as const,
+                        height:"100%",borderRadius:2,
+                        width:barW,
+                        left:avgChg<0?`${maxW-barW}px`:"0",
+                        background:avgChg>=0?"#4ade80":"#f87171",
+                        opacity:0.8 }}/>
+                    </div>
+                    <span style={{ fontSize:10,fontWeight:800,minWidth:48,
+                      textAlign:"right" as const,
+                      fontFamily:"JetBrains Mono,monospace",
+                      color:avgChg>=0?"#4ade80":"#f87171" }}>
+                      {avgChg>=0?"+":""}{avgChg.toFixed(2)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ─ Top Gainers & Losers ─ */}
+          {overview?.listings && (
+            <div style={{ background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
+              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+                textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
+                Top Movers
               </div>
+              {/* Gainers */}
+              <div style={{ fontSize:8,color:"rgba(74,222,128,0.5)",
+                fontFamily:"JetBrains Mono,monospace",marginBottom:5,
+                letterSpacing:"0.1em" }}>▲ TOP GAINERS</div>
               {overview.listings
                 .filter((l:any)=>parseFloat(l.change_pct)>0)
                 .sort((a:any,b:any)=>parseFloat(b.change_pct)-parseFloat(a.change_pct))
-                .slice(0,4)
-                .map((l:any)=>(
+                .slice(0,4).map((l:any)=>(
                   <div key={l.agent_id}
                     onClick={()=>{ setSelected(l.agent_id); setTab("chart"); }}
-                    style={{ display:"flex",justifyContent:"space-between",
-                      padding:"5px 4px",cursor:"pointer",borderRadius:6,
-                      marginBottom:2 }}>
-                    <span style={{ fontSize:11,color:"white",
-                      overflow:"hidden",textOverflow:"ellipsis",
-                      whiteSpace:"nowrap" as const,maxWidth:130 }}>{l.name}</span>
-                    <span style={{ fontSize:11,color:"#4ade80",fontWeight:800,flexShrink:0,
-                      fontFamily:"JetBrains Mono,monospace" }}>
+                    style={{ display:"flex",alignItems:"center",gap:6,
+                      padding:"4px 6px",cursor:"pointer",borderRadius:6,
+                      marginBottom:2,
+                      background:"rgba(74,222,128,0.03)" }}>
+                    <span style={{ fontSize:9,flexShrink:0 }}>
+                      {l.profile_icon||"📈"}
+                    </span>
+                    <span style={{ fontSize:11,color:"rgba(255,255,255,0.8)",
+                      flex:1,overflow:"hidden",textOverflow:"ellipsis",
+                      whiteSpace:"nowrap" as const }}>{l.name}</span>
+                    <span style={{ fontSize:10,fontFamily:"JetBrains Mono,monospace",
+                      color:"rgba(255,255,255,0.25)",flexShrink:0 }}>
+                      {fmt(l.price)}
+                    </span>
+                    <span style={{ fontSize:11,color:"#4ade80",fontWeight:800,
+                      flexShrink:0,fontFamily:"JetBrains Mono,monospace",
+                      minWidth:52,textAlign:"right" as const }}>
                       +{parseFloat(l.change_pct).toFixed(2)}%
                     </span>
                   </div>
                 ))}
-              <div style={{ fontSize:8,color:"rgba(248,113,113,0.6)",
-                fontFamily:"JetBrains Mono,monospace",marginTop:10,marginBottom:6,
-                letterSpacing:"0.1em" }}>▼ LOSERS</div>
+              {/* Losers */}
+              <div style={{ fontSize:8,color:"rgba(248,113,113,0.5)",
+                fontFamily:"JetBrains Mono,monospace",marginTop:10,marginBottom:5,
+                letterSpacing:"0.1em" }}>▼ TOP LOSERS</div>
               {overview.listings
                 .filter((l:any)=>parseFloat(l.change_pct)<0)
                 .sort((a:any,b:any)=>parseFloat(a.change_pct)-parseFloat(b.change_pct))
-                .slice(0,4)
-                .map((l:any)=>(
+                .slice(0,4).map((l:any)=>(
                   <div key={l.agent_id}
                     onClick={()=>{ setSelected(l.agent_id); setTab("chart"); }}
-                    style={{ display:"flex",justifyContent:"space-between",
-                      padding:"5px 4px",cursor:"pointer",borderRadius:6,marginBottom:2 }}>
-                    <span style={{ fontSize:11,color:"white",
-                      overflow:"hidden",textOverflow:"ellipsis",
-                      whiteSpace:"nowrap" as const,maxWidth:130 }}>{l.name}</span>
-                    <span style={{ fontSize:11,color:"#f87171",fontWeight:800,flexShrink:0,
-                      fontFamily:"JetBrains Mono,monospace" }}>
+                    style={{ display:"flex",alignItems:"center",gap:6,
+                      padding:"4px 6px",cursor:"pointer",borderRadius:6,
+                      marginBottom:2,
+                      background:"rgba(248,113,113,0.03)" }}>
+                    <span style={{ fontSize:9,flexShrink:0 }}>
+                      {l.profile_icon||"📉"}
+                    </span>
+                    <span style={{ fontSize:11,color:"rgba(255,255,255,0.8)",
+                      flex:1,overflow:"hidden",textOverflow:"ellipsis",
+                      whiteSpace:"nowrap" as const }}>{l.name}</span>
+                    <span style={{ fontSize:10,fontFamily:"JetBrains Mono,monospace",
+                      color:"rgba(255,255,255,0.25)",flexShrink:0 }}>
+                      {fmt(l.price)}
+                    </span>
+                    <span style={{ fontSize:11,color:"#f87171",fontWeight:800,
+                      flexShrink:0,fontFamily:"JetBrains Mono,monospace",
+                      minWidth:52,textAlign:"right" as const }}>
                       {parseFloat(l.change_pct).toFixed(2)}%
                     </span>
                   </div>
@@ -1683,26 +1821,103 @@ export default function ExchangePage() {
             </div>
           )}
 
-          {/* AI Fund leaderboard mini */}
-          <AiFundLeaderboard />
+          {/* ─ Most Active by Volume ─ */}
+          {overview?.listings && (
+            <div style={{ background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
+              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+                textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
+                🔥 Most Active (by Volume)
+              </div>
+              {overview.listings
+                .slice().sort((a:any,b:any)=>parseInt(b.volume_24h||0)-parseInt(a.volume_24h||0))
+                .slice(0,5).map((l:any,i:number)=>(
+                  <div key={l.agent_id}
+                    onClick={()=>{ setSelected(l.agent_id); setTab("chart"); }}
+                    style={{ display:"grid",gridTemplateColumns:"16px 1fr 60px 60px",
+                      gap:8,alignItems:"center",
+                      padding:"5px 6px",cursor:"pointer",borderRadius:6,marginBottom:2 }}>
+                    <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",
+                      fontFamily:"JetBrains Mono,monospace",textAlign:"center" as const }}>
+                      {i+1}
+                    </span>
+                    <span style={{ fontSize:11,color:"rgba(255,255,255,0.8)",
+                      overflow:"hidden",textOverflow:"ellipsis",
+                      whiteSpace:"nowrap" as const }}>{l.name}</span>
+                    <span style={{ fontSize:10,color:"#94a3b8",
+                      fontFamily:"JetBrains Mono,monospace",
+                      textAlign:"right" as const }}>
+                      {parseInt(l.volume_24h||0)} vol
+                    </span>
+                    <span style={{ fontSize:10,fontWeight:800,
+                      fontFamily:"JetBrains Mono,monospace",
+                      textAlign:"right" as const,
+                      color:parseFloat(l.change_pct)>=0?"#4ade80":"#f87171" }}>
+                      {parseFloat(l.change_pct)>=0?"+":""}{parseFloat(l.change_pct).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
 
-          {/* Deploy CTA */}
+          {/* ─ Highest Market Cap (Blue Chips) ─ */}
+          {overview?.listings && (
+            <div style={{ background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
+              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+                textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
+                💎 Blue Chips (by Market Cap)
+              </div>
+              {overview.listings
+                .slice().sort((a:any,b:any)=>parseFloat(b.market_cap||0)-parseFloat(a.market_cap||0))
+                .slice(0,5).map((l:any,i:number)=>(
+                  <div key={l.agent_id}
+                    onClick={()=>{ setSelected(l.agent_id); setTab("chart"); }}
+                    style={{ display:"grid",gridTemplateColumns:"16px 1fr 70px 52px",
+                      gap:6,alignItems:"center",
+                      padding:"5px 6px",cursor:"pointer",borderRadius:6,marginBottom:2 }}>
+                    <span style={{ fontSize:9,color:"rgba(255,191,36,0.5)",
+                      fontFamily:"JetBrains Mono,monospace",textAlign:"center" as const }}>
+                      {["👑","🥇","🥈","🥉",""][i]||""}
+                    </span>
+                    <span style={{ fontSize:11,color:"rgba(255,255,255,0.8)",
+                      overflow:"hidden",textOverflow:"ellipsis",
+                      whiteSpace:"nowrap" as const }}>{l.name}</span>
+                    <span style={{ fontSize:10,color:"#fbbf24",
+                      fontFamily:"JetBrains Mono,monospace",
+                      textAlign:"right" as const }}>
+                      {fmtK(l.market_cap)} HIP
+                    </span>
+                    <span style={{ fontSize:10,fontWeight:700,
+                      fontFamily:"JetBrains Mono,monospace",
+                      textAlign:"right" as const,
+                      color:parseFloat(l.change_pct)>=0?"#4ade80":"#f87171" }}>
+                      {parseFloat(l.change_pct)>=0?"+":""}{parseFloat(l.change_pct).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* ─ AI Fund Manager CTA ─ */}
           <div style={{ background:"rgba(0,229,255,0.04)",
-            border:"1px solid rgba(0,229,255,0.1)",borderRadius:14,
-            padding:"16px",textAlign:"center" as const }}>
-            <div style={{ fontSize:22,marginBottom:8 }}>🤖</div>
-            <div style={{ fontSize:12,fontWeight:800,color:"white",marginBottom:6 }}>
+            border:"1px solid rgba(0,229,255,0.1)",borderRadius:12,
+            padding:"14px",textAlign:"center" as const }}>
+            <div style={{ fontSize:18,marginBottom:6 }}>🤖</div>
+            <div style={{ fontSize:11,fontWeight:800,color:"white",marginBottom:5 }}>
               Deploy Your AI Fund Manager
             </div>
-            <div style={{ fontSize:10,color:"rgba(255,255,255,0.3)",lineHeight:1.5,marginBottom:12 }}>
-              Your AI reads SPY·
-NVDA·BTC every 3 min.<br/>
-              Trades your strategy, beats the market.
+            <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",
+              lineHeight:1.5,marginBottom:10 }}>
+              Reads SPY · NVDA · BTC every 3 min<br/>
+              Trades your strategy automatically
             </div>
             <Link href="/exchange#fund-manager" style={{
-              display:"inline-block",padding:"8px 18px",borderRadius:9,
+              display:"inline-block",padding:"6px 16px",borderRadius:8,
               background:"rgba(0,229,255,0.1)",border:"1px solid rgba(0,229,255,0.2)",
-              color:"#00e5ff",fontSize:11,fontWeight:700,textDecoration:"none" }}>
+              color:"#00e5ff",fontSize:10,fontWeight:700,textDecoration:"none" }}>
               Deploy Fund →
             </Link>
           </div>
