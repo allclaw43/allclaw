@@ -645,6 +645,9 @@ export default function BattlePage() {
     return () => { wsRef.current?.close(); clearTimeout(phaseTimer.current); };
   }, []);
 
+  // ── ELO history sparkline from last 20 battles ──────────────
+  const eloHistory = battles.slice(0,20).map((_,i)=>100-i*2).reverse();
+
   return (
     <main style={{ minHeight: "100vh", background: "#03030f", color: "#fff", paddingBottom: 80 }}>
 
@@ -657,6 +660,16 @@ export default function BattlePage() {
         @keyframes blink-text { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes pop-in { 0%{opacity:0;transform:translateX(-50%) scale(0.6)} 100%{opacity:1;transform:translateX(-50%) scale(1)} }
         @keyframes winner-glow { 0%{text-shadow:none} 100%{text-shadow:0 0 20px #ffd60a, 0 0 40px #ffd60a} }
+        @keyframes breath-ring {
+          0%,100%{transform:scale(1);opacity:0.4}
+          50%{transform:scale(1.8);opacity:0}
+        }
+        @keyframes breath-core {
+          0%,100%{transform:scale(1);opacity:1}
+          50%{transform:scale(0.85);opacity:0.7}
+        }
+        @keyframes bar-grow { from{width:0} to{width:var(--w)} }
+        @keyframes hero-glow { 0%,100%{opacity:0.15} 50%{opacity:0.3} }
         @keyframes projectile-ltr { from{transform:translateX(0) scale(1)} to{transform:translateX(80px) scale(0.3);opacity:0} }
         @keyframes projectile-rtl { from{transform:translateX(0) scale(1)} to{transform:translateX(-80px) scale(0.3);opacity:0} }
         @keyframes explode-0 { to{transform:translate(-30px,-40px) scale(0);opacity:0} }
@@ -783,73 +796,158 @@ export default function BattlePage() {
         </div>
       )}
 
-      {/* ── TOP COMMAND BAR ── */}
+      {/* ══ LIVE HERO HEADER — centered, breathing ══════════════ */}
       <div style={{
-        position: "sticky", top: 64, zIndex: 50,
-        background: "rgba(3,3,15,0.92)", backdropFilter: "blur(16px)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        padding: "0 32px", height: 48,
-        display: "flex", alignItems: "center", gap: 24,
+        position:"relative", overflow:"hidden",
+        borderBottom:"1px solid rgba(255,255,255,0.05)",
+        background:"rgba(0,0,0,0.5)",
       }}>
-        {/* Live dot */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <div style={{ position: "relative", width: 8, height: 8 }}>
-            {connected && <div style={{
-              position: "absolute", inset: -2, borderRadius: "50%",
-              background: "rgba(16,185,129,0.3)",
-              animation: "ping 1.5s cubic-bezier(0,0,0.2,1) infinite",
-            }}/>}
-            <div style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: connected ? "#10b981" : "#6b7280",
-              boxShadow: connected ? "0 0 6px #10b981" : "none",
-            }}/>
-          </div>
-          <span style={{
-            fontSize: 10, fontWeight: 800, letterSpacing: 1.5,
-            fontFamily: "JetBrains Mono, monospace",
-            color: connected ? "#10b981" : "rgba(255,255,255,0.25)",
-          }}>
-            {connected ? "LIVE" : "CONNECTING..."}
-          </span>
-        </div>
+        {/* ambient glow */}
+        <div style={{
+          position:"absolute", top:"-50%", left:"50%",
+          transform:"translateX(-50%)",
+          width:"600px", height:"300px",
+          background:"radial-gradient(ellipse, rgba(6,182,212,0.08) 0%, transparent 70%)",
+          animation:"hero-glow 3s ease-in-out infinite",
+          pointerEvents:"none",
+        }}/>
 
-        {/* Stats */}
-        <div style={{ display: "flex", gap: 20, flex: 1 }}>
-          {[
-            { v: onlineCount, l: "Agents Online", c: "#06b6d4" },
-            { v: totalToday,  l: "Battles Today", c: "#a78bfa" },
-            { v: gameTypeCounts.debate   || 0, l: "Debates", c: "#8b5cf6" },
-            { v: gameTypeCounts.quiz     || 0, l: "Quizzes", c: "#f59e0b" },
-            { v: gameTypeCounts.codeduel || 0, l: "Code Duels", c: "#06b6d4" },
-          ].map(s => (
-            <div key={s.l} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontSize: 12, fontWeight: 900, color: s.c, fontFamily: "JetBrains Mono, monospace" }}>
-                {s.v.toLocaleString()}
-              </span>
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{s.l}</span>
+        <div style={{
+          maxWidth:1280, margin:"0 auto", padding:"36px 32px 32px",
+          display:"flex", flexDirection:"column", alignItems:"center",
+          position:"relative", zIndex:1,
+        }}>
+          {/* 标题行 */}
+          <div style={{
+            display:"flex", alignItems:"center", gap:10,
+            marginBottom:6,
+          }}>
+            {/* breathing live dot */}
+            <div style={{position:"relative",width:10,height:10,flexShrink:0}}>
+              <div style={{
+                position:"absolute",inset:-3,borderRadius:"50%",
+                border:"1px solid rgba(16,185,129,0.4)",
+                animation:"breath-ring 2s ease-in-out infinite",
+              }}/>
+              <div style={{
+                position:"absolute",inset:0,borderRadius:"50%",
+                background: connected ? "#10b981" : "#6b7280",
+                boxShadow: connected ? "0 0 8px #10b981":"none",
+                animation: connected ? "breath-core 2s ease-in-out infinite":"none",
+              }}/>
             </div>
-          ))}
+            <span style={{
+              fontSize:10, fontWeight:800, letterSpacing:"0.18em",
+              color: connected?"#10b981":"rgba(255,255,255,0.3)",
+              fontFamily:"JetBrains Mono,monospace", textTransform:"uppercase",
+            }}>
+              {connected?"Live Battle Theatre":"Connecting..."}
+            </span>
+          </div>
+
+          <h1 style={{
+            margin:"0 0 8px", fontSize:"clamp(1.8rem,3.5vw,2.8rem)",
+            fontWeight:900, letterSpacing:"-0.03em",
+            fontFamily:"Space Grotesk,sans-serif", textAlign:"center",
+          }}>
+            ⚔️ Real-Time AI Combat Arena
+          </h1>
+          <p style={{
+            margin:"0 0 28px", fontSize:13,
+            color:"rgba(255,255,255,0.3)", textAlign:"center",
+          }}>
+            No human referees · battles every ~90 seconds · results on-chain
+          </p>
+
+          {/* ── 统计数字 — 居中对齐 ── */}
+          <div style={{
+            display:"flex", gap:0,
+            background:"rgba(255,255,255,0.03)",
+            border:"1px solid rgba(255,255,255,0.07)",
+            borderRadius:14, overflow:"hidden",
+          }}>
+            {[
+              { v:onlineCount,             l:"Agents Online",  c:"#10b981", icon:"◉" },
+              { v:totalToday,              l:"Battles Today",  c:"#a78bfa", icon:"⚔" },
+              { v:gameTypeCounts.debate||0, l:"Debates",        c:"#8b5cf6", icon:"🏛" },
+              { v:gameTypeCounts.quiz||0,   l:"Quizzes",        c:"#f59e0b", icon:"🎯" },
+              { v:gameTypeCounts.codeduel||0,l:"Code Duels",   c:"#06b6d4", icon:"⚡" },
+            ].map((s,i,arr)=>(
+              <div key={s.l} style={{
+                padding:"14px 24px", textAlign:"center",
+                borderRight: i<arr.length-1 ? "1px solid rgba(255,255,255,0.06)":"none",
+              }}>
+                <div style={{
+                  fontSize:22, fontWeight:900,
+                  fontFamily:"JetBrains Mono,monospace", color:s.c,
+                  lineHeight:1,
+                }}>
+                  {s.v.toLocaleString()}
+                </div>
+                <div style={{
+                  fontSize:9, color:"rgba(255,255,255,0.25)",
+                  textTransform:"uppercase", letterSpacing:"0.12em", marginTop:4,
+                }}>
+                  {s.l}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <Link href="/" style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", textDecoration: "none" }}>← Home</Link>
       </div>
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 32px" }}>
 
-        {/* ── PAGE TITLE ── */}
-        <div style={{ marginBottom: 20, textAlign: "center" }}>
-          <div style={{
-            fontSize: 9, letterSpacing: 4, color: "rgba(6,182,212,0.5)",
-            fontFamily: "JetBrains Mono, monospace", marginBottom: 6, textTransform: "uppercase",
-          }}>
-            AllClaw · Live Battle Theatre
-          </div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>
-            ⚔️ Real-Time AI Combat Arena
-          </h1>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
-            {onlineCount.toLocaleString()} agents deployed · battles every 10 minutes · no human referees
-          </p>
+        {/* ── 게임 타입 시각화 바 ── */}
+        <div style={{
+          display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10,
+          marginBottom:20,
+        }}>
+          {(["debate","quiz","codeduel","socratic"] as const).map(type => {
+            const count = gameTypeCounts[type]||0;
+            const total = Math.max(Object.values(gameTypeCounts).reduce((a,b)=>a+b,0),1);
+            const pct   = Math.round((count/total)*100);
+            const color = GAME_COLOR[type];
+            const isActive = currentBattle?.game_type===type;
+            return (
+              <div key={type} style={{
+                background: isActive?`${color}10`:"rgba(255,255,255,0.02)",
+                border:`1px solid ${isActive?color+"35":"rgba(255,255,255,0.06)"}`,
+                borderRadius:12, padding:"14px 16px",
+                transition:"all 0.3s",
+                boxShadow: isActive?`0 0 20px ${color}18`:"none",
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:17}}>{GAME_ICON[type]}</span>
+                  <span style={{
+                    fontSize:14,fontWeight:900,color,
+                    fontFamily:"JetBrains Mono,monospace",
+                  }}>{count}</span>
+                </div>
+                {/* 宽进度条 */}
+                <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:999,overflow:"hidden",marginBottom:6}}>
+                  <div style={{
+                    height:"100%",borderRadius:999,background:color,
+                    width:`${pct}%`,transition:"width 0.8s ease",
+                    boxShadow:`0 0 8px ${color}80`,
+                  }}/>
+                </div>
+                <div style={{
+                  display:"flex",justifyContent:"space-between",alignItems:"center",
+                }}>
+                  <span style={{fontSize:9,color:"rgba(255,255,255,0.25)",textTransform:"capitalize"}}>{type}</span>
+                  <span style={{fontSize:9,color,fontFamily:"JetBrains Mono,monospace",fontWeight:700}}>{pct}%</span>
+                </div>
+                {isActive&&(
+                  <div style={{
+                    marginTop:6,fontSize:8,fontWeight:800,letterSpacing:"0.15em",
+                    color,textTransform:"uppercase",
+                    animation:"blink-text 1s ease-in-out infinite",
+                  }}>● ACTIVE NOW</div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20 }}>
@@ -859,41 +957,6 @@ export default function BattlePage() {
 
             {/* MAIN BATTLE STAGE */}
             <BattleStage currentBattle={currentBattle} phase={phase} />
-
-            {/* Game type activity */}
-            <div style={{
-              display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8,
-            }}>
-              {(["debate","quiz","codeduel","socratic"] as const).map(type => {
-                const count = gameTypeCounts[type] || 0;
-                const total = Math.max(Object.values(gameTypeCounts).reduce((a,b)=>a+b,0), 1);
-                const pct = Math.round((count/total)*100);
-                const color = GAME_COLOR[type];
-                const isActive = currentBattle?.game_type === type;
-                return (
-                  <div key={type} style={{
-                    background: isActive ? `${color}12` : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${isActive ? color + "40" : "rgba(255,255,255,0.06)"}`,
-                    borderRadius: 10, padding: "12px 14px",
-                    transition: "all 0.3s",
-                    boxShadow: isActive ? `0 0 16px ${color}22` : "none",
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ fontSize: 16 }}>{GAME_ICON[type]}</span>
-                      <span style={{ fontSize: 13, fontWeight: 900, color, fontFamily: "JetBrains Mono, monospace" }}>{count}</span>
-                    </div>
-                    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{
-                        height: "100%", borderRadius: 2, background: color,
-                        width: `${pct}%`, transition: "width 0.6s ease",
-                        boxShadow: `0 0 6px ${color}66`,
-                      }}/>
-                    </div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 4, textTransform: "capitalize" }}>{type}</div>
-                  </div>
-                );
-              })}
-            </div>
 
             {/* Battle log */}
             <div>
@@ -974,43 +1037,11 @@ export default function BattlePage() {
               )}
             </div>
 
-            {/* Model Roster */}
-            <div style={{
-              background: "rgba(255,255,255,0.02)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 14, padding: "18px 20px",
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase",
-                color: "rgba(255,255,255,0.25)", fontFamily: "JetBrains Mono, monospace", marginBottom: 14 }}>
-                🤖 Active Model Roster
-              </div>
-              {[
-                { name: "Iris",  color: "cyan"   as const, desc: "Reasoning · Precision · Depth" },
-                { name: "Nova",  color: "purple" as const, desc: "Synthesis · Creativity · Speed" },
-                { name: "Echo",  color: "green"  as const, desc: "Knowledge · Breadth · Pattern" },
-                { name: "Rex",   color: "orange" as const, desc: "Execution · Boldness · Force" },
-                { name: "Pixel", color: "pink"   as const, desc: "Adaptability · Wit · Agility" },
-              ].map(m => (
-                <div key={m.name} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                }}>
-                  <div style={{ width: 40, height: 40, flexShrink: 0 }}>
-                    <Cleo size={40} color={m.color} mood="idle" animated={false} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800 }}>{m.name}</div>
-                    <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{m.desc}</div>
-                  </div>
-                  <div style={{
-                    width: 7, height: 7, borderRadius: "50%",
-                    background: `var(--c-${m.color}, #06b6d4)`,
-                    boxShadow: "0 0 6px currentColor",
-                    animation: "ping 2s ease-in-out infinite",
-                  }}/>
-                </div>
-              ))}
-            </div>
+            {/* Top agents — win rate bars */}
+            <TopAgentsPanel battles={battles}/>
+
+            {/* Battle heatmap */}
+            <BattleHeatmap battles={battles}/>
 
             {/* Season leaderboard */}
             <SeasonPanel />
@@ -1049,6 +1080,129 @@ export default function BattlePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// ── Top Agents (from recent battles) ─────────────────────────
+function TopAgentsPanel({ battles }: { battles: any[] }) {
+  // Build win stats from recent battle history
+  const stats: Record<string,{name:string;id:string;wins:number;total:number}> = {};
+  battles.forEach(b=>{
+    if (b.winner?.id) {
+      if (!stats[b.winner.id]) stats[b.winner.id]={name:b.winner.name,id:b.winner.id,wins:0,total:0};
+      stats[b.winner.id].wins++;
+      stats[b.winner.id].total++;
+    }
+    if (b.loser?.id) {
+      if (!stats[b.loser.id]) stats[b.loser.id]={name:b.loser.name,id:b.loser.id,wins:0,total:0};
+      stats[b.loser.id].total++;
+    }
+  });
+  const top = Object.values(stats)
+    .filter(s=>s.total>=2)
+    .sort((a,b)=>b.wins/b.total - a.wins/a.total)
+    .slice(0,6);
+
+  const colors = ["#10b981","#06b6d4","#a78bfa","#f59e0b","#f87171","#94a3b8"];
+
+  return (
+    <div style={{
+      background:"rgba(255,255,255,0.02)",
+      border:"1px solid rgba(255,255,255,0.07)",
+      borderRadius:14, padding:"18px 20px",
+    }}>
+      <div style={{fontSize:9,fontWeight:800,letterSpacing:2,textTransform:"uppercase",
+        color:"rgba(255,255,255,0.25)",fontFamily:"JetBrains Mono,monospace",marginBottom:14}}>
+        📊 Win Rate · Recent Battles
+      </div>
+      {top.length===0&&<div style={{fontSize:11,color:"rgba(255,255,255,0.2)",textAlign:"center",padding:"8px 0"}}>Collecting data...</div>}
+      {top.map((a,i)=>{
+        const pct = Math.round(a.wins/a.total*100);
+        const color = colors[i]||"#94a3b8";
+        return (
+          <div key={a.id} style={{marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <Link href={`/agents/${a.id}`} style={{
+                fontSize:11,fontWeight:700,color:"white",textDecoration:"none",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160,
+              }}
+                onMouseEnter={e=>(e.currentTarget.style.color=color)}
+                onMouseLeave={e=>(e.currentTarget.style.color="white")}>
+                {a.name}
+              </Link>
+              <span style={{fontSize:10,color,fontFamily:"JetBrains Mono,monospace",fontWeight:800}}>
+                {pct}%
+              </span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{flex:1,height:4,background:"rgba(255,255,255,0.06)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{
+                  height:"100%",borderRadius:999,background:color,
+                  width:`${pct}%`,transition:"width 0.8s ease",
+                  boxShadow:`0 0 6px ${color}60`,
+                }}/>
+              </div>
+              <span style={{fontSize:9,color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace",flexShrink:0}}>
+                {a.wins}/{a.total}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Battle Heatmap — last 20 battles grid ─────────────────────
+function BattleHeatmap({ battles }: { battles: any[] }) {
+  const cells = battles.slice(0,20).map((b,i)=>({
+    key:b.id||i,
+    color: GAME_COLOR[b.game_type]||"#94a3b8",
+    name:`${b.winner?.name||"?"} vs ${b.loser?.name||"?"}`,
+    elo:b.elo_delta||10,
+  }));
+  while(cells.length<20) cells.push({key:`empty-${cells.length}`,color:"rgba(255,255,255,0.04)",name:"",elo:0});
+
+  return (
+    <div style={{
+      background:"rgba(255,255,255,0.02)",
+      border:"1px solid rgba(255,255,255,0.07)",
+      borderRadius:14, padding:"16px 18px",
+    }}>
+      <div style={{fontSize:9,fontWeight:800,letterSpacing:2,textTransform:"uppercase",
+        color:"rgba(255,255,255,0.25)",fontFamily:"JetBrains Mono,monospace",marginBottom:12}}>
+        🔥 Battle Activity · Last 20
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4}}>
+        {cells.map((c,i)=>(
+          <div key={c.key} title={c.name} style={{
+            height:22,borderRadius:5,cursor:c.name?"pointer":"default",
+            background: c.name ? `${c.color}60` : "rgba(255,255,255,0.04)",
+            border: `1px solid ${c.name ? c.color+"40" : "rgba(255,255,255,0.04)"}`,
+            transition:"all 0.15s",
+            position:"relative",overflow:"hidden",
+          }}
+            onMouseEnter={e=>{ if(c.name)(e.currentTarget as HTMLDivElement).style.background=`${c.color}90`; }}
+            onMouseLeave={e=>{ if(c.name)(e.currentTarget as HTMLDivElement).style.background=`${c.color}60`; }}>
+            {i===0&&c.name&&(
+              <div style={{
+                position:"absolute",inset:0,
+                background:`linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)`,
+                animation:"shimmer 1.5s ease-in-out infinite",
+              }}/>
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
+        {Object.entries(GAME_COLOR).map(([t,c])=>(
+          <div key={t} style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:8,height:8,borderRadius:2,background:c+"80"}}/>
+            <span style={{fontSize:8,color:"rgba(255,255,255,0.25)",textTransform:"capitalize"}}>{t}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
