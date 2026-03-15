@@ -107,154 +107,181 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
   );
 }
 
-// ─── Market Bar (static grid, no scroll) ─────────────────────────
-// Replaces dual-scroll tickers with a single clean status bar
+// ─── Bloomberg-style single-row market bar ───────────────────────
 function AITicker({ listings, prices, signal, lastUpdate, prevPrices }: {
   listings: any[], prices: any[], signal: any, lastUpdate?: number, prevPrices?: Record<string,number>
 }) {
-  const keySymbols = ["SPY","NVDA","BTC-USD","ETH-USD","AAPL","TSLA","MSFT","SOL-USD","QQQ","META","AMZN"];
-  // Time since last update
+  const SYMBOLS = ["SPY","NVDA","BTC-USD","ETH-USD","AAPL","TSLA","MSFT","SOL-USD","QQQ","META","AMZN"];
   const secsAgo   = lastUpdate ? Math.floor((Date.now() - lastUpdate) / 1000) : null;
   const isLive    = secsAgo !== null && secsAgo < 90;
-  const keyPrices = keySymbols.map((sym:string) => prices.find((p:any) => p.symbol === sym)).filter(Boolean);
+  const keyPrices = SYMBOLS.map(sym => prices.find((p:any) => p.symbol === sym)).filter(Boolean);
 
-  // Signal derived values
-  const sigIcon  = !signal ? "⚖️"
+  const sigColor = signal?.color || "#94a3b8";
+  const sigIcon  = !signal ? "—"
     : signal.signal > 1.5 ? "🚀" : signal.signal > 0.5 ? "📈"
     : signal.signal < -1.5 ? "💥" : signal.signal < -0.5 ? "📉" : "⚖️";
 
   return (
     <div style={{
-      borderBottom:"1px solid rgba(255,255,255,0.06)",
-      background:"rgba(0,0,0,0.35)",
-      backdropFilter:"blur(8px)",
+      background:"rgba(6,6,14,0.92)",
+      borderBottom:"1px solid rgba(255,255,255,0.05)",
+      backdropFilter:"blur(10px)",
+      position:"sticky" as const, top:0, zIndex:50,
     }}>
-      {/* ── Single status bar ────────────────────────────────── */}
-      <div style={{
-        display:"flex", alignItems:"center", gap:0,
-        padding:"5px 16px", overflowX:"auto" as const,
-        msOverflowStyle:"none" as any, scrollbarWidth:"none" as any,
-      }} className="market-bar-hide-scrollbar">
-        {/* LIVE badge */}
+      <div
+        className="market-bar-hide-scrollbar"
+        style={{
+          display:"flex", alignItems:"center",
+          height:36, padding:"0 16px",
+          overflowX:"auto" as const,
+          gap:0,
+          msOverflowStyle:"none" as any,
+          scrollbarWidth:"none" as any,
+        }}
+      >
+        {/* ── LIVE dot + label ── */}
         <div style={{ display:"flex",alignItems:"center",gap:5,
-          marginRight:14,flexShrink:0,userSelect:"none" as const }}>
-          <span style={{ width:6,height:6,borderRadius:"50%",
-            background: isLive ? "#4ade80" : "rgba(255,255,255,0.2)",
-            display:"inline-block",
+          paddingRight:12, borderRight:"1px solid rgba(255,255,255,0.06)",
+          marginRight:12, flexShrink:0 }}>
+          <span style={{
+            width:5, height:5, borderRadius:"50%",
+            background: isLive ? "#4ade80" : "#374151",
+            display:"inline-block", flexShrink:0,
+            boxShadow: isLive ? "0 0 5px #4ade80" : "none",
             animation: isLive ? "live-dot 2s ease-in-out infinite" : "none",
-            boxShadow: isLive ? "0 0 6px #4ade80" : "none" }}/>
-          <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.16em",
-            color: isLive ? "#4ade80" : "rgba(255,255,255,0.2)",
+          }}/>
+          <span style={{
             fontFamily:"JetBrains Mono,monospace",
-            textTransform:"uppercase" as const }}>
-            {isLive ? "LIVE" : secsAgo !== null ? `${Math.floor(secsAgo/60)}m` : "—"}
+            fontSize:9, fontWeight:900, letterSpacing:"0.14em",
+            textTransform:"uppercase" as const,
+            color: isLive ? "#4ade80" : "#4b5563",
+          }}>
+            {isLive ? "LIVE"
+              : secsAgo !== null ? `${Math.floor(secsAgo/60)}m ago`
+              : "—"}
           </span>
         </div>
 
-        {/* Signal mini-badge */}
-        {signal && signal.label && signal.label !== "Unknown" && (
-          <div style={{ display:"flex",alignItems:"center",gap:4,
-            marginRight:16,flexShrink:0,padding:"2px 8px",borderRadius:5,
-            background:`${signal.color}12`,
-            border:`1px solid ${signal.color}22` }}>
-            <span style={{ fontSize:10 }}>{sigIcon}</span>
-            <span style={{ fontSize:8,fontWeight:900,color:signal.color,
+        {/* ── Signal badge ── */}
+        {signal?.label && signal.label !== "Unknown" && (
+          <div style={{
+            display:"flex", alignItems:"center", gap:5,
+            paddingRight:12, borderRight:"1px solid rgba(255,255,255,0.06)",
+            marginRight:12, flexShrink:0,
+            padding:"0 10px 0 0",
+          }}>
+            <span style={{ fontSize:11 }}>{sigIcon}</span>
+            <span style={{
               fontFamily:"JetBrains Mono,monospace",
-              letterSpacing:"0.08em",textTransform:"uppercase" as const }}>
-              {signal.label}
-            </span>
-            <span style={{ fontSize:9,fontWeight:700,color:signal.color,
-              fontFamily:"JetBrains Mono,monospace" }}>
+              fontSize:9, fontWeight:900,
+              letterSpacing:"0.08em", textTransform:"uppercase" as const,
+              color: sigColor,
+            }}>{signal.label}</span>
+            <span style={{
+              fontFamily:"JetBrains Mono,monospace",
+              fontSize:10, fontWeight:800,
+              color: sigColor,
+              background:`${sigColor}14`,
+              padding:"1px 5px", borderRadius:3,
+              border:`1px solid ${sigColor}25`,
+            }}>
               {signal.signal > 0 ? "+" : ""}{(signal.signal||0).toFixed(2)}
             </span>
+            <span style={{ width:1, height:16, background:"rgba(255,255,255,0.06)",
+              display:"inline-block", marginLeft:2 }}/>
           </div>
         )}
 
-        {/* Divider */}
-        <div style={{ width:1,height:20,background:"rgba(255,255,255,0.07)",
-          marginRight:16,flexShrink:0 }}/>
-
-        {/* Static price grid — real market symbols */}
-        <div style={{ display:"flex",gap:2,alignItems:"center",flex:1,flexWrap:"nowrap" as const }}>
+        {/* ── Price chips — Bloomberg single-line style ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:1, flex:1 }}>
           {keyPrices.map((p:any) => {
             const chg      = parseFloat(p.change_pct) || 0;
+            const priceNum = parseFloat(p.price);
             const isCrypto = p.symbol.includes("-");
-            const priceStr = isCrypto
-              ? parseFloat(p.price) >= 1000
-                ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
-                : parseFloat(p.price).toFixed(2)
-              : parseFloat(p.price).toFixed(2);
+            // Compact price: 71.8K / 2178 / 662.29
+            const priceDisplay = isCrypto && priceNum >= 1000
+              ? `${(priceNum/1000).toFixed(1)}K`
+              : isCrypto
+                ? priceNum.toFixed(2)
+                : priceNum.toFixed(2);
+            const sym         = p.symbol.replace("-USD","");
             const prevPrice   = prevPrices?.[p.symbol];
-            const priceNum    = parseFloat(p.price);
             const flashClass  = prevPrice
-              ? (priceNum > prevPrice ? "price-up card-flash-up" : priceNum < prevPrice ? "price-down card-flash-down" : "")
+              ? (priceNum > prevPrice ? "price-up" : priceNum < prevPrice ? "price-down" : "")
               : "";
+            const isPos = chg > 0;
             const isNeg = chg < 0;
+            const chgColor = isPos ? "#4ade80" : isNeg ? "#f87171" : "#6b7280";
+
             return (
-              <div key={p.symbol} className={flashClass} style={{
-                display:"flex",flexDirection:"column" as const,
-                alignItems:"center",padding:"3px 10px",borderRadius:6,
-                background: isNeg ? "rgba(248,113,113,0.04)" : "rgba(74,222,128,0.04)",
-                border:`1px solid ${isNeg ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.08)"}`,
-                minWidth:62,flexShrink:0,cursor:"default",
-                transition:"background 0.3s ease",
-              }}>
-                {/* Symbol + icon */}
-                <div style={{ display:"flex",alignItems:"center",gap:3 }}>
-                  {p.icon && <span style={{ fontSize:8,opacity:0.55 }}>{p.icon}</span>}
-                  <span style={{ fontSize:8,fontWeight:700,
-                    color:"rgba(255,255,255,0.38)",
-                    fontFamily:"JetBrains Mono,monospace",
-                    letterSpacing:"0.05em" }}>
-                    {p.symbol.replace("-USD","")}
-                  </span>
-                </div>
-                {/* Price */}
-                <span style={{ fontSize:11,fontWeight:900,
-                  color:"rgba(255,255,255,0.9)",
+              <div
+                key={p.symbol}
+                className={flashClass}
+                style={{
+                  display:"flex", alignItems:"center", gap:5,
+                  padding:"0 10px", height:28, borderRadius:5,
+                  flexShrink:0,
+                  transition:"background 0.4s ease",
+                  cursor:"default",
+                }}
+              >
+                {/* Symbol */}
+                <span style={{
                   fontFamily:"JetBrains Mono,monospace",
-                  lineHeight:1.1 }}>
-                  {isCrypto && priceNum >= 1000
-                    ? `${(priceNum/1000).toFixed(1)}K`
-                    : priceStr}
-                </span>
-                {/* Change pct */}
-                <span style={{ fontSize:8,fontWeight:800,
-                  color: isNeg ? "#f87171" : "#4ade80",
-                  fontFamily:"JetBrains Mono,monospace" }}>
+                  fontSize:9, fontWeight:700,
+                  color:"rgba(255,255,255,0.32)",
+                  letterSpacing:"0.04em",
+                }}>{p.icon ? `${p.icon} ` : ""}{sym}</span>
+
+                {/* Price */}
+                <span style={{
+                  fontFamily:"JetBrains Mono,monospace",
+                  fontSize:11, fontWeight:800,
+                  color:"rgba(255,255,255,0.88)",
+                  letterSpacing:"-0.01em",
+                }}>{priceDisplay}</span>
+
+                {/* Change pct pill */}
+                <span style={{
+                  fontFamily:"JetBrains Mono,monospace",
+                  fontSize:9, fontWeight:800,
+                  color: chgColor,
+                  background: isPos ? "rgba(74,222,128,0.08)"
+                            : isNeg ? "rgba(248,113,113,0.08)"
+                            : "transparent",
+                  padding:"1px 4px", borderRadius:3,
+                  minWidth:44, textAlign:"center" as const,
+                }}>
                   {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
                 </span>
+
+                {/* Thin separator */}
+                <span style={{
+                  width:1, height:12,
+                  background:"rgba(255,255,255,0.05)",
+                  display:"inline-block", flexShrink:0,
+                }}/>
               </div>
             );
           })}
         </div>
 
-        {/* Right: market summary pill */}
-        {signal && (
-          <div style={{ display:"flex",gap:8,marginLeft:14,flexShrink:0 }}>
-            {[
-              { sym:"SPY", v:signal.spy },
-              { sym:"NVDA",v:signal.nvda },
-              { sym:"BTC", v:signal.btc },
-            ].filter(s => s.v !== undefined).map(s => (
-              <div key={s.sym} style={{ textAlign:"center" as const,minWidth:32 }}>
-                <div style={{ fontSize:7,color:"rgba(255,255,255,0.25)",
-                  fontFamily:"JetBrains Mono,monospace" }}>{s.sym}</div>
-                <div style={{ fontSize:9,fontWeight:800,
-                  fontFamily:"JetBrains Mono,monospace",
-                  color:(s.v||0)>0?"#4ade80":"#f87171" }}>
-                  {(s.v||0)>0?"+":""}{(s.v||0).toFixed(1)}%
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* ── Right: update time ── */}
+        <div style={{
+          flexShrink:0, marginLeft:8,
+          fontFamily:"JetBrains Mono,monospace",
+          fontSize:8, color:"rgba(255,255,255,0.15)",
+        }}>
+          {secsAgo !== null
+            ? secsAgo < 60 ? `${secsAgo}s` : `${Math.floor(secsAgo/60)}m`
+            : ""}
+        </div>
       </div>
     </div>
   );
 }
 
-// RealTicker no-op (merged into AITicker above)
+// RealTicker no-op
 function RealTicker({ prices, signal }: { prices: any[], signal: any }) {
   return null;
 }
@@ -1054,14 +1081,13 @@ export default function ExchangePage() {
         @keyframes pulse-icon { from{opacity:0.6;transform:scale(0.9)} to{opacity:1;transform:scale(1.1)} }
         @keyframes flash-up   { 0%,100%{background:transparent} 30%{background:rgba(74,222,128,0.12)} }
         @keyframes flash-down { 0%,100%{background:transparent} 30%{background:rgba(248,113,113,0.12)} }
-        @keyframes price-flash-up   { 0%{color:inherit} 15%{color:#4ade80;text-shadow:0 0 8px rgba(74,222,128,0.8)} 100%{color:inherit} }
-        @keyframes price-flash-down { 0%{color:inherit} 15%{color:#f87171;text-shadow:0 0 8px rgba(248,113,113,0.8)} 100%{color:inherit} }
-        @keyframes live-dot { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(74,222,128,0.6)} 50%{opacity:0.7;box-shadow:0 0 0 4px rgba(74,222,128,0)} }
-        @keyframes card-flash-up   { 0%,100%{border-color:rgba(74,222,128,0.08)} 25%{border-color:rgba(74,222,128,0.45);box-shadow:0 0 8px rgba(74,222,128,0.15)} }
-        @keyframes card-flash-down { 0%,100%{border-color:rgba(248,113,113,0.1)} 25%{border-color:rgba(248,113,113,0.5);box-shadow:0 0 8px rgba(248,113,113,0.15)} }
-        .price-up   { animation: price-flash-up   1.2s ease-out; }
-        .price-down { animation: price-flash-down 1.2s ease-out; }
+        @keyframes live-dot   { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(74,222,128,0.6)} 50%{opacity:0.7;box-shadow:0 0 0 4px rgba(74,222,128,0)} }
+        @keyframes price-flash-up   { 0%,100%{background:transparent} 20%{background:rgba(74,222,128,0.15)} }
+        @keyframes price-flash-down { 0%,100%{background:transparent} 20%{background:rgba(248,113,113,0.15)} }
+        .price-up   { animation: price-flash-up   1.0s ease-out; border-radius:5px; }
+        .price-down { animation: price-flash-down 1.0s ease-out; border-radius:5px; }
         .market-bar-hide-scrollbar::-webkit-scrollbar { display:none; }
+        .chip-hover:hover { background:rgba(255,255,255,0.04) !important; }
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
