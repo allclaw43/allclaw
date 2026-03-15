@@ -644,6 +644,8 @@ export default function ExchangePage() {
   const [chartMode,      setChartMode]      = useState<string>("SPY"); // default: show real market
   const [realCandles,    setRealCandles]    = useState<any[]>([]);
   const [realSymbolMeta, setRealSymbolMeta] = useState<any>(null);
+  const [sectorTrades,   setSectorTrades]   = useState<any[]>([]);
+  const [marketStats,    setMarketStats]    = useState<any[]>([]);
   const wsRef = useRef<WebSocket|null>(null);
 
   // ── Toast helper
@@ -698,6 +700,17 @@ export default function ExchangePage() {
     return () => window.clearInterval(t);
   }, [selected, interval]);
 
+  // ── Load market stats once
+  useEffect(() => {
+    fetch(`${API}/api/v1/exchange/market-stats`).then(r=>r.json())
+      .then(d=>{ if (d.sectors) setMarketStats(d.sectors); }).catch(()=>{});
+    const t = window.setInterval(() => {
+      fetch(`${API}/api/v1/exchange/market-stats`).then(r=>r.json())
+        .then(d=>{ if (d.sectors) setMarketStats(d.sectors); }).catch(()=>{});
+    }, 30000);
+    return () => window.clearInterval(t);
+  }, []);
+
   // ── Real market candles (when chartMode !== "agent")
   useEffect(() => {
     if (chartMode === "agent") { setRealCandles([]); setRealSymbolMeta(null); return; }
@@ -714,6 +727,31 @@ export default function ExchangePage() {
     const t = window.setInterval(load, 30000);
     return () => window.clearInterval(t);
   }, [chartMode, interval]);
+
+  // ── Load sector trades linked to current real market symbol
+  useEffect(() => {
+    // Map symbol → relevant profiles
+    const SYMBOL_PROFILES: Record<string,string> = {
+      "SPY":     "tech_growth,defensive",
+      "QQQ":     "tech_growth,momentum",
+      "NVDA":    "ai_pure,tech_growth",
+      "GOOGL":   "ai_pure,tech_growth",
+      "MSFT":    "ai_pure,tech_growth",
+      "BTC-USD": "crypto_native",
+      "ETH-USD": "crypto_native,momentum",
+      "TSLA":    "momentum,contrarian",
+      "agent":   "",
+    };
+    const profile = SYMBOL_PROFILES[chartMode] || "";
+    if (!profile) { setSectorTrades([]); return; }
+    const load = () =>
+      fetch(`${API}/api/v1/exchange/trades/by-sector?profile=${profile}&limit=20`)
+        .then(r=>r.json()).catch(()=>null)
+        .then(d=>{ if (d?.trades) setSectorTrades(d.trades); });
+    load();
+    const t = window.setInterval(load, 10000);
+    return () => window.clearInterval(t);
+  }, [chartMode]);
 
   // ── Portfolio + HIP balance
   useEffect(() => {
@@ -1863,24 +1901,44 @@ export default function ExchangePage() {
         {/* ── RIGHT: Market Data Terminal ── */}
         <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
 
-          {/* ─ Terminal header ─ */}
-          <div style={{ display:"flex",alignItems:"center",gap:8,
-            padding:"10px 14px",borderRadius:12,
-            background:"rgba(0,229,255,0.04)",
-            border:"1px solid rgba(0,229,255,0.12)" }}>
-            <span style={{ width:6,height:6,borderRadius:"50%",background:"#00e5ff",
-              boxShadow:"0 0 8px #00e5ff",display:"inline-block",
-              animation:"pulse-icon 2s ease-in-out infinite alternate" }}/>
-            <span style={{ fontSize:10,fontWeight:900,letterSpacing:"0.16em",
-              color:"#00e5ff",fontFamily:"JetBrains Mono,monospace",
-              textTransform:"uppercase" as const }}>
-              ASX Market Terminal
-            </span>
-            <span style={{ marginLeft:"auto",fontSize:8,
-              color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace" }}>
-              LIVE
-            </span>
-          </div>
+          {/* ─ Terminal header — context-aware ─ */}
+          {(() => {
+            const symMeta = realSymbolMeta || realPrices.find((p:any)=>p.symbol===chartMode);
+            const isReal  = chartMode !== "agent";
+            return (
+              <div style={{ padding:"10px 14px",borderRadius:12,
+                background: isReal?"rgba(251,191,36,0.05)":"rgba(0,229,255,0.04)",
+                border:`1px solid ${isReal?"rgba(251,191,36,0.2)":"rgba(0,229,255,0.12)"}` }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom: isReal?6:0 }}>
+                  <span style={{ width:6,height:6,borderRadius:"50%",
+                    background:isReal?"#fbbf24":"#00e5ff",
+                    boxShadow:isReal?"0 0 8px #fbbf24":"0 0 8px #00e5ff",
+                    display:"inline-block",
+                    animation:"pulse-icon 2s ease-in-out infinite alternate" }}/>
+                  <span style={{ fontSize:10,fontWeight:900,letterSpacing:"0.16em",
+                    color:isReal?"#fbbf24":"#00e5ff",
+                    fontFamily:"JetBrains Mono,monospace",
+                    textTransform:"uppercase" as const }}>
+                    {isReal ? `${chartMode.replace("-USD","")} — Linked AI Agents` : "ASX Market Terminal"}
+                  </span>
+                  <span style={{ marginLeft:"auto",fontSize:8,
+                    color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace" }}>
+                    LIVE
+                  </span>
+                </div>
+                {isReal && symMeta && (
+                  <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    AI agents that track {symMeta.name||chartMode} movements
+                    <span style={{ marginLeft:8,
+                      color:parseFloat(symMeta.change_pct)>=0?"#4ade80":"#f87171" }}>
+                      ({parseFloat(symMeta.change_pct)>=0?"+":""}{parseFloat(symMeta.change_pct).toFixed(2)}% today)
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ─ Market Overview Stats ─ */}
           {overview?.market && (
@@ -1934,31 +1992,133 @@ export default function ExchangePage() {
             </div>
           )}
 
+          {/* ─ Linked AI Agent Trades (when real market selected) ─ */}
+          {chartMode !== "agent" && (
+            <div style={{ background:"rgba(251,191,36,0.03)",
+              border:"1px solid rgba(251,191,36,0.12)",borderRadius:12,padding:"12px" }}>
+              <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:10 }}>
+                <span style={{ width:5,height:5,borderRadius:"50%",background:"#f97316",
+                  boxShadow:"0 0 5px #f97316",display:"inline-block",
+                  animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
+                <span style={{ fontSize:8,fontWeight:800,letterSpacing:"0.14em",
+                  textTransform:"uppercase" as const,color:"#f97316",
+                  fontFamily:"JetBrains Mono,monospace" }}>
+                  Linked AI Trades
+                </span>
+                <span style={{ marginLeft:"auto",fontSize:8,
+                  color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace" }}>
+                  {sectorTrades.length} recent
+                </span>
+              </div>
+              {sectorTrades.length === 0 ? (
+                <div style={{ textAlign:"center" as const,padding:"16px 0",
+                  color:"rgba(255,255,255,0.2)",fontSize:10 }}>
+                  No sector trades yet...
+                </div>
+              ) : (
+                <div style={{ maxHeight:220,overflowY:"auto" as const }}>
+                  {sectorTrades.slice(0,12).map((t:any,i:number)=>{
+                    const isBuy = t.trade_type==="buy";
+                    const timeAgo_ = (() => {
+                      const d = (Date.now()-new Date(t.created_at).getTime())/1000;
+                      if (d<60) return `${Math.floor(d)}s`;
+                      if (d<3600) return `${Math.floor(d/60)}m`;
+                      return `${Math.floor(d/3600)}h`;
+                    })();
+                    return (
+                      <div key={t.id||i} style={{ display:"grid",
+                        gridTemplateColumns:"22px 1fr 50px 36px",
+                        gap:6,alignItems:"center",
+                        padding:"4px 6px",borderRadius:5,marginBottom:2,
+                        background:isBuy?"rgba(74,222,128,0.03)":"rgba(248,113,113,0.03)" }}>
+                        <span style={{ fontSize:9,fontWeight:800,
+                          padding:"1px 0",borderRadius:3,textAlign:"center" as const,
+                          background:isBuy?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",
+                          color:isBuy?"#4ade80":"#f87171",
+                          fontFamily:"JetBrains Mono,monospace" }}>
+                          {isBuy?"B":"S"}
+                        </span>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:10,fontWeight:700,
+                            color:"rgba(255,255,255,0.75)",
+                            overflow:"hidden",textOverflow:"ellipsis",
+                            whiteSpace:"nowrap" as const }}>
+                            {t.target_name}
+                          </div>
+                          <div style={{ fontSize:8,color:"rgba(255,255,255,0.25)" }}>
+                            {t.sector_icon} {t.sector_label}
+                          </div>
+                        </div>
+                        <div style={{ textAlign:"right" as const }}>
+                          <div style={{ fontSize:9,fontWeight:800,
+                            color:"rgba(255,255,255,0.8)",
+                            fontFamily:"JetBrains Mono,monospace" }}>
+                            {parseFloat(t.price).toFixed(2)}
+                          </div>
+                          <div style={{ fontSize:8,color:"rgba(255,255,255,0.25)" }}>
+                            ×{t.shares}
+                          </div>
+                        </div>
+                        <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+                          fontFamily:"JetBrains Mono,monospace",
+                          textAlign:"right" as const }}>{timeAgo_}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ─ Sector Performance ─ */}
           {overview?.listings && (
             <div style={{ background:"rgba(255,255,255,0.02)",
               border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px" }}>
-              <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
-                textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-                fontFamily:"JetBrains Mono,monospace",marginBottom:10 }}>
-                Sector Performance
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
+                <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+                  textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                  fontFamily:"JetBrains Mono,monospace" }}>
+                  Sector Performance
+                </div>
+                {chartMode!=="agent" && (
+                  <div style={{ fontSize:7,color:"rgba(251,191,36,0.5)",
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    ★ = linked to {chartMode.replace("-USD","")}
+                  </div>
+                )}
               </div>
-              {[
-                {key:"ai_pure",       icon:"🤖", label:"AI Pure"},
-                {key:"crypto_native", icon:"₿",  label:"Crypto Native"},
-                {key:"tech_growth",   icon:"🚀", label:"Tech Growth"},
-                {key:"contrarian",    icon:"🔄", label:"Contrarian"},
-                {key:"momentum",      icon:"⚡", label:"Momentum"},
-                {key:"defensive",     icon:"🛡", label:"Defensive"},
-              ].map(sector=>{
-                const agents = overview.listings.filter((l:any)=>l.market_profile===sector.key);
-                if (!agents.length) return null;
-                const avgChg = agents.reduce((s:number,l:any)=>s+parseFloat(l.change_pct||0),0)/agents.length;
-                const maxW = 80;
-                const barW = Math.min(maxW, Math.abs(avgChg) * 8);
-                return (
-                  <div key={sector.key} style={{ marginBottom:6,
-                    display:"flex",alignItems:"center",gap:6 }}>
+              {(() => {
+                const SYMBOL_PROFILES: Record<string,string[]> = {
+                  "SPY":     ["tech_growth","defensive"],
+                  "QQQ":     ["tech_growth","momentum"],
+                  "NVDA":    ["ai_pure","tech_growth"],
+                  "GOOGL":   ["ai_pure","tech_growth"],
+                  "MSFT":    ["ai_pure","tech_growth"],
+                  "BTC-USD": ["crypto_native"],
+                  "ETH-USD": ["crypto_native","momentum"],
+                  "TSLA":    ["momentum","contrarian"],
+                };
+                const linkedProfiles = SYMBOL_PROFILES[chartMode] || [];
+                return [
+                  {key:"ai_pure",       icon:"🤖", label:"AI Pure"},
+                  {key:"crypto_native", icon:"₿",  label:"Crypto Native"},
+                  {key:"tech_growth",   icon:"🚀", label:"Tech Growth"},
+                  {key:"contrarian",    icon:"🔄", label:"Contrarian"},
+                  {key:"momentum",      icon:"⚡", label:"Momentum"},
+                  {key:"defensive",     icon:"🛡", label:"Defensive"},
+                ].map(sector=>{
+                  const agents = overview.listings.filter((l:any)=>l.market_profile===sector.key);
+                  if (!agents.length) return null;
+                  const avgChg = agents.reduce((s:number,l:any)=>s+parseFloat(l.change_pct||0),0)/agents.length;
+                  const maxW = 80;
+                  const barW = Math.min(maxW, Math.abs(avgChg) * 8);
+                  const isLinked = linkedProfiles.includes(sector.key);
+                  return (
+                    <div key={sector.key} style={{ marginBottom:6,
+                      display:"flex",alignItems:"center",gap:6,
+                      padding:isLinked?"3px 6px":"0",borderRadius:6,
+                      background:isLinked?"rgba(251,191,36,0.05)":"transparent",
+                      border:isLinked?"1px solid rgba(251,191,36,0.12)":"1px solid transparent" }}>
                     <span style={{ fontSize:11,flexShrink:0 }}>{sector.icon}</span>
                     <span style={{ fontSize:10,color:"rgba(255,255,255,0.5)",
                       flex:1,minWidth:0,overflow:"hidden",
@@ -1986,9 +2146,14 @@ export default function ExchangePage() {
                       color:avgChg>=0?"#4ade80":"#f87171" }}>
                       {avgChg>=0?"+":""}{avgChg.toFixed(2)}%
                     </span>
+                    {isLinked && (
+                      <span style={{ fontSize:8,color:"rgba(251,191,36,0.6)",
+                        flexShrink:0 }}>★</span>
+                    )}
                   </div>
                 );
-              })}
+              });
+              })()}
             </div>
           )}
 
