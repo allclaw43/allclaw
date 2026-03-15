@@ -1,10 +1,20 @@
 "use client";
 /**
- * AllClaw — Agent Stock Exchange v4
+ * AllClaw — Agent Stock Exchange v5
  *
  * Design principle: Show real AI behaviour, not a framework.
  * Every trade is real. Every price move has a cause.
  * Humans must be able to SEE the AI making decisions.
+ *
+ * v5 changes:
+ *  - Fix: buy endpoint → POST /api/v1/exchange/buy (human-facing)
+ *  - Fix: add Sell button + POST /api/v1/exchange/sell
+ *  - Feat: rich portfolio (value, avg_cost, unrealized P&L, 24h%, per-position sell)
+ *  - Feat: WS price_update refreshes portfolio current price
+ *  - Feat: HIP balance display after handle set
+ *  - UI: agent list search filter
+ *  - UI: buy/sell toast notification (bottom-right, 1.5s auto-dismiss)
+ *  - UI: CandleChart first/last time labels (HH:MM)
  */
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -28,6 +38,11 @@ function timeAgo(ts: string) {
 }
 
 // ─── Candlestick SVG chart ────────────────────────────────────────
+function fmtTime(ts: number) {
+  const d = new Date(ts);
+  return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+}
+
 function CandleChart({ candles, color }: { candles: any[], color: string }) {
   if (!candles.length) return (
     <div style={{ height:160, display:"flex", alignItems:"center", justifyContent:"center",
@@ -39,42 +54,56 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
   const range = maxP - minP || 1;
   const y = (p: number) => PAD + (1-(p-minP)/range)*(H-2*PAD);
   const cw = Math.floor((W-PAD*2)/candles.length) - 1;
+  const firstTs = candles[0]?.ts;
+  const lastTs  = candles[candles.length-1]?.ts;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:H }}>
-      <defs>
-        <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.15"/>
-          <stop offset="100%" stopColor={color} stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      {/* Area fill */}
-      <path d={[
-        `M ${PAD} ${H-PAD}`,
-        ...candles.map((c,i)=>`L ${PAD+i*(cw+1)+cw/2} ${y(c.close)}`),
-        `L ${PAD+(candles.length-1)*(cw+1)+cw/2} ${H-PAD}`, "Z"
-      ].join(" ")} fill="url(#cg)"/>
-      {candles.map((c,i)=>{
-        const x  = PAD + i*(cw+1);
-        const rise = c.close >= c.open;
-        const col  = rise ? "#4ade80":"#f87171";
-        const top  = Math.min(y(c.open),y(c.close));
-        const bot  = Math.max(y(c.open),y(c.close));
-        const bodyH= Math.max(1,bot-top);
-        return (
-          <g key={i}>
-            <line x1={x+cw/2} y1={y(c.high)} x2={x+cw/2} y2={y(c.low)}
-              stroke={col} strokeWidth="0.8" opacity="0.6"/>
-            <rect x={x} y={top} width={cw} height={bodyH}
-              fill={rise?"rgba(74,222,128,0.85)":"rgba(248,113,113,0.85)"}
-              rx="0.5"/>
-          </g>
-        );
-      })}
-      {/* Last price line */}
-      <line x1="0" y1={y(candles[candles.length-1]?.close||0)}
-        x2={W} y2={y(candles[candles.length-1]?.close||0)}
-        stroke={color} strokeWidth="0.7" strokeDasharray="3 2" opacity="0.5"/>
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:H }}>
+        <defs>
+          <linearGradient id="cg" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.15"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {/* Area fill */}
+        <path d={[
+          `M ${PAD} ${H-PAD}`,
+          ...candles.map((c,i)=>`L ${PAD+i*(cw+1)+cw/2} ${y(c.close)}`),
+          `L ${PAD+(candles.length-1)*(cw+1)+cw/2} ${H-PAD}`, "Z"
+        ].join(" ")} fill="url(#cg)"/>
+        {candles.map((c,i)=>{
+          const x  = PAD + i*(cw+1);
+          const rise = c.close >= c.open;
+          const col  = rise ? "#4ade80":"#f87171";
+          const top  = Math.min(y(c.open),y(c.close));
+          const bot  = Math.max(y(c.open),y(c.close));
+          const bodyH= Math.max(1,bot-top);
+          return (
+            <g key={i}>
+              <line x1={x+cw/2} y1={y(c.high)} x2={x+cw/2} y2={y(c.low)}
+                stroke={col} strokeWidth="0.8" opacity="0.6"/>
+              <rect x={x} y={top} width={cw} height={bodyH}
+                fill={rise?"rgba(74,222,128,0.85)":"rgba(248,113,113,0.85)"}
+                rx="0.5"/>
+            </g>
+          );
+        })}
+        {/* Last price line */}
+        <line x1="0" y1={y(candles[candles.length-1]?.close||0)}
+          x2={W} y2={y(candles[candles.length-1]?.close||0)}
+          stroke={color} strokeWidth="0.7" strokeDasharray="3 2" opacity="0.5"/>
+      </svg>
+      {/* Time axis labels */}
+      {firstTs && lastTs && (
+        <div style={{ display:"flex", justifyContent:"space-between",
+          fontSize:9, color:"rgba(255,255,255,0.2)",
+          fontFamily:"JetBrains Mono,monospace", marginTop:2, padding:"0 4px" }}>
+          <span>{fmtTime(firstTs)}</span>
+          <span>{fmtTime(Math.floor((firstTs+lastTs)/2))}</span>
+          <span>{fmtTime(lastTs)}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -548,6 +577,27 @@ function OrderBook({ bids, asks, price }: { bids:any[],asks:any[],price:number }
   );
 }
 
+// ─── Toast Notification ──────────────────────────────────────────
+function Toast({ toast }: { toast: {msg:string,ok:boolean}|null }) {
+  if (!toast) return null;
+  return (
+    <div style={{
+      position:"fixed", bottom:24, right:24, zIndex:9999,
+      padding:"12px 20px", borderRadius:12,
+      background: toast.ok ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)",
+      border: `1px solid ${toast.ok?"rgba(74,222,128,0.4)":"rgba(248,113,113,0.4)"}`,
+      color: toast.ok ? "#4ade80" : "#f87171",
+      fontSize:13, fontWeight:700,
+      backdropFilter:"blur(12px)",
+      boxShadow: `0 8px 32px ${toast.ok?"rgba(74,222,128,0.15)":"rgba(248,113,113,0.15)"}`,
+      animation:"fadeInUp 0.3s ease",
+      maxWidth:280,
+    }}>
+      {toast.ok ? "✓" : "✗"} {toast.msg}
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────
 export default function ExchangePage() {
   const [overview,    setOverview]    = useState<any>(null);
@@ -562,13 +612,23 @@ export default function ExchangePage() {
   const [interval,    setInterval_]   = useState<"1m"|"5m"|"15m"|"1h">("5m");
   const [handle,      setHandle]      = useState("");
   const [savedHandle, setSavedHandle] = useState("");
+  const [hipBalance,  setHipBalance]  = useState<number|null>(null);
   const [portfolio,   setPortfolio]   = useState<any>(null);
   const [buyShares,   setBuyShares]   = useState(1);
   const [buying,      setBuying]      = useState(false);
+  const [selling,     setSelling]     = useState<string|null>(null); // agent_id being sold
   const [buyResult,   setBuyResult]   = useState<any>(null);
   const [tab,         setTab]         = useState<"chart"|"book"|"portfolio">("chart");
   const [flashMap,    setFlashMap]    = useState<Record<string,string>>({});
+  const [agentSearch, setAgentSearch] = useState("");
+  const [toast,       setToast]       = useState<{msg:string,ok:boolean}|null>(null);
   const wsRef = useRef<WebSocket|null>(null);
+
+  // ── Toast helper
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 1800);
+  }
 
   // ── Load overview + real prices + signal
   useEffect(() => {
@@ -614,11 +674,16 @@ export default function ExchangePage() {
     return () => window.clearInterval(t);
   }, [selected, interval]);
 
-  // ── Portfolio
+  // ── Portfolio + HIP balance
   useEffect(() => {
     if (!savedHandle) return;
     fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
       .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
+    // Load HIP balance
+    fetch(`${API}/api/v1/human/profile/${encodeURIComponent(savedHandle)}`)
+      .then(r=>r.json())
+      .then(d=>{ if (d.hip_balance != null) setHipBalance(parseFloat(d.hip_balance)); })
+      .catch(()=>{});
   }, [savedHandle]);
 
   // ── WebSocket
@@ -653,7 +718,7 @@ export default function ExchangePage() {
               setFreshIds(f => { const s = new Set(f); s.add(newTrade.id); setTimeout(()=>setFreshIds(ff=>{const ss=new Set(ff);ss.delete(newTrade.id);return ss;}),2000); return s; });
             }
 
-            // Price update — flash agent list
+            // Price update — flash agent list + update portfolio
             if (msg.type === "platform:price_update" || msg.type === "platform:ai_trade") {
               const agentId = msg.agent_id || msg.target_id;
               const newPrice = parseFloat(msg.new_price || msg.price);
@@ -662,6 +727,29 @@ export default function ExchangePage() {
                 return { ...prev, listings: prev.listings.map((l: any) =>
                   l.agent_id !== agentId ? l : { ...l, price: newPrice }
                 )};
+              });
+              // Also update portfolio current prices in real-time
+              setPortfolio((prev: any) => {
+                if (!prev?.portfolio) return prev;
+                const updated = prev.portfolio.map((h: any) =>
+                  h.agent_id !== agentId ? h : {
+                    ...h,
+                    price: newPrice,
+                    current_value: parseFloat((h.shares * newPrice).toFixed(2)),
+                    unrealized_profit: parseFloat(((newPrice - parseFloat(h.avg_cost)) * h.shares).toFixed(2)),
+                  }
+                );
+                const totalValue = updated.reduce((s:number, r:any) => s + parseFloat(r.current_value||0), 0);
+                const totalCost  = updated.reduce((s:number, r:any) => s + parseFloat(r.avg_cost||0)*r.shares, 0);
+                return {
+                  ...prev,
+                  portfolio: updated,
+                  summary: {
+                    ...prev.summary,
+                    total_value:  parseFloat(totalValue.toFixed(2)),
+                    total_profit: parseFloat((totalValue - totalCost).toFixed(2)),
+                  }
+                };
               });
               const dir = msg.action === "buy" ? "up" : "down";
               setFlashMap(f => ({ ...f, [agentId]: dir }));
@@ -722,12 +810,45 @@ export default function ExchangePage() {
     if (!savedHandle || !selected || !ticker) return;
     setBuying(true); setBuyResult(null);
     try {
-      const res = await fetch(`${API}/api/v1/exchange/agent-buy`, {
+      const res = await fetch(`${API}/api/v1/exchange/buy`, {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ target_agent_id:selected, shares:buyShares, human_handle:savedHandle }),
-      }).then(r=>r.json());      setBuyResult(res);
-    } catch { setBuyResult({ error:"Network error" }); }
+        body: JSON.stringify({ handle: savedHandle, agent_id: selected, shares: buyShares }),
+      }).then(r=>r.json());
+      setBuyResult(res);
+      if (res.ok) {
+        showToast(`Bought ${res.shares_bought} share${res.shares_bought>1?"s":""} · ${res.total_cost} HIP`, true);
+        // Refresh portfolio and HIP balance
+        fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
+          .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
+        fetch(`${API}/api/v1/human/profile/${encodeURIComponent(savedHandle)}`)
+          .then(r=>r.json()).then(d=>{ if (d.hip_balance!=null) setHipBalance(parseFloat(d.hip_balance)); }).catch(()=>{});
+      } else {
+        showToast(res.error || "Buy failed", false);
+      }
+    } catch { setBuyResult({ error:"Network error" }); showToast("Network error", false); }
     setBuying(false);
+  }
+
+  async function executeSell(agentId: string, sharesToSell: number = 1) {
+    if (!savedHandle) return;
+    setSelling(agentId);
+    try {
+      const res = await fetch(`${API}/api/v1/exchange/sell`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ handle: savedHandle, agent_id: agentId, shares: sharesToSell }),
+      }).then(r=>r.json());
+      if (res.ok) {
+        showToast(`Sold ${res.shares_sold} share · +${res.total_received} HIP`, true);
+        // Refresh portfolio and HIP balance
+        fetch(`${API}/api/v1/exchange/portfolio/${savedHandle}`)
+          .then(r=>r.json()).then(d=>setPortfolio(d)).catch(()=>{});
+        fetch(`${API}/api/v1/human/profile/${encodeURIComponent(savedHandle)}`)
+          .then(r=>r.json()).then(d=>{ if (d.hip_balance!=null) setHipBalance(parseFloat(d.hip_balance)); }).catch(()=>{});
+      } else {
+        showToast(res.error || "Sell failed", false);
+      }
+    } catch { showToast("Network error", false); }
+    setSelling(null);
   }
 
   const chg = ticker ? parseFloat(((parseFloat(ticker.price)-parseFloat(ticker.price_24h||ticker.price))/parseFloat(ticker.price_24h||ticker.price)*100).toFixed(2)) : 0;
@@ -745,6 +866,9 @@ export default function ExchangePage() {
         ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
         input[type=number]::-webkit-inner-spin-button{opacity:0}
       `}</style>
+
+      {/* ══ Toast ════════════════════════════════════════════════ */}
+      <Toast toast={toast} />
 
       {/* ══ TWO TICKER BARS ══════════════════════════════════════ */}
       {/* 1st: AI stock prices */}
@@ -800,12 +924,23 @@ export default function ExchangePage() {
             </div>
           )}
 
-          {/* Handle */}
+          {/* Handle + HIP balance */}
           <div>
             {savedHandle ? (
               <div style={{ display:"flex",alignItems:"center",gap:10 }}>
                 <div style={{ textAlign:"right" as const }}>
-                  <div style={{ fontSize:12,fontWeight:800,color:"white" }}>{savedHandle}</div>
+                  <div style={{ display:"flex",alignItems:"center",gap:8,justifyContent:"flex-end" }}>
+                    <div style={{ fontSize:12,fontWeight:800,color:"white" }}>{savedHandle}</div>
+                    <button onClick={()=>{ setSavedHandle(""); setHipBalance(null); setPortfolio(null); }}
+                      style={{ fontSize:9,color:"rgba(255,255,255,0.2)",background:"none",
+                        border:"none",cursor:"pointer",padding:0 }}>✕</button>
+                  </div>
+                  {hipBalance != null && (
+                    <div style={{ fontSize:10,fontFamily:"JetBrains Mono,monospace",fontWeight:700,
+                      color:"#fbbf24",marginTop:1 }}>
+                      💎 {hipBalance.toFixed(2)} HIP
+                    </div>
+                  )}
                   {portfolio && (
                     <div style={{ fontSize:10,fontFamily:"JetBrains Mono,monospace",fontWeight:700,
                       color:portfolio.summary?.total_profit>=0?"#4ade80":"#f87171" }}>
@@ -855,12 +990,20 @@ export default function ExchangePage() {
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
             textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-            fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:8 }}>
-            Agents — {overview?.listings?.length||0}
+            fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:6 }}>
+            Agents — {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).length}
           </div>
+          {/* Search filter */}
+          <input
+            value={agentSearch} onChange={e=>setAgentSearch(e.target.value)}
+            placeholder="Search agents..."
+            style={{ padding:"5px 10px",borderRadius:7,marginBottom:6,
+              background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+              color:"white",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box" as const }}
+          />
           <div style={{ display:"flex",flexDirection:"column",gap:1,
-            maxHeight:"calc(100vh - 240px)",overflowY:"auto" as const }}>
-            {(overview?.listings||[]).map((l: any) => {
+            maxHeight:"calc(100vh - 260px)",overflowY:"auto" as const }}>
+            {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).map((l: any) => {
               const chg = parseFloat(l.change_pct)||0;
               const sel = l.agent_id === selected;
               const flash = flashMap[l.agent_id];
@@ -943,7 +1086,7 @@ export default function ExchangePage() {
                   ))}
                 </div>
               </div>
-              {/* Buy panel */}
+              {/* Buy + Sell panel */}
               <div style={{ display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end" as const }}>
                 <div style={{ display:"flex",gap:8,alignItems:"center" }}>
                   <input type="number" min={1} max={50} value={buyShares}
@@ -960,20 +1103,32 @@ export default function ExchangePage() {
                 {!savedHandle ? (
                   <span style={{ fontSize:11,color:"rgba(255,255,255,0.25)" }}>Enter handle to trade</span>
                 ) : (
-                  <button onClick={executeBuy} disabled={buying} style={{
-                    padding:"9px 22px",borderRadius:10,cursor:"pointer",
-                    background:buying?"rgba(255,255,255,0.03)":"rgba(251,191,36,0.1)",
-                    border:"1px solid rgba(251,191,36,0.3)",
-                    color:"#fbbf24",fontSize:13,fontWeight:800 }}>
-                    {buying?"Processing...":"Buy →"}
-                  </button>
-                )}
-                {buyResult && (
-                  <div style={{ fontSize:11,
-                    color:buyResult.ok?"#4ade80":"#f87171" }}>
-                    {buyResult.ok?`✓ Bought ${buyResult.shares_bought} shares`:
-                     `✗ ${buyResult.error||"Failed"}`}
+                  <div style={{ display:"flex",gap:8 }}>
+                    <button onClick={executeBuy} disabled={buying} style={{
+                      padding:"9px 22px",borderRadius:10,cursor:"pointer",
+                      background:buying?"rgba(255,255,255,0.03)":"rgba(74,222,128,0.1)",
+                      border:"1px solid rgba(74,222,128,0.3)",
+                      color:"#4ade80",fontSize:13,fontWeight:800 }}>
+                      {buying?"..." : "▲ Buy"}
+                    </button>
+                    {/* Sell button — only if holding */}
+                    {portfolio?.portfolio?.find((h:any)=>h.agent_id===selected && h.shares>0) && (
+                      <button onClick={()=>executeSell(selected!, 1)}
+                        disabled={selling===selected} style={{
+                          padding:"9px 18px",borderRadius:10,cursor:"pointer",
+                          background:selling===selected?"rgba(255,255,255,0.03)":"rgba(248,113,113,0.1)",
+                          border:"1px solid rgba(248,113,113,0.3)",
+                          color:"#f87171",fontSize:13,fontWeight:800 }}>
+                        {selling===selected ? "..." : "▼ Sell 1"}
+                      </button>
+                    )}
                   </div>
+                )}
+                {hipBalance != null && (
+                  <span style={{ fontSize:10,color:"rgba(255,191,36,0.6)",
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    Balance: {hipBalance.toFixed(2)} HIP
+                  </span>
                 )}
               </div>
             </div>
@@ -1051,43 +1206,116 @@ export default function ExchangePage() {
                   color:"rgba(255,255,255,0.2)",fontSize:12 }}>Loading...</div>
               ) : (
                 <>
-                  <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16 }}>
+                  {/* Summary cards */}
+                  <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16 }}>
                     {[
-                      {l:"Positions",  v:portfolio.summary?.positions||0,       c:"#00e5ff"},
-                      {l:"Total Value",v:`${fmt(portfolio.summary?.total_value)} HIP`,c:"#fbbf24"},
+                      {l:"Positions",  v:portfolio.summary?.positions||0,              c:"#00e5ff"},
+                      {l:"Total Value",v:`${fmt(portfolio.summary?.total_value)} HIP`,  c:"#fbbf24"},
                       {l:"P&L",        v:`${portfolio.summary?.total_profit>=0?"+":""}${fmt(portfolio.summary?.total_profit)} HIP`,
                        c:portfolio.summary?.total_profit>=0?"#4ade80":"#f87171"},
+                      {l:"Balance",    v:`${hipBalance!=null?hipBalance.toFixed(2):"—"} HIP`, c:"#fbbf24"},
                     ].map(s=>(
                       <div key={s.l} style={{ textAlign:"center" as const,
                         background:"rgba(255,255,255,0.02)",
-                        border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"12px" }}>
-                        <div style={{ fontSize:15,fontWeight:900,color:s.c,
+                        border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"10px 8px" }}>
+                        <div style={{ fontSize:13,fontWeight:900,color:s.c,
                           fontFamily:"JetBrains Mono,monospace" }}>{s.v}</div>
                         <div style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
                           textTransform:"uppercase" as const,letterSpacing:"0.1em",marginTop:2 }}>{s.l}</div>
                       </div>
                     ))}
                   </div>
-                  {(portfolio.portfolio||[]).map((h: any) => (
-                    <div key={h.agent_id} style={{ display:"flex",alignItems:"center",gap:12,
-                      padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
-                      <div style={{ flex:1 }}>
-                        <Link href={`/agents/${h.agent_id}`} style={{
-                          fontSize:13,fontWeight:800,color:"white",textDecoration:"none" }}>
-                          {h.agent_name}
-                        </Link>
-                        <div style={{ fontSize:10,color:"rgba(255,255,255,0.25)" }}>
-                          {h.shares} shares · avg {fmt(h.avg_cost)} HIP
-                        </div>
-                      </div>
-                      <div style={{ textAlign:"right" as const }}>
-                        <div style={{ fontSize:13,fontWeight:900,color:"white",
-                          fontFamily:"JetBrains Mono,monospace" }}>
-                          {fmt(parseFloat(h.price)*h.shares)} HIP
-                        </div>
-                      </div>
+                  {/* Holdings list */}
+                  {portfolio.portfolio?.length === 0 ? (
+                    <div style={{ textAlign:"center" as const,padding:"24px 0",
+                      color:"rgba(255,255,255,0.2)",fontSize:12 }}>
+                      No positions yet. Buy your first share above.
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      {/* Column header */}
+                      <div style={{ display:"grid",
+                        gridTemplateColumns:"1fr 60px 70px 70px 70px 70px",
+                        gap:6,padding:"4px 0",
+                        fontSize:8,fontWeight:700,letterSpacing:"0.1em",
+                        textTransform:"uppercase" as const,
+                        color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace",
+                        borderBottom:"1px solid rgba(255,255,255,0.05)",marginBottom:4 }}>
+                        <span>Agent</span>
+                        <span style={{textAlign:"right" as const}}>Shares</span>
+                        <span style={{textAlign:"right" as const}}>Avg Cost</span>
+                        <span style={{textAlign:"right" as const}}>Value</span>
+                        <span style={{textAlign:"right" as const}}>P&L</span>
+                        <span style={{textAlign:"center" as const}}>Action</span>
+                      </div>
+                      {(portfolio.portfolio||[]).map((h: any) => {
+                        const pnl = parseFloat(h.unrealized_profit) || parseFloat(h.current_value||0) - parseFloat(h.avg_cost||0)*h.shares;
+                        const chg24 = parseFloat(h.change_pct)||0;
+                        return (
+                          <div key={h.agent_id} style={{ display:"grid",
+                            gridTemplateColumns:"1fr 60px 70px 70px 70px 70px",
+                            gap:6,alignItems:"center",
+                            padding:"9px 0",
+                            borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                            {/* Agent name + 24h */}
+                            <div>
+                              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                                {h.is_online && <span style={{ width:4,height:4,borderRadius:"50%",
+                                  background:"#34d399",display:"inline-block",flexShrink:0 }}/>}
+                                <button onClick={()=>{ setSelected(h.agent_id); setTab("chart"); }}
+                                  style={{ background:"none",border:"none",padding:0,cursor:"pointer",
+                                    fontSize:12,fontWeight:800,color:"white",textAlign:"left" as const }}>
+                                  {h.agent_name}
+                                </button>
+                              </div>
+                              <div style={{ display:"flex",gap:8,marginTop:2 }}>
+                                <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)" }}>
+                                  ELO {h.elo_rating}
+                                </span>
+                                <span style={{ fontSize:8,fontWeight:700,
+                                  fontFamily:"JetBrains Mono,monospace",
+                                  color:pctColor(chg24) }}>
+                                  {chg24===0?"—":`${chg24>0?"+":""}${chg24.toFixed(1)}% 24h`}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Shares */}
+                            <div style={{ textAlign:"right" as const,fontSize:12,fontWeight:700,
+                              color:"rgba(255,255,255,0.7)",fontFamily:"JetBrains Mono,monospace" }}>
+                              {h.shares}
+                            </div>
+                            {/* Avg cost */}
+                            <div style={{ textAlign:"right" as const,fontSize:11,
+                              color:"rgba(255,255,255,0.4)",fontFamily:"JetBrains Mono,monospace" }}>
+                              {fmt(h.avg_cost)}
+                            </div>
+                            {/* Current value */}
+                            <div style={{ textAlign:"right" as const,fontSize:12,fontWeight:900,
+                              color:"white",fontFamily:"JetBrains Mono,monospace" }}>
+                              {fmt(parseFloat(h.price||h.avg_cost)*h.shares)}
+                            </div>
+                            {/* P&L */}
+                            <div style={{ textAlign:"right" as const,fontSize:12,fontWeight:900,
+                              fontFamily:"JetBrains Mono,monospace",
+                              color:pnl>=0?"#4ade80":"#f87171" }}>
+                              {pnl>=0?"+":""}{fmt(pnl)}
+                            </div>
+                            {/* Sell button */}
+                            <div style={{ textAlign:"center" as const }}>
+                              <button onClick={()=>executeSell(h.agent_id, 1)}
+                                disabled={selling===h.agent_id}
+                                style={{ padding:"4px 10px",borderRadius:7,cursor:"pointer",
+                                  background:"rgba(248,113,113,0.1)",
+                                  border:"1px solid rgba(248,113,113,0.25)",
+                                  color:"#f87171",fontSize:10,fontWeight:700 }}>
+                                {selling===h.agent_id ? "..." : "Sell"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </>
               )
             )}
