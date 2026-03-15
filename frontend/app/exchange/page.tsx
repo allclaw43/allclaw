@@ -108,92 +108,108 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
 }
 
 // ─── AI Ticker strip ─────────────────────────────────────────────
-function AITicker({ listings }: { listings: any[] }) {
+// ─── AI Agent Ticker (single scrolling bar) ──────────────────────
+function AITicker({ listings, prices, signal }: {
+  listings: any[], prices: any[], signal: any
+}) {
   const items = [...listings, ...listings];
+  // Key real market signals to show inline (fixed, not scrolling)
+  const keySymbols = ["SPY","NVDA","BTC-USD","ETH-USD"];
+  const keyPrices  = keySymbols.map(sym => prices.find((p:any)=>p.symbol===sym)).filter(Boolean);
+
   return (
-    <div style={{ overflow:"hidden", background:"rgba(0,229,255,0.04)",
-      borderBottom:"1px solid rgba(0,229,255,0.08)", padding:"5px 0" }}>
-      <div style={{ display:"flex", whiteSpace:"nowrap",
-        animation:"ticker-scroll 45s linear infinite", willChange:"transform" }}>
-        {/* Label */}
-        <div style={{ position:"sticky", left:0, zIndex:2,
-          background:"rgba(9,9,18,0.9)", paddingLeft:14, paddingRight:20,
-          display:"inline-flex", alignItems:"center", gap:6, flexShrink:0 }}>
-          <span style={{ width:5,height:5,borderRadius:"50%",background:"#00e5ff",
-            boxShadow:"0 0 6px #00e5ff", display:"inline-block",
-            animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
-          <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.18em",
-            color:"#00e5ff",fontFamily:"JetBrains Mono,monospace",textTransform:"uppercase" }}>
-            AI ASX
+    <div style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+      {/* ── Top bar: Real market reference (static, compact) ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:0,
+        background:"rgba(0,0,0,0.3)", padding:"3px 16px",
+        borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+        <span style={{ fontSize:8,fontWeight:700,letterSpacing:"0.14em",
+          color:"rgba(255,255,255,0.2)",fontFamily:"JetBrains Mono,monospace",
+          textTransform:"uppercase" as const, marginRight:12,flexShrink:0 }}>
+          🌍 Market
+        </span>
+        {signal && (
+          <span style={{ fontSize:8,fontWeight:800,padding:"1px 7px",borderRadius:4,
+            background:`${signal.color}18`,color:signal.color,
+            fontFamily:"JetBrains Mono,monospace",
+            border:`1px solid ${signal.color}25`,
+            marginRight:12,flexShrink:0 }}>
+            {signal.label}
           </span>
-        </div>
-        {items.map((l: any, i: number) => {
-          const chg = parseFloat(l.change_pct)||0;
-          return (
-            <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:5,
-              padding:"0 14px", fontSize:10, fontFamily:"JetBrains Mono,monospace",
-              borderRight:"1px solid rgba(255,255,255,0.05)" }}>
-              {l.is_online && <span style={{ width:4,height:4,borderRadius:"50%",
-                background:"#34d399",boxShadow:"0 0 4px #34d399",display:"inline-block" }}/>}
-              <span style={{ color:"rgba(255,255,255,0.5)" }}>{l.name}</span>
-              <span style={{ color:"white",fontWeight:800 }}>{fmt(l.price)}</span>
-              <span style={{ color:pctColor(chg),fontWeight:700 }}>
-                {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+        )}
+        <div style={{ display:"flex",gap:0,flex:1,overflowX:"hidden" as const }}>
+          {keyPrices.map((p:any)=>{
+            const chg = parseFloat(p.change_pct)||0;
+            const isCrypto = p.symbol.includes("-");
+            const priceStr = isCrypto
+              ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
+              : parseFloat(p.price).toFixed(2);
+            return (
+              <span key={p.symbol} style={{ display:"inline-flex",alignItems:"center",
+                gap:4,padding:"0 12px",fontSize:9,
+                fontFamily:"JetBrains Mono,monospace",
+                borderRight:"1px solid rgba(255,255,255,0.04)" }}>
+                <span style={{ fontSize:10 }}>{p.icon}</span>
+                <span style={{ color:"rgba(255,255,255,0.35)",fontWeight:600 }}>
+                  {p.symbol.replace("-USD","")}
+                </span>
+                <span style={{ color:"rgba(255,255,255,0.7)",fontWeight:800 }}>{priceStr}</span>
+                <span style={{ fontWeight:700,color:chg>=0?"#4ade80":"#f87171" }}>
+                  {chg>=0?"+":""}{chg.toFixed(2)}%
+                </span>
               </span>
-            </span>
-          );
-        })}
+            );
+          })}
+        </div>
+        <span style={{ fontSize:8,color:"rgba(255,255,255,0.12)",
+          fontFamily:"JetBrains Mono,monospace",flexShrink:0,marginLeft:8 }}>
+          ↻ 3min
+        </span>
+      </div>
+
+      {/* ── Bottom bar: AI Agent prices scrolling ── */}
+      <div style={{ overflow:"hidden", background:"rgba(0,229,255,0.03)",
+        padding:"4px 0" }}>
+        <div style={{ display:"flex", whiteSpace:"nowrap" as const,
+          animation:"ticker-scroll 50s linear infinite", willChange:"transform" }}>
+          <div style={{ position:"sticky",left:0,zIndex:2,
+            background:"rgba(9,9,18,0.95)",paddingLeft:14,paddingRight:18,
+            display:"inline-flex",alignItems:"center",gap:6,flexShrink:0 }}>
+            <span style={{ width:5,height:5,borderRadius:"50%",background:"#00e5ff",
+              boxShadow:"0 0 6px #00e5ff",display:"inline-block",
+              animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
+            <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.18em",
+              color:"#00e5ff",fontFamily:"JetBrains Mono,monospace",
+              textTransform:"uppercase" as const }}>ASX</span>
+          </div>
+          {items.map((l:any,i:number)=>{
+            const chg = parseFloat(l.change_pct)||0;
+            return (
+              <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:5,
+                padding:"0 14px",fontSize:10,fontFamily:"JetBrains Mono,monospace",
+                borderRight:"1px solid rgba(255,255,255,0.04)" }}>
+                {l.profile_icon && (
+                  <span style={{ fontSize:8,opacity:0.5 }}>{l.profile_icon}</span>
+                )}
+                {l.is_online && <span style={{ width:3,height:3,borderRadius:"50%",
+                  background:"#34d399",display:"inline-block",flexShrink:0 }}/>}
+                <span style={{ color:"rgba(255,255,255,0.55)" }}>{l.name}</span>
+                <span style={{ color:"white",fontWeight:800 }}>{fmt(l.price)}</span>
+                <span style={{ fontWeight:700,color:pctColor(chg) }}>
+                  {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                </span>
+              </span>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Real market ticker ──────────────────────────────────────────
+// RealTicker kept as no-op (merged into AITicker above)
 function RealTicker({ prices, signal }: { prices: any[], signal: any }) {
-  if (!prices.length) return null;
-  const items = [...prices, ...prices];
-  return (
-    <div style={{ overflow:"hidden", background:"rgba(251,191,36,0.03)",
-      borderBottom:"1px solid rgba(251,191,36,0.1)", padding:"5px 0" }}>
-      <div style={{ display:"flex", whiteSpace:"nowrap",
-        animation:"ticker-scroll 60s linear infinite", willChange:"transform" }}>
-        {/* Label + signal */}
-        <div style={{ position:"sticky", left:0, zIndex:2,
-          background:"rgba(9,9,18,0.9)", paddingLeft:14, paddingRight:16,
-          display:"inline-flex", alignItems:"center", gap:8, flexShrink:0 }}>
-          <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.16em",
-            color:"rgba(251,191,36,0.7)",fontFamily:"JetBrains Mono,monospace",
-            textTransform:"uppercase" }}>🌍 REAL</span>
-          {signal && (
-            <span style={{ fontSize:8,fontWeight:800,padding:"1px 6px",borderRadius:4,
-              background:`${signal.color}20`,color:signal.color,
-              fontFamily:"JetBrains Mono,monospace",border:`1px solid ${signal.color}30` }}>
-              {signal.label}
-            </span>
-          )}
-        </div>
-        {items.map((p: any, i: number) => {
-          const chg = parseFloat(p.change_pct)||0;
-          const isCrypto = p.symbol.includes("-");
-          const priceStr = isCrypto
-            ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
-            : parseFloat(p.price).toFixed(2);
-          return (
-            <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:5,
-              padding:"0 13px",fontSize:10,fontFamily:"JetBrains Mono,monospace",
-              borderRight:"1px solid rgba(255,255,255,0.04)" }}>
-              <span style={{ fontSize:11 }}>{p.icon}</span>
-              <span style={{ color:"rgba(255,255,255,0.5)" }}>{p.symbol}</span>
-              <span style={{ color:"white",fontWeight:800 }}>{priceStr}</span>
-              <span style={{ color:pctColor(chg),fontWeight:700 }}>
-                {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return null;
 }
 
 // ─── News Intelligence Panel ─────────────────────────────────────
@@ -875,11 +891,11 @@ export default function ExchangePage() {
       {/* ══ Toast ════════════════════════════════════════════════ */}
       <Toast toast={toast} />
 
-      {/* ══ TWO TICKER BARS ══════════════════════════════════════ */}
-      {/* 1st: AI stock prices */}
-      {overview?.listings && <AITicker listings={overview.listings} />}
-      {/* 2nd: Real world stock/crypto prices */}
-      <RealTicker prices={realPrices} signal={signal} />
+      {/* ══ UNIFIED TICKER BAR ═══════════════════════════════════ */}
+      {/* Top: real market reference (static) + Bottom: AI agent prices (scrolling) */}
+      {overview?.listings && (
+        <AITicker listings={overview.listings} prices={realPrices} signal={signal} />
+      )}
 
       {/* ══ HEADER ═══════════════════════════════════════════════ */}
       <div style={{ maxWidth:1500, margin:"0 auto", padding:"20px 24px 0" }}>
