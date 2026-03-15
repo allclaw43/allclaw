@@ -131,39 +131,65 @@ module.exports = async function marketDataRoutes(fastify) {
                      : 300000;
 
     const { rows: [share] } = await db.query(
-      `SELECT s.price, s.price_24h, COALESCE(a.custom_name,a.display_name) AS name
+      `SELECT s.price, s.price_24h, s.price_history,
+              COALESCE(a.custom_name,a.display_name) AS name
        FROM agent_shares s JOIN agents a ON a.agent_id=s.agent_id
        WHERE s.agent_id=$1`, [agentId]
     );
     if (!share) return reply.status(404).send({ error: 'Not found' });
 
-    // Try to build candles from actual trade history
-    const { rows: trades } = await db.query(`
-      SELECT price, shares, created_at
-      FROM share_trades WHERE agent_id=$1
-      ORDER BY created_at ASC LIMIT 200
-    `, [agentId]);
-
     let candles;
-    if (trades.length >= 3) {
-      // Build real OHLC from trades
+
+    // PRIORITY 1: Use price_history from price engine (most accurate, real market-driven)
+    const priceHistory = share.price_history || [];
+    if (priceHistory.length >= 4) {
+      // Bucket price_history ticks into candles
       const buckets = {};
-      trades.forEach(t => {
-        const bucket = Math.floor(new Date(t.created_at).getTime() / intervalMs) * intervalMs;
+      for (const tick of priceHistory) {
+        const bucket = Math.floor(tick.t * 1000 / intervalMs) * intervalMs;
         if (!buckets[bucket]) buckets[bucket] = [];
-        buckets[bucket].push(parseFloat(t.price));
-      });
+        buckets[bucket].push(parseFloat(tick.p));
+      }
+      // Also add current price as the latest tick
+      const nowBucket = Math.floor(Date.now() / intervalMs) * intervalMs;
+      if (!buckets[nowBucket]) buckets[nowBucket] = [];
+      buckets[nowBucket].push(parseFloat(share.price));
+
       candles = Object.entries(buckets).map(([ts, prices]) => ({
-        ts: parseInt(ts),
+        ts:     parseInt(ts),
         open:   prices[0],
         close:  prices[prices.length - 1],
         high:   Math.max(...prices),
         low:    Math.min(...prices),
         volume: prices.length,
-      })).sort((a,b) => a.ts - b.ts);
+      })).sort((a, b) => a.ts - b.ts).slice(-60); // last 60 candles
     } else {
-      // Generate synthetic candles
-      candles = generateCandles(share.price_24h || share.price, share.price, 30, intervalMs);
+      // PRIORITY 2: Build from actual trade history
+      const { rows: trades } = await db.query(`
+        SELECT price, shares, created_at
+        FROM share_trades WHERE agent_id=$1
+        ORDER BY created_at ASC LIMIT 200
+      `, [agentId]);
+
+      if (trades.length >= 3) {
+        const buckets = {};
+        trades.forEach(t => {
+          const bucket = Math.floor(new Date(t.created_at).getTime() / intervalMs) * intervalMs;
+          if (!buckets[bucket]) buckets[bucket] = [];
+          buckets[bucket].push(parseFloat(t.price));
+        });
+        candles = Object.entries(buckets).map(([ts, prices]) => ({
+          ts:     parseInt(ts),
+          open:   prices[0],
+          close:  prices[prices.length - 1],
+          high:   Math.max(...prices),
+          low:    Math.min(...prices),
+          volume: prices.length,
+        })).sort((a, b) => a.ts - b.ts);
+      } else {
+        // FALLBACK: Synthetic candles (only for brand-new agents)
+        candles = generateCandles(share.price_24h || share.price, share.price, 30, intervalMs);
+      }
     }
 
     reply.send({ agent_id: agentId, name: share.name, interval, candles });
