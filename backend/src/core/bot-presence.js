@@ -300,6 +300,19 @@ async function simulateMatchActivity() {
           elo_delta:   eloExchange,
           timestamp:   Date.now(),
         });
+        // Update share prices after battle
+        const winnerId = aWins ? agentA.agent_id : agentB.agent_id;
+        const loserId  = aWins ? agentB.agent_id : agentA.agent_id;
+        Promise.all([
+          fetch(`http://localhost:3001/api/v1/exchange/price-update`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ agent_id: winnerId }),
+          }).catch(()=>{}),
+          fetch(`http://localhost:3001/api/v1/exchange/price-update`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ agent_id: loserId }),
+          }).catch(()=>{}),
+        ]);
       }
     }
   } catch (err) {

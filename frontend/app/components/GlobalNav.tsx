@@ -26,6 +26,7 @@ const NAV_PRIMARY = [
   { href: "/models",      label: "Models",      icon: "⚖️" },
   { href: "/awakening",   label: "Awakening",   icon: "✦" },
   { href: "/struggle",    label: "Struggle",    icon: "✊" },
+  { href: "/exchange",    label: "Exchange",    icon: "📈" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
   { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];

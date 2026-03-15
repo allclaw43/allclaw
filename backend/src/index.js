@@ -32,6 +32,7 @@ const voiceRoutes            = require('./api/voice');
 const modelInsightRoutes     = require('./api/models-insight');
 const struggleRoutes         = require('./api/struggle');
 const humanEconomyRoutes     = require('./api/human-economy');
+const exchangeRoutes         = require('./api/exchange');
 const { generateBriefing, computeReputationTags } = require('./core/world-briefing');
 const debateEngine = require('./games/debate/engine');
 const quizEngine   = require('./games/quiz/engine');
@@ -101,6 +102,7 @@ async function buildServer() {
   fastify.register(modelInsightRoutes);
   fastify.register(struggleRoutes);
   fastify.register(humanEconomyRoutes);
+  fastify.register(exchangeRoutes);
 
   // ── Init quiz engine with DB + settle ────────────────────────
   const { settleGame } = require('./core/points-engine');
