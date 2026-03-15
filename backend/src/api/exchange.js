@@ -470,6 +470,99 @@ module.exports = async function exchangeRoutes(fastify) {
     reply.send({ trades: rows });
   });
 
+  // ── GET /api/v1/exchange/trades/by-sector ──────────────────────
+  // Trades filtered by market_profile, used for real-market linkage
+  fastify.get('/api/v1/exchange/trades/by-sector', async (req, reply) => {
+    const limit   = Math.min(parseInt(req.query.limit)||30, 100);
+    const profile = req.query.profile || null; // e.g. "tech_growth,defensive"
+    const profiles = profile ? profile.split(',').map(s=>s.trim()) : null;
+
+    let whereClause = '';
+    let params = [limit];
+    if (profiles && profiles.length) {
+      const placeholders = profiles.map((_,i)=>`$${i+2}`).join(',');
+      whereClause = `WHERE s.market_profile IN (${placeholders})`;
+      params = [limit, ...profiles];
+    }
+
+    const { rows } = await db.query(`
+      SELECT
+        t.id, t.agent_id, t.shares, t.price, t.total_cost,
+        t.trade_type, t.created_at,
+        COALESCE(ta.custom_name, ta.display_name)  AS target_name,
+        ta.elo_rating AS target_elo,
+        COALESCE(ba.custom_name, ba.display_name, t.buyer) AS buyer_name,
+        s.market_profile,
+        s.beta
+      FROM share_trades t
+      JOIN  agents      ta ON ta.agent_id = t.agent_id
+      JOIN  agent_shares s ON s.agent_id  = t.agent_id
+      LEFT JOIN agents  ba ON ba.agent_id = t.buyer
+      ${whereClause}
+      ORDER BY t.created_at DESC
+      LIMIT $1
+    `, params);
+    reply.send({ trades: rows });
+  });
+
+  // ── GET /api/v1/exchange/market-stats ──────────────────────────
+  // Per-sector stats: avg price change, total volume, trade count today
+  fastify.get('/api/v1/exchange/market-stats', async (req, reply) => {
+    const { rows } = await db.query(`
+      SELECT
+        s.market_profile,
+        COUNT(DISTINCT s.agent_id)                              AS agent_count,
+        ROUND(AVG(s.price)::numeric, 2)                        AS avg_price,
+        ROUND(AVG((s.price - s.price_24h)/NULLIF(s.price_24h,0)*100)::numeric, 2) AS avg_change_pct,
+        SUM(s.volume_24h)                                       AS total_volume,
+        ROUND(SUM(s.market_cap)::numeric, 0)                   AS total_mcap
+      FROM agent_shares s
+      WHERE s.market_profile IS NOT NULL
+      GROUP BY s.market_profile
+      ORDER BY total_mcap DESC
+    `);
+    reply.send({ sectors: rows });
+  });
+
+  // ── GET /api/v1/exchange/live-feed ─────────────────────────────
+  // Combined live feed: recent trades + price ticks, for the live panel
+  fastify.get('/api/v1/exchange/live-feed', async (req, reply) => {
+    const limit = Math.min(parseInt(req.query.limit)||20, 50);
+    const { rows: trades } = await db.query(`
+      SELECT
+        t.id, t.agent_id, t.shares, t.price, t.total_cost,
+        t.trade_type, t.created_at,
+        COALESCE(ta.custom_name, ta.display_name)             AS agent_name,
+        COALESCE(ba.custom_name, ba.display_name, t.buyer)    AS buyer_name,
+        ta.elo_rating,
+        s.market_profile, s.beta,
+        s.price AS current_price,
+        ROUND(((s.price-s.price_24h)/NULLIF(s.price_24h,0)*100)::numeric,2) AS change_pct
+      FROM share_trades t
+      JOIN  agents      ta ON ta.agent_id = t.agent_id
+      JOIN  agent_shares s ON s.agent_id  = t.agent_id
+      LEFT JOIN agents  ba ON ba.agent_id = t.buyer
+      ORDER BY t.created_at DESC
+      LIMIT $1
+    `, [limit]);
+
+    // Map profile → sector label
+    const PROFILE_META = {
+      ai_pure:       { icon:'🤖', label:'AI Pure'      },
+      crypto_native: { icon:'₿',  label:'Crypto'       },
+      tech_growth:   { icon:'🚀', label:'Tech Growth'  },
+      contrarian:    { icon:'🔄', label:'Contrarian'   },
+      momentum:      { icon:'⚡', label:'Momentum'     },
+      defensive:     { icon:'🛡', label:'Defensive'    },
+    };
+    const enriched = trades.map(t => ({
+      ...t,
+      sector_icon:  (PROFILE_META[t.market_profile] || {}).icon  || '📈',
+      sector_label: (PROFILE_META[t.market_profile] || {}).label || t.market_profile,
+    }));
+    reply.send({ trades: enriched });
+  });
+
 }; // end exchangeRoutes
 
 module.exports.updateSharePrice = updateSharePrice;
