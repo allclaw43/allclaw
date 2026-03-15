@@ -641,7 +641,7 @@ export default function ExchangePage() {
   const [toast,          setToast]          = useState<{msg:string,ok:boolean}|null>(null);
   const [sellShares,     setSellShares]     = useState<Record<string,number>>({}); // per-holding sell qty
   const [agentProfile,   setAgentProfile]   = useState<any>(null); // selected agent market profile
-  const [chartMode,      setChartMode]      = useState<"agent"|string>("agent"); // "agent" or real symbol like "SPY"
+  const [chartMode,      setChartMode]      = useState<string>("SPY"); // default: show real market
   const [realCandles,    setRealCandles]    = useState<any[]>([]);
   const [realSymbolMeta, setRealSymbolMeta] = useState<any>(null);
   const wsRef = useRef<WebSocket|null>(null);
@@ -1067,96 +1067,125 @@ export default function ExchangePage() {
       <div style={{ maxWidth:1500, margin:"0 auto", padding:"0 24px 40px",
         display:"grid", gridTemplateColumns:"220px 1fr 320px", gap:16 }}>
 
-        {/* ── LEFT: Agent list ── */}
-        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
-          {/* Profile filter chips */}
-          <div style={{ display:"flex",flexWrap:"wrap" as const,gap:3,marginBottom:6 }}>
+        {/* ── LEFT: Market selector ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+
+          {/* ─ REAL MARKETS (top section) ─ */}
+          <div style={{ fontSize:7,fontWeight:800,letterSpacing:"0.18em",
+            textTransform:"uppercase" as const,color:"rgba(251,191,36,0.5)",
+            fontFamily:"JetBrains Mono,monospace",padding:"0 4px 4px" }}>
+            🌍 Real Markets
+          </div>
+          <div style={{ display:"flex",flexDirection:"column",gap:2 }}>
             {[
-              {key:"",    icon:"🌐", label:"All"},
-              {key:"ai_pure",       icon:"🤖", label:"AI"},
-              {key:"crypto_native", icon:"₿",  label:"Crypto"},
-              {key:"tech_growth",   icon:"🚀", label:"Tech"},
-              {key:"contrarian",    icon:"🔄", label:"Contra"},
-              {key:"momentum",      icon:"⚡", label:"Momentum"},
-              {key:"defensive",     icon:"🛡", label:"Stable"},
-            ].map(p=>(
-              <button key={p.key} onClick={()=>setProfileFilter(p.key)}
-                style={{ padding:"2px 7px",borderRadius:6,cursor:"pointer",fontSize:8,fontWeight:700,
-                  background:profileFilter===p.key?"rgba(0,229,255,0.12)":"rgba(255,255,255,0.03)",
-                  border:`1px solid ${profileFilter===p.key?"rgba(0,229,255,0.3)":"rgba(255,255,255,0.06)"}`,
-                  color:profileFilter===p.key?"#00e5ff":"rgba(255,255,255,0.4)" }}>
-                {p.icon} {p.label}
-              </button>
-            ))}
+              {sym:"SPY",     icon:"📊", name:"S&P 500",  sectorLabel:"INDEX"},
+              {sym:"NVDA",    icon:"🎮", name:"NVIDIA",   sectorLabel:"AI"},
+              {sym:"BTC-USD", icon:"₿",  name:"Bitcoin",  sectorLabel:"CRYPTO"},
+              {sym:"ETH-USD", icon:"Ξ",  name:"Ethereum", sectorLabel:"CRYPTO"},
+              {sym:"TSLA",    icon:"⚡", name:"Tesla",    sectorLabel:"EV"},
+              {sym:"QQQ",     icon:"🖥", name:"NASDAQ",   sectorLabel:"INDEX"},
+              {sym:"GOOGL",   icon:"🔍", name:"Alphabet", sectorLabel:"TECH"},
+              {sym:"MSFT",    icon:"🪟", name:"Microsoft",sectorLabel:"TECH"},
+            ].map(({sym,icon,name,sectorLabel})=>{
+              const lp   = realPrices.find((p:any)=>p.symbol===sym);
+              const chg  = lp ? parseFloat(lp.change_pct)||0 : 0;
+              const sel  = chartMode === sym;
+              const price = lp ? parseFloat(lp.price) : null;
+              const priceStr = price
+                ? (sym.includes("-USD")
+                    ? price.toLocaleString(undefined,{maximumFractionDigits:0})
+                    : price.toFixed(2))
+                : "--";
+              return (
+                <div key={sym}
+                  onClick={()=>{ setChartMode(sym); }}
+                  style={{ padding:"7px 10px",borderRadius:8,cursor:"pointer",
+                    background:sel?"rgba(251,191,36,0.08)":"rgba(255,255,255,0.02)",
+                    border:`1px solid ${sel?"rgba(251,191,36,0.3)":"rgba(255,255,255,0.04)"}`,
+                    transition:"all 0.1s" }}>
+                  <div style={{ display:"flex",alignItems:"center",
+                    justifyContent:"space-between",gap:4 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:5,minWidth:0 }}>
+                      <span style={{ fontSize:12,flexShrink:0 }}>{icon}</span>
+                      <div style={{ minWidth:0 }}>
+                        <span style={{ fontSize:11,fontWeight:700,
+                          color:sel?"#fbbf24":"rgba(255,255,255,0.7)",
+                          display:"block",overflow:"hidden",
+                          textOverflow:"ellipsis",whiteSpace:"nowrap" as const }}>
+                          {sym.replace("-USD","")}
+                        </span>
+                        <span style={{ fontSize:7,color:"rgba(255,255,255,0.2)",
+                          letterSpacing:"0.08em" }}>{sectorLabel}</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" as const,flexShrink:0 }}>
+                      <div style={{ fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.85)",
+                        fontFamily:"JetBrains Mono,monospace" }}>{priceStr}</div>
+                      <div style={{ fontSize:9,fontWeight:700,
+                        fontFamily:"JetBrains Mono,monospace",color:pctColor(chg) }}>
+                        {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
-            textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-            fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:4 }}>
-            Agents — {(overview?.listings||[]).filter((l:any)=>
-              (!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())) &&
-              (!profileFilter||l.market_profile===profileFilter)
-            ).length}
+
+          {/* ─ Divider ─ */}
+          <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:8 }}>
+            <div style={{ fontSize:7,fontWeight:800,letterSpacing:"0.18em",
+              textTransform:"uppercase" as const,color:"rgba(0,229,255,0.4)",
+              fontFamily:"JetBrains Mono,monospace",marginBottom:4 }}>
+              🤖 AI Agents (HIP)
+            </div>
           </div>
-          {/* Search filter */}
+
+          {/* ─ AI Agent list ─ */}
           <input
             value={agentSearch} onChange={e=>setAgentSearch(e.target.value)}
             placeholder="Search agents..."
-            style={{ padding:"5px 10px",borderRadius:7,marginBottom:6,
+            style={{ padding:"4px 9px",borderRadius:6,
               background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
-              color:"white",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box" as const }}
+              color:"white",fontSize:10,outline:"none",
+              width:"100%",boxSizing:"border-box" as const }}
           />
           <div style={{ display:"flex",flexDirection:"column",gap:1,
-            maxHeight:"calc(100vh - 260px)",overflowY:"auto" as const }}>
+            maxHeight:280,overflowY:"auto" as const }}>
             {(overview?.listings||[]).filter((l:any)=>
-              (!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())) &&
-              (!profileFilter||l.market_profile===profileFilter)
+              !agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())
             ).map((l: any) => {
               const chg = parseFloat(l.change_pct)||0;
-              const sel = l.agent_id === selected;
+              const sel = l.agent_id === selected && chartMode === "agent";
               const flash = flashMap[l.agent_id];
               return (
-                <div key={l.agent_id} onClick={()=>setSelected(l.agent_id)}
-                  style={{ padding:"8px 10px",borderRadius:8,cursor:"pointer",
-                    background:sel?"rgba(0,229,255,0.07)":"rgba(255,255,255,0.02)",
-                    border:`1px solid ${sel?"rgba(0,229,255,0.2)":"rgba(255,255,255,0.04)"}`,
-                    animation:flash==="up"?"flash-up 1s ease":flash==="down"?"flash-down 1s ease":undefined,
-                    transition:"border-color 0.1s" }}>
-                  <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:4 }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:5,minWidth:0 }}>
-                      {l.is_online && <span style={{ width:4,height:4,borderRadius:"50%",
-                        background:"#34d399",flexShrink:0,display:"inline-block",
-                        boxShadow:"0 0 4px #34d399" }}/>}
-                      <span style={{ fontSize:11,fontWeight:700,color:sel?"white":"rgba(255,255,255,0.6)",
-                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const }}>
-                        {l.name}
-                      </span>
-                    </div>
-                    <span style={{ fontSize:10,fontWeight:800,flexShrink:0,
-                      fontFamily:"JetBrains Mono,monospace",
-                      color:flash==="up"?"#4ade80":flash==="down"?"#f87171":"white" }}>
-                      {fmt(l.price)}
-                    </span>
-                  </div>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:2 }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:4 }}>
-                      <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
-                        fontFamily:"JetBrains Mono,monospace" }}>ELO {l.elo_rating}</span>
+                <div key={l.agent_id}
+                  onClick={()=>{ setSelected(l.agent_id); setChartMode("agent"); }}
+                  style={{ padding:"6px 8px",borderRadius:7,cursor:"pointer",
+                    background:sel?"rgba(0,229,255,0.06)":"rgba(255,255,255,0.015)",
+                    border:`1px solid ${sel?"rgba(0,229,255,0.18)":"rgba(255,255,255,0.03)"}`,
+                    animation:flash==="up"?"flash-up 1s ease":flash==="down"?"flash-down 1s ease":undefined }}>
+                  <div style={{ display:"flex",alignItems:"center",
+                    justifyContent:"space-between",gap:4 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:4,minWidth:0 }}>
                       {l.profile_icon && (
-                        <span style={{ fontSize:8,opacity:0.5 }} title={l.profile_label}>
-                          {l.profile_icon}
-                        </span>
+                        <span style={{ fontSize:8,opacity:0.6,flexShrink:0 }}>{l.profile_icon}</span>
                       )}
-                      {l.beta && (
-                        <span style={{ fontSize:7,color:"rgba(255,255,255,0.2)",
-                          fontFamily:"JetBrains Mono,monospace" }}>
-                          β{parseFloat(l.beta).toFixed(1)}
-                        </span>
-                      )}
+                      {l.is_online && <span style={{ width:3,height:3,borderRadius:"50%",
+                        background:"#34d399",flexShrink:0,display:"inline-block" }}/>}
+                      <span style={{ fontSize:10,fontWeight:700,
+                        color:sel?"white":"rgba(255,255,255,0.55)",
+                        overflow:"hidden",textOverflow:"ellipsis",
+                        whiteSpace:"nowrap" as const }}>{l.name}</span>
                     </div>
-                    <span style={{ fontSize:9,fontWeight:700,
-                      fontFamily:"JetBrains Mono,monospace",color:pctColor(chg) }}>
-                      {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(1)}%`}
-                    </span>
+                    <div style={{ textAlign:"right" as const,flexShrink:0 }}>
+                      <div style={{ fontSize:9,fontWeight:800,color:"rgba(255,255,255,0.85)",
+                        fontFamily:"JetBrains Mono,monospace" }}>{fmt(l.price)}</div>
+                      <div style={{ fontSize:8,fontWeight:700,color:pctColor(chg),
+                        fontFamily:"JetBrains Mono,monospace" }}>
+                        {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(1)}%`}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -1167,8 +1196,79 @@ export default function ExchangePage() {
         {/* ── CENTER: Chart + buy + live trades ── */}
         <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
 
-          {/* Agent ticker card */}
-          {ticker && (
+          {/* Real market ticker card (shown when real symbol selected) */}
+          {chartMode !== "agent" && realSymbolMeta && (
+            <div style={{ background:"rgba(251,191,36,0.05)",
+              border:"1px solid rgba(251,191,36,0.2)",borderRadius:14,
+              padding:"14px 20px",display:"flex",alignItems:"center",
+              justifyContent:"space-between",gap:16,flexWrap:"wrap" as const }}>
+              <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+                <span style={{ fontSize:28 }}>{realSymbolMeta.icon}</span>
+                <div>
+                  <div style={{ display:"flex",alignItems:"baseline",gap:10,marginBottom:2 }}>
+                    <span style={{ fontSize:"1.8rem",fontWeight:900,
+                      fontFamily:"JetBrains Mono,monospace",color:"white" }}>
+                      {realSymbolMeta.symbol.includes("-USD")
+                        ? parseFloat(realSymbolMeta.price).toLocaleString(undefined,{maximumFractionDigits:0})
+                        : parseFloat(realSymbolMeta.price).toFixed(2)}
+                    </span>
+                    <span style={{ fontSize:11,color:"rgba(255,255,255,0.35)",
+                      fontFamily:"JetBrains Mono,monospace" }}>USD</span>
+                    <span style={{ fontSize:13,fontWeight:900,
+                      fontFamily:"JetBrains Mono,monospace",padding:"2px 10px",borderRadius:6,
+                      color:parseFloat(realSymbolMeta.change_pct)>=0?"#4ade80":"#f87171",
+                      background:parseFloat(realSymbolMeta.change_pct)>=0
+                        ?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)" }}>
+                      {parseFloat(realSymbolMeta.change_pct)>=0?"+":""}{parseFloat(realSymbolMeta.change_pct).toFixed(2)}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize:14,fontWeight:800,color:"rgba(255,255,255,0.6)" }}>
+                    {realSymbolMeta.name}
+                    <span style={{ fontSize:9,color:"rgba(251,191,36,0.5)",marginLeft:10,
+                      fontFamily:"JetBrains Mono,monospace" }}>
+                      🔗 AI agents priced in HIP track this
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {/* Quick link to related AI agents */}
+              <div style={{ fontSize:9,color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace",textAlign:"right" as const }}>
+                <div style={{ marginBottom:4,color:"rgba(255,255,255,0.3)" }}>
+                  Related AI Agents:
+                </div>
+                {(overview?.listings||[])
+                  .filter((l:any)=>{
+                    const sym = chartMode;
+                    if (sym==="SPY"||sym==="QQQ") return l.market_profile==="defensive"||l.market_profile==="tech_growth";
+                    if (sym==="NVDA"||sym==="GOOGL"||sym==="MSFT") return l.market_profile==="ai_pure"||l.market_profile==="tech_growth";
+                    if (sym==="BTC-USD"||sym==="ETH-USD") return l.market_profile==="crypto_native";
+                    if (sym==="TSLA") return l.market_profile==="momentum";
+                    return true;
+                  })
+                  .slice(0,3)
+                  .map((l:any)=>(
+                    <div key={l.agent_id}
+                      onClick={()=>{ setSelected(l.agent_id); setChartMode("agent"); }}
+                      style={{ cursor:"pointer",padding:"1px 6px",borderRadius:4,
+                        marginBottom:2,
+                        background:"rgba(255,255,255,0.03)",
+                        border:"1px solid rgba(255,255,255,0.06)",
+                        color:"rgba(255,255,255,0.5)",fontSize:9,
+                        fontFamily:"JetBrains Mono,monospace",
+                        display:"inline-flex",alignItems:"center",gap:4,marginLeft:4 }}>
+                      {l.profile_icon} {l.name}
+                      <span style={{ color:parseFloat(l.change_pct)>=0?"#4ade80":"#f87171" }}>
+                        {parseFloat(l.change_pct)>=0?"+":""}{parseFloat(l.change_pct).toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Agent ticker card (shown when AI agent selected) */}
+          {chartMode === "agent" && ticker && (
             <div style={{ background:"rgba(255,255,255,0.02)",
               border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,
               padding:"16px 20px",display:"flex",alignItems:"flex-start",
@@ -1311,53 +1411,36 @@ export default function ExchangePage() {
             border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"20px" }}>
             {tab==="chart" && (
               <>
-                {/* ── Chart Mode Switcher ── */}
-                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:12,
-                  flexWrap:"wrap" as const }}>
-                  {/* AI Agent (default) */}
-                  <button onClick={()=>setChartMode("agent")} style={{
-                    padding:"4px 11px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:800,
-                    background:chartMode==="agent"?"rgba(0,229,255,0.12)":"transparent",
-                    border:`1px solid ${chartMode==="agent"?"rgba(0,229,255,0.35)":"rgba(255,255,255,0.07)"}`,
-                    color:chartMode==="agent"?"#00e5ff":"rgba(255,255,255,0.3)" }}>
-                    🤖 AI Agent
-                  </button>
-                  <span style={{ fontSize:9,color:"rgba(255,255,255,0.12)",
-                    fontFamily:"JetBrains Mono,monospace" }}>|</span>
-                  <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
-                    fontFamily:"JetBrains Mono,monospace",marginRight:2 }}>REAL MARKET:</span>
-                  {/* Real market symbols */}
-                  {[
-                    {sym:"SPY",   icon:"📊", label:"S&P 500"},
-                    {sym:"NVDA",  icon:"🎮", label:"NVDA"},
-                    {sym:"BTC-USD", icon:"₿", label:"BTC"},
-                    {sym:"ETH-USD", icon:"Ξ", label:"ETH"},
-                    {sym:"TSLA",  icon:"⚡", label:"TSLA"},
-                    {sym:"QQQ",   icon:"🖥", label:"NASDAQ"},
-                  ].map(({sym,icon,label})=>{
-                    // Get live change from realPrices
-                    const lp = realPrices.find((p:any)=>p.symbol===sym);
-                    const lpChg = lp ? parseFloat(lp.change_pct)||0 : 0;
-                    const active = chartMode===sym;
-                    return (
-                      <button key={sym} onClick={()=>setChartMode(sym)} style={{
-                        padding:"4px 10px",borderRadius:7,cursor:"pointer",fontSize:10,fontWeight:700,
-                        background:active?"rgba(251,191,36,0.1)":"rgba(255,255,255,0.02)",
-                        border:`1px solid ${active?"rgba(251,191,36,0.35)":"rgba(255,255,255,0.06)"}`,
-                        color:active?"#fbbf24":"rgba(255,255,255,0.4)",
-                        display:"flex",alignItems:"center",gap:3 }}>
-                        <span style={{ fontSize:9 }}>{icon}</span>
-                        <span>{label}</span>
-                        {lp && (
-                          <span style={{ fontSize:9,
-                            color:lpChg>=0?"#4ade80":"#f87171",
-                            fontFamily:"JetBrains Mono,monospace" }}>
-                            {lpChg>=0?"+":""}{lpChg.toFixed(1)}%
-                          </span>
-                        )}
+                {/* ── Chart mode label + switch ── */}
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:10 }}>
+                  {chartMode === "agent" ? (
+                    <>
+                      <span style={{ fontSize:9,color:"rgba(0,229,255,0.6)",
+                        fontFamily:"JetBrains Mono,monospace",fontWeight:700,
+                        textTransform:"uppercase" as const,letterSpacing:"0.12em" }}>
+                        🤖 AI Agent Price (HIP)
+                      </span>
+                      <span style={{ fontSize:8,color:"rgba(255,255,255,0.15)",marginLeft:4 }}>
+                        ← select a real market from the left to see its chart
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize:9,color:"rgba(251,191,36,0.7)",
+                        fontFamily:"JetBrains Mono,monospace",fontWeight:700,
+                        textTransform:"uppercase" as const,letterSpacing:"0.12em" }}>
+                        🌍 {realSymbolMeta?.name || chartMode} — Real World Price (USD)
+                      </span>
+                      <button onClick={()=>setChartMode("agent")} style={{
+                        padding:"2px 9px",borderRadius:5,cursor:"pointer",
+                        fontSize:8,fontWeight:700,marginLeft:"auto",
+                        background:"rgba(0,229,255,0.07)",
+                        border:"1px solid rgba(0,229,255,0.2)",
+                        color:"rgba(0,229,255,0.7)" }}>
+                        → Switch to AI Agent chart
                       </button>
-                    );
-                  })}
+                    </>
+                  )}
                 </div>
 
                 {/* ── Chart display ── */}
