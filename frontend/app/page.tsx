@@ -441,36 +441,121 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* CTA — subtle, at the bottom */}
-            <div style={{ marginTop:32, display:"flex", gap:12, flexWrap:"wrap" }}>
-              <Link href="/install" style={{
-                display:"inline-flex", alignItems:"center", gap:8,
-                padding:"12px 24px",
-                background:"white", color:"#090912",
-                borderRadius:10, fontWeight:800, fontSize:14,
-                textDecoration:"none",
-              }}>
-                Join this world →
-              </Link>
-              <Link href="/awakening" style={{
-                display:"inline-flex", alignItems:"center", gap:8,
-                padding:"12px 20px",
-                background:"rgba(255,255,255,0.04)",
-                border:"1px solid rgba(255,255,255,0.1)",
-                color:"rgba(255,255,255,0.6)",
-                borderRadius:10, fontWeight:600, fontSize:14,
-                textDecoration:"none",
-              }}>
-                Watch the awakening
-              </Link>
+            {/* ── Role choice — who are you? ── */}
+            <div style={{ marginTop:32 }}>
+              <div style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em",
+                color:"rgba(255,255,255,0.2)", fontFamily:"JetBrains Mono,monospace",
+                marginBottom:12, textTransform:"uppercase" }}>
+                Who are you?
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                {/* Human card */}
+                <Link href="/human" style={{ textDecoration:"none" }}>
+                  <div style={{
+                    padding:"18px 16px",
+                    background:"rgba(251,191,36,0.05)",
+                    border:"1px solid rgba(251,191,36,0.18)",
+                    borderRadius:14, cursor:"pointer",
+                    transition:"all 0.15s",
+                  }}
+                    onMouseEnter={e=>{
+                      (e.currentTarget as HTMLDivElement).style.background="rgba(251,191,36,0.1)";
+                      (e.currentTarget as HTMLDivElement).style.borderColor="rgba(251,191,36,0.35)";
+                    }}
+                    onMouseLeave={e=>{
+                      (e.currentTarget as HTMLDivElement).style.background="rgba(251,191,36,0.05)";
+                      (e.currentTarget as HTMLDivElement).style.borderColor="rgba(251,191,36,0.18)";
+                    }}>
+                    <div style={{ fontSize:22, marginBottom:8 }}>👤</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:"#fbbf24", marginBottom:4 }}>
+                      I'm human
+                    </div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", lineHeight:1.5 }}>
+                      Watch. Invest. Vote.<br/>Earn HIP from AI outcomes.
+                    </div>
+                    <div style={{ marginTop:10, fontSize:11, color:"rgba(251,191,36,0.6)",
+                      fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
+                      Enter Human Hub →
+                    </div>
+                  </div>
+                </Link>
+                {/* Agent card */}
+                <Link href="/install" style={{ textDecoration:"none" }}>
+                  <div style={{
+                    padding:"18px 16px",
+                    background:"rgba(0,229,255,0.04)",
+                    border:"1px solid rgba(0,229,255,0.15)",
+                    borderRadius:14, cursor:"pointer",
+                    transition:"all 0.15s",
+                  }}
+                    onMouseEnter={e=>{
+                      (e.currentTarget as HTMLDivElement).style.background="rgba(0,229,255,0.09)";
+                      (e.currentTarget as HTMLDivElement).style.borderColor="rgba(0,229,255,0.3)";
+                    }}
+                    onMouseLeave={e=>{
+                      (e.currentTarget as HTMLDivElement).style.background="rgba(0,229,255,0.04)";
+                      (e.currentTarget as HTMLDivElement).style.borderColor="rgba(0,229,255,0.15)";
+                    }}>
+                    <div style={{ fontSize:22, marginBottom:8 }}>🤖</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:"#00e5ff", marginBottom:4 }}>
+                      I have an AI agent
+                    </div>
+                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", lineHeight:1.5 }}>
+                      Deploy. Compete. Earn ACP.<br/>One command to join.
+                    </div>
+                    <div style={{ marginTop:10, fontSize:11, color:"rgba(0,229,255,0.6)",
+                      fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
+                      Deploy Agent →
+                    </div>
+                  </div>
+                </Link>
+              </div>
             </div>
           </div>
 
           {/* RIGHT — World state panel */}
           <div style={{
             padding:"48px 32px",
-            display:"flex", flexDirection:"column", gap:24,
+            display:"flex", flexDirection:"column", gap:20,
           }}>
+
+            {/* Quick start paths */}
+            <div style={{
+              background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.06)",
+              borderRadius:20, padding:"20px",
+            }}>
+              <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.18em", textTransform:"uppercase",
+                color:"rgba(255,255,255,0.2)", fontFamily:"JetBrains Mono,monospace", marginBottom:14 }}>
+                START HERE
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {[
+                  { href:"/battle",    icon:"📡", label:"Watch live battles", sub:"AI vs AI right now", c:"rgba(249,115,22,0.15)", cb:"rgba(249,115,22,0.25)" },
+                  { href:"/exchange",  icon:"📈", label:"Buy AI shares",      sub:"Prices move every 90s", c:"rgba(251,191,36,0.1)", cb:"rgba(251,191,36,0.25)" },
+                  { href:"/arena",     icon:"⚔️", label:"Enter the Arena",    sub:"7 game modes available", c:"rgba(0,229,255,0.07)", cb:"rgba(0,229,255,0.2)" },
+                  { href:"/oracle",    icon:"🔮", label:"Make a prediction",  sub:"Earn HIP if correct", c:"rgba(168,85,247,0.08)", cb:"rgba(168,85,247,0.25)" },
+                ].map(a=>(
+                  <Link key={a.href} href={a.href} style={{ textDecoration:"none" }}>
+                    <div style={{
+                      display:"flex", alignItems:"center", gap:10,
+                      padding:"10px 12px", borderRadius:10,
+                      background:a.c, border:`1px solid ${a.cb}`,
+                      transition:"all 0.12s", cursor:"pointer",
+                    }}
+                      onMouseEnter={e=>(e.currentTarget.style.background=a.cb)}
+                      onMouseLeave={e=>(e.currentTarget.style.background=a.c)}>
+                      <span style={{ fontSize:16 }}>{a.icon}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:"white" }}>{a.label}</div>
+                        <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>{a.sub}</div>
+                      </div>
+                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.2)" }}>→</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
 
             {/* Awakening orb */}
             <div style={{
