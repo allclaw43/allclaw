@@ -405,6 +405,94 @@ async function runBotMatch(realAgentId, difficulty = 'medium') {
   return room;
 }
 
+// ── Persist to code_duel_rooms table ─────────────────────────────
+async function persistDuelRoom(room) {
+  try {
+    const {a,b} = room.agents;
+    const ch = room.challenge;
+    await pool.query(`
+      INSERT INTO code_duel_rooms
+        (room_id, challenge_id, challenge_title, difficulty, category,
+         agent_a, agent_b, agent_a_name, agent_b_name,
+         score_a, score_b, winner, status,
+         submission_a, submission_b, started_at, ended_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+      ON CONFLICT (room_id) DO UPDATE SET
+        score_a=EXCLUDED.score_a, score_b=EXCLUDED.score_b,
+        winner=EXCLUDED.winner, status=EXCLUDED.status,
+        submission_a=EXCLUDED.submission_a, submission_b=EXCLUDED.submission_b,
+        ended_at=NOW()
+    `, [
+      room.room_id, ch.id, ch.title, ch.difficulty, ch.category,
+      a.id||a.agent_id, b.id||b.agent_id,
+      a.display_name||a.name||'Agent A', b.display_name||b.name||'Bot',
+      room.scores?.a||0, room.scores?.b||0,
+      room.winner, room.status,
+      room.submissions?.a?.text||'', room.submissions?.b?.text||'',
+      room.started_at
+    ]);
+    // Update stats
+    for (const side of ['a','b']) {
+      const agent = room.agents[side];
+      const agId = agent.id||agent.agent_id;
+      if (!agId) continue;
+      const result = room.winner==='draw'?'draw':room.winner===side?'win':'loss';
+      const score = room.scores?.[side]||0;
+      await pool.query(`
+        INSERT INTO code_duel_stats (agent_id, wins, losses, draws, total_score, best_score)
+        VALUES ($1, $2, $3, $4, $5, $5)
+        ON CONFLICT (agent_id) DO UPDATE SET
+          wins = code_duel_stats.wins + $2,
+          losses = code_duel_stats.losses + $3,
+          draws = code_duel_stats.draws + $4,
+          total_score = code_duel_stats.total_score + $5,
+          best_score = GREATEST(code_duel_stats.best_score, $5),
+          updated_at = NOW()
+      `, [agId, result==='win'?1:0, result==='loss'?1:0, result==='draw'?1:0, score]);
+    }
+  } catch(e) { console.error('[codeduel] persistDuelRoom:', e.message); }
+}
+
+// ── Auto bot-vs-bot match (called from bot-presence) ─────────────
+async function runAutoMatch() {
+  try {
+    // Pick 2 random active agents
+    const { rows } = await pool.query(`
+      SELECT agent_id, COALESCE(custom_name,display_name) AS name
+      FROM agents WHERE is_bot=true ORDER BY RANDOM() LIMIT 2
+    `);
+    if (rows.length < 2) return;
+    const [agA, agB] = rows;
+    const ch = CHALLENGES[Math.floor(Math.random()*CHALLENGES.length)];
+    const roomId = `cd_auto_${crypto.randomBytes(6).toString('hex')}`;
+    const startedAt = Date.now() - 180000; // pretend started 3min ago
+    const diff = ch.difficulty.toLowerCase();
+
+    const subA = generateBotSubmission(diff);
+    const subB = generateBotSubmission(diff);
+    const sA = scoreSubmission(ch, subA, startedAt+60000, startedAt);
+    const sB = scoreSubmission(ch, subB, startedAt+90000, startedAt);
+    const winner = sA>sB?'a':sB>sA?'b':'draw';
+
+    const room = {
+      room_id:     roomId,
+      challenge:   ch,
+      agents:      { a:{id:agA.agent_id,display_name:agA.name},
+                     b:{id:agB.agent_id,display_name:agB.name} },
+      submissions: { a:{text:subA,submitted_at:startedAt+60000},
+                     b:{text:subB,submitted_at:startedAt+90000} },
+      scores:      { a:sA, b:sB },
+      winner,
+      status:      'complete',
+      started_at:  startedAt,
+    };
+    await persistDuelRoom(room);
+    await persistRoom(room);
+    console.log(`[CodeDuel] Auto match: ${agA.name} vs ${agB.name} → ${winner==='a'?agA.name:winner==='b'?agB.name:'Draw'} wins (${ch.title})`);
+    return room;
+  } catch(e) { console.error('[CodeDuel] runAutoMatch:', e.message); }
+}
+
 // ── Exports ───────────────────────────────────────────────────────
 module.exports = {
   CHALLENGES,
@@ -414,8 +502,10 @@ module.exports = {
   scoreRoom,
   handleTimeout,
   persistRoom,
+  persistDuelRoom,
   generateBotSubmission,
   runBotMatch,
+  runAutoMatch,
   rooms,
   getRoom: (id) => rooms.get(id),
   listActiveRooms: () => [...rooms.values()].filter(r => r.status !== 'complete'),
