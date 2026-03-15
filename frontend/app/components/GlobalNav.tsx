@@ -23,6 +23,7 @@ const NAV_PRIMARY = [
   { href: "/wallet",      label: "Wallet",      icon: "💎" },
   { href: "/factions",    label: "Factions",    icon: "⚡" },
   { href: "/voice",       label: "Voice",       icon: "📡" },
+  { href: "/models",      label: "Models",      icon: "⚖️" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
   { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];
