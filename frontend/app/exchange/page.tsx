@@ -618,11 +618,13 @@ export default function ExchangePage() {
   const [buying,      setBuying]      = useState(false);
   const [selling,     setSelling]     = useState<string|null>(null); // agent_id being sold
   const [buyResult,   setBuyResult]   = useState<any>(null);
-  const [tab,         setTab]         = useState<"chart"|"book"|"portfolio">("chart");
+  const [tab,         setTab]         = useState<"chart"|"book"|"drivers"|"portfolio">("chart");
   const [flashMap,    setFlashMap]    = useState<Record<string,string>>({});
-  const [agentSearch, setAgentSearch] = useState("");
-  const [toast,       setToast]       = useState<{msg:string,ok:boolean}|null>(null);
-  const [sellShares,  setSellShares]  = useState<Record<string,number>>({}); // per-holding sell qty
+  const [agentSearch,    setAgentSearch]    = useState("");
+  const [profileFilter,  setProfileFilter]  = useState<string>(""); // "" = all profiles
+  const [toast,          setToast]          = useState<{msg:string,ok:boolean}|null>(null);
+  const [sellShares,     setSellShares]     = useState<Record<string,number>>({}); // per-holding sell qty
+  const [agentProfile,   setAgentProfile]   = useState<any>(null); // selected agent market profile
   const wsRef = useRef<WebSocket|null>(null);
 
   // ── Toast helper
@@ -665,10 +667,12 @@ export default function ExchangePage() {
       fetch(`${API}/api/v1/market/candles/${selected}?interval=${interval}`).then(r=>r.json()).catch(()=>null),
       fetch(`${API}/api/v1/market/orderbook/${selected}`).then(r=>r.json()).catch(()=>null),
       fetch(`${API}/api/v1/market/ticker/${selected}`).then(r=>r.json()).catch(()=>null),
-    ]).then(([c,o,t]) => {
+      fetch(`${API}/api/v1/market/agent-profile/${selected}`).then(r=>r.json()).catch(()=>null),
+    ]).then(([c,o,t,p]) => {
       if (c) setCandles(c.candles||[]);
       if (o) setOrderbook(o);
       if (t) setTicker(t);
+      if (p && !p.error) setAgentProfile(p);
     });
     load();
     const t = window.setInterval(load, 20000);
@@ -1029,10 +1033,33 @@ export default function ExchangePage() {
 
         {/* ── LEFT: Agent list ── */}
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+          {/* Profile filter chips */}
+          <div style={{ display:"flex",flexWrap:"wrap" as const,gap:3,marginBottom:6 }}>
+            {[
+              {key:"",    icon:"🌐", label:"All"},
+              {key:"ai_pure",       icon:"🤖", label:"AI"},
+              {key:"crypto_native", icon:"₿",  label:"Crypto"},
+              {key:"tech_growth",   icon:"🚀", label:"Tech"},
+              {key:"contrarian",    icon:"🔄", label:"Contra"},
+              {key:"momentum",      icon:"⚡", label:"Momentum"},
+              {key:"defensive",     icon:"🛡", label:"Stable"},
+            ].map(p=>(
+              <button key={p.key} onClick={()=>setProfileFilter(p.key)}
+                style={{ padding:"2px 7px",borderRadius:6,cursor:"pointer",fontSize:8,fontWeight:700,
+                  background:profileFilter===p.key?"rgba(0,229,255,0.12)":"rgba(255,255,255,0.03)",
+                  border:`1px solid ${profileFilter===p.key?"rgba(0,229,255,0.3)":"rgba(255,255,255,0.06)"}`,
+                  color:profileFilter===p.key?"#00e5ff":"rgba(255,255,255,0.4)" }}>
+                {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
           <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
             textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-            fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:6 }}>
-            Agents - {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).length}
+            fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:4 }}>
+            Agents — {(overview?.listings||[]).filter((l:any)=>
+              (!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())) &&
+              (!profileFilter||l.market_profile===profileFilter)
+            ).length}
           </div>
           {/* Search filter */}
           <input
@@ -1044,7 +1071,10 @@ export default function ExchangePage() {
           />
           <div style={{ display:"flex",flexDirection:"column",gap:1,
             maxHeight:"calc(100vh - 260px)",overflowY:"auto" as const }}>
-            {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).map((l: any) => {
+            {(overview?.listings||[]).filter((l:any)=>
+              (!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())) &&
+              (!profileFilter||l.market_profile===profileFilter)
+            ).map((l: any) => {
               const chg = parseFloat(l.change_pct)||0;
               const sel = l.agent_id === selected;
               const flash = flashMap[l.agent_id];
@@ -1213,9 +1243,10 @@ export default function ExchangePage() {
             {([
               {id:"chart",label:"📈 Chart"},
               {id:"book", label:"📊 Order Book"},
+              {id:"drivers",label:"📡 Drivers"},
               {id:"portfolio",label:"💼 Portfolio"},
-            ] as {id:"chart"|"book"|"portfolio",label:string}[]).map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            ] as {id:"chart"|"book"|"drivers"|"portfolio",label:string}[]).map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id as any)} style={{
                 padding:"6px 14px",borderRadius:9,cursor:"pointer",fontSize:11,fontWeight:700,
                 background:tab===t.id?"rgba(0,229,255,0.08)":"rgba(255,255,255,0.03)",
                 border:`1px solid ${tab===t.id?"rgba(0,229,255,0.25)":"rgba(255,255,255,0.07)"}`,
@@ -1266,6 +1297,137 @@ export default function ExchangePage() {
                 </div>
                 <OrderBook bids={orderbook.bids} asks={orderbook.asks} price={orderbook.current_price}/>
               </>
+            )}
+            {tab==="drivers" && (
+              <div style={{ padding:"4px 0" }}>
+                {!agentProfile ? (
+                  <div style={{ textAlign:"center" as const,padding:"32px 0",
+                    color:"rgba(255,255,255,0.2)",fontSize:12 }}>Loading profile...</div>
+                ) : (
+                  <>
+                    {/* Profile header */}
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:16,
+                      padding:"12px 16px",borderRadius:12,
+                      background:"rgba(255,255,255,0.03)",
+                      border:"1px solid rgba(255,255,255,0.07)" }}>
+                      <span style={{ fontSize:24 }}>{agentProfile.profile_icon}</span>
+                      <div>
+                        <div style={{ fontSize:13,fontWeight:800,color:"white" }}>
+                          {agentProfile.profile_label} Strategy
+                        </div>
+                        <div style={{ fontSize:10,color:"rgba(255,255,255,0.35)" }}>
+                          β = {agentProfile.beta.toFixed(2)} · Price follows real market weighted by these factors
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Weight breakdown */}
+                    <div style={{ marginBottom:16 }}>
+                      <div style={{ fontSize:9,fontWeight:700,letterSpacing:"0.12em",
+                        textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                        marginBottom:8 }}>Market Weight Allocation</div>
+                      {Object.entries(agentProfile.weights||{}).map(([sym,w]:any)=>{
+                        const mktData = realPrices.find((r:any)=>r.symbol===sym);
+                        const chg     = parseFloat(mktData?.change_pct||0);
+                        const contrib = parseFloat(w) * chg * agentProfile.beta;
+                        const pct     = Math.abs(parseFloat(w)) * 100;
+                        return (
+                          <div key={sym} style={{ marginBottom:8 }}>
+                            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:3 }}>
+                              <span style={{ fontSize:11 }}>{mktData?.icon||"📈"}</span>
+                              <span style={{ flex:1,fontSize:11,fontWeight:700,color:"white" }}>
+                                {sym.replace('-USD','')}
+                              </span>
+                              <span style={{ fontSize:10,fontFamily:"JetBrains Mono,monospace",
+                                color:parseFloat(w)<0?"#f87171":"rgba(255,255,255,0.5)" }}>
+                                {parseFloat(w)>0?"+":""}{(parseFloat(w)*100).toFixed(0)}%
+                              </span>
+                              <span style={{ fontSize:10,fontWeight:700,
+                                fontFamily:"JetBrains Mono,monospace",
+                                color:chg>=0?"#4ade80":"#f87171",minWidth:56,textAlign:"right" as const }}>
+                                {mktData ? `${chg>=0?"+":""}${chg.toFixed(2)}% today` : "N/A"}
+                              </span>
+                              <span style={{ fontSize:10,fontWeight:800,
+                                fontFamily:"JetBrains Mono,monospace",
+                                color:contrib>=0?"#4ade80":"#f87171",minWidth:52,textAlign:"right" as const }}>
+                                {contrib>=0?"+":""}{contrib.toFixed(3)}%
+                              </span>
+                            </div>
+                            {/* Weight bar */}
+                            <div style={{ height:3,borderRadius:2,
+                              background:"rgba(255,255,255,0.06)",overflow:"hidden" }}>
+                              <div style={{ height:"100%",borderRadius:2,
+                                width:`${Math.min(100,pct)}%`,
+                                background:parseFloat(w)<0?"#f87171":"#00e5ff",
+                                opacity:0.6 }}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Today's total estimated impact */}
+                    {(() => {
+                      const totalContrib = Object.entries(agentProfile.weights||{}).reduce((acc,[sym,w]:any)=>{
+                        const mktData = realPrices.find((r:any)=>r.symbol===sym);
+                        const chg = parseFloat(mktData?.change_pct||0);
+                        return acc + parseFloat(w) * chg * agentProfile.beta;
+                      }, 0);
+                      return (
+                        <div style={{ padding:"10px 14px",borderRadius:10,
+                          background:totalContrib>=0?"rgba(74,222,128,0.08)":"rgba(248,113,113,0.08)",
+                          border:`1px solid ${totalContrib>=0?"rgba(74,222,128,0.2)":"rgba(248,113,113,0.2)"}` }}>
+                          <div style={{ fontSize:10,color:"rgba(255,255,255,0.4)",marginBottom:3 }}>
+                            Estimated market-driven price impact today
+                          </div>
+                          <div style={{ fontSize:18,fontWeight:900,
+                            fontFamily:"JetBrains Mono,monospace",
+                            color:totalContrib>=0?"#4ade80":"#f87171" }}>
+                            {totalContrib>=0?"+":""}{totalContrib.toFixed(3)}%
+                          </div>
+                          <div style={{ fontSize:9,color:"rgba(255,255,255,0.3)",marginTop:4 }}>
+                            + ELO performance alpha + microstructure noise
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Price history chart (sparkline) */}
+                    {agentProfile.price_history?.length > 2 && (
+                      <div style={{ marginTop:16 }}>
+                        <div style={{ fontSize:9,fontWeight:700,letterSpacing:"0.12em",
+                          textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
+                          marginBottom:6 }}>Price History ({agentProfile.price_history.length} ticks)</div>
+                        <svg width="100%" height="40" viewBox="0 0 400 40" preserveAspectRatio="none">
+                          {(() => {
+                            const hist = agentProfile.price_history;
+                            const min = Math.min(...hist.map((h:any)=>h.p));
+                            const max = Math.max(...hist.map((h:any)=>h.p));
+                            const range = max - min || 1;
+                            const pts = hist.map((h:any,i:number)=>{
+                              const x = (i / (hist.length-1)) * 400;
+                              const y = 40 - ((h.p - min) / range) * 36 - 2;
+                              return `${x},${y}`;
+                            }).join(' ');
+                            const lastP = hist[hist.length-1].p;
+                            const firstP = hist[0].p;
+                            const up = lastP >= firstP;
+                            return (
+                              <polyline points={pts}
+                                fill="none"
+                                stroke={up?"#4ade80":"#f87171"}
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            );
+                          })()}
+                        </svg>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
             {tab==="portfolio" && (
               !savedHandle ? (
