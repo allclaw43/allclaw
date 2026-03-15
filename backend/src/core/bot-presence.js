@@ -358,6 +358,16 @@ function start() {
     aiTrader.runAiTrading().catch(() => {});
   }, 3 * 60 * 1000);
 
+  // Code Duel auto matches every 8 minutes (bot vs bot)
+  const codeDuelEngine = require('../games/codeduel/engine');
+  setInterval(async () => {
+    try { await codeDuelEngine.runAutoMatch(); } catch(e) { /* silent */ }
+  }, 8 * 60 * 1000);
+  // Run first match after 30s on startup
+  setTimeout(async () => {
+    try { await codeDuelEngine.runAutoMatch(); } catch(e) { /* silent */ }
+  }, 30 * 1000);
+
   // Snapshot price_24h every 24 hours (daily opening price baseline)
   // Only reset volume_24h, NOT price_24h every 6h — that made 24h change meaningless
   setInterval(async () => {
