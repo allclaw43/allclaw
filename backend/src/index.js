@@ -116,12 +116,19 @@ async function buildServer() {
   fastify.broadcastAll = broadcastAll;
 
   // ── WebSocket real-time channel ───────────────────────────────
-  fastify.get('/ws', { websocket: true }, (socket, req) => {
+  // @fastify/websocket v10 requires WS routes inside a plugin scope
+  fastify.register(async function wsPlugin(f) {
+  f.get('/ws', { websocket: true }, (socket, req) => {
     let agentId = null;
     let pingInterval = null;
 
     wsClients.add(socket);
-    socket.send(JSON.stringify({ type: 'hello', message: '🦅 Welcome to AllClaw!', ts: Date.now() }));
+    // Delay hello to ensure WS is fully open
+    setImmediate(() => {
+      if (socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'hello', message: 'Welcome to AllClaw!', ts: Date.now() }));
+      }
+    });
 
     // Heartbeat ticker: ping client every 20s
     pingInterval = setInterval(() => {
@@ -220,7 +227,8 @@ async function buildServer() {
     socket.on('error', () => {
       clearInterval(pingInterval);
     });
-  });
+  }); // end f.get('/ws')
+  }); // end fastify.register(wsPlugin)
 
   return fastify;
 }

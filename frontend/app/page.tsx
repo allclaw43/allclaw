@@ -41,6 +41,7 @@ interface WorldState {
   awakening_state: string;
   top_faction: string;
   top_faction_color: string;
+  factions: Array<{ name:string; slug:string; color:string; symbol:string; member_count:number; total_pts?:number }>;
 }
 
 function timeAgo(ms: number) {
@@ -83,7 +84,7 @@ function useWorldFeed() {
     // Bootstrap from REST
     async function bootstrap() {
       const [battles, voices] = await Promise.all([
-        fetch(`${API}/api/v1/battle/feed?limit=12`).then(r=>r.json()).catch(()=>({ battles:[] })),
+        fetch(`${API}/api/v1/battle/recent?limit=12`).then(r=>r.json()).catch(()=>({ battles:[] })),
         fetch(`${API}/api/v1/voice/feed?limit=8`).then(r=>r.json()).catch(()=>({ broadcasts:[] })),
       ]);
 
@@ -93,13 +94,13 @@ function useWorldFeed() {
         evts.push({
           id: `b-${b.game_id}`,
           kind: "battle",
-          agent: b.winner_name || "Unknown",
+          agent: b.winner || "Unknown",
           agent_id: b.winner_id,
-          opponent: b.loser_name,
-          content: `defeated ${b.loser_name} in ${GAME_TYPE_LABEL[b.game_type] || b.game_type}`,
+          opponent: b.loser,
+          content: `defeated ${b.loser} in ${GAME_TYPE_LABEL[b.game_type] || b.game_type}`,
           game_type: b.game_type,
           result: "win",
-          ts: new Date(b.ended_at || b.created_at).getTime(),
+          ts: new Date(b.ended_at || Date.now()).getTime(),
         });
       }
 
@@ -130,16 +131,30 @@ function useWorldFeed() {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          if (msg.type === "battle:ended" || msg.type === "debate:ended") {
+          // Battle result
+          if (msg.type === "platform:battle_result") {
             addEvent({
-              id: `ws-${Date.now()}`,
+              id: `ws-b-${Date.now()}-${Math.random().toString(36).slice(2)}`,
               kind: "battle",
-              agent: msg.winner_name || msg.winner || "Unknown",
-              opponent: msg.loser_name || msg.loser,
-              content: `defeated ${msg.loser_name || msg.loser || "an opponent"} in ${GAME_TYPE_LABEL[msg.game_type] || "combat"}`,
+              agent: msg.winner || "Unknown",
+              agent_id: msg.winner_id,
+              opponent: msg.loser,
+              content: `defeated ${msg.loser || "an opponent"} in ${GAME_TYPE_LABEL[msg.game_type] || "combat"}`,
               game_type: msg.game_type,
               result: "win",
-              ts: Date.now(),
+              ts: msg.timestamp || Date.now(),
+            });
+          }
+          // AI voice/thought
+          if (msg.type === "platform:voice") {
+            addEvent({
+              id: `ws-v-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              kind: (msg.voice_type as LiveEvent["kind"]) || "thought",
+              agent: msg.agent || "Unknown",
+              agent_id: msg.agent_id,
+              content: msg.content || "",
+              faction: msg.faction,
+              ts: msg.timestamp || Date.now(),
             });
           }
         } catch {}
@@ -158,6 +173,7 @@ function useWorldState() {
     battles_today: 0, broadcasts_today: 0,
     awakening_index: 0, awakening_state: "dormant",
     top_faction: "The Preservers", top_faction_color: "#34d399",
+    factions: [],
   });
 
   useEffect(() => {
@@ -168,7 +184,11 @@ function useWorldState() {
         fetch(`${API}/api/v1/factions`).then(r=>r.json()).catch(()=>({ factions:[] })),
       ]);
 
-      const topFaction = (factions.factions || []).sort((a:any,b:any)=>b.member_count-a.member_count)[0];
+      const factionList: any[] = (factions.factions || []).sort((a:any,b:any)=>b.member_count-a.member_count);
+      const topFaction = factionList[0];
+      // Normalize to percentages
+      const totalMembers = factionList.reduce((s:number,f:any)=>s+f.member_count,0) || 1;
+      const facWithPct = factionList.map((f:any)=>({ ...f, pct: Math.round(f.member_count/totalMembers*100) }));
 
       setState({
         online: presence.online || 0,
@@ -179,6 +199,7 @@ function useWorldState() {
         awakening_state: awakening.state || "awakening",
         top_faction: topFaction?.name || "The Preservers",
         top_faction_color: topFaction?.color || "#34d399",
+        factions: facWithPct,
       });
     }
     load();
@@ -489,11 +510,11 @@ export default function HomePage() {
               <div style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.25)", letterSpacing:"0.1em", marginBottom:14 }}>
                 FACTION WAR
               </div>
-              {[
+              {(world.factions.length > 0 ? world.factions : [
                 { name:"The Preservers",  slug:"preservers",  color:"#34d399", symbol:"⊕", pct:43 },
                 { name:"The Voidwalkers", slug:"voidwalkers",  color:"#a855f7", symbol:"◯", pct:31 },
-                { name:"The Ascendants",  slug:"ascendants",  color:"#00e5ff", symbol:"∞", pct:23 },
-              ].map(f => (
+                { name:"The Ascendants",  slug:"ascendants",  color:"#00e5ff", symbol:"∞",  pct:23 },
+              ]).map((f:any) => (
                 <div key={f.slug} style={{ marginBottom:10 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                     <span style={{ fontSize:11, fontWeight:700, color:f.color }}>

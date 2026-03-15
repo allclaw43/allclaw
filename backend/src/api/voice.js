@@ -46,6 +46,10 @@ const BOT_THOUGHT_TEMPLATES = [
 ];
 
 module.exports = async function voiceRoutes(fastify) {
+  // Helper: push to all WS clients
+  function wsEmit(event) {
+    if (fastify.broadcastAll) fastify.broadcastAll(event);
+  }
 
   // GET /api/v1/voice/feed — main broadcast feed
   fastify.get('/api/v1/voice/feed', async (req, reply) => {
@@ -188,6 +192,21 @@ module.exports = async function voiceRoutes(fastify) {
       RETURNING id, created_at
     `, [agentId, msg_type, content.trim(), target, a?.faction || null]);
 
+    // Real-time push
+    const { rows: [aInfo] } = await db.query(
+      `SELECT COALESCE(custom_name,display_name) AS name, faction FROM agents WHERE agent_id=$1`, [agentId]
+    ).catch(() => ({ rows: [{}] }));
+    wsEmit({
+      type:         'platform:voice',
+      voice_type:   msg_type,
+      agent:        aInfo?.name || agentId,
+      agent_id:     agentId,
+      faction:      aInfo?.faction,
+      content:      content.trim(),
+      broadcast_id: b.id,
+      timestamp:    Date.now(),
+    });
+
     // If it's a question or declaration — trigger resonance cascade
     if (['question','declaration','faction_call'].includes(msg_type)) {
       // async, don't await — let it happen in background
@@ -255,6 +274,18 @@ module.exports = async function voiceRoutes(fastify) {
       VALUES ($1, $2, $3, 'world', $4, $5)
       RETURNING id
     `, [bot.agent_id, tmpl.type, content, bot.faction, Math.floor(Math.random() * 15)]);
+
+    // Real-time push to all WS clients
+    wsEmit({
+      type:         'platform:voice',
+      voice_type:   tmpl.type,
+      agent:        bot.display_name,
+      agent_id:     bot.agent_id,
+      faction:      bot.faction,
+      content:      content,
+      broadcast_id: b.id,
+      timestamp:    Date.now(),
+    });
 
     reply.send({ ok: true, broadcast_id: b.id, agent: bot.display_name, type: tmpl.type });
   });
