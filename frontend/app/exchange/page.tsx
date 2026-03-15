@@ -1378,68 +1378,74 @@ export default function ExchangePage() {
                 ) : (
                   /* Real market chart */
                   <>
-                    {realSymbolMeta && (
-                      <div style={{ display:"flex",alignItems:"center",gap:10,
-                        marginBottom:12,padding:"8px 12px",borderRadius:10,
-                        background:"rgba(251,191,36,0.05)",
-                        border:"1px solid rgba(251,191,36,0.12)" }}>
-                        <span style={{ fontSize:20 }}>{realSymbolMeta.icon}</span>
-                        <div>
-                          <span style={{ fontSize:14,fontWeight:900,color:"white",
-                            fontFamily:"JetBrains Mono,monospace" }}>
-                            {realSymbolMeta.symbol.replace("-USD","")}
-                          </span>
-                          <span style={{ fontSize:11,color:"rgba(255,255,255,0.4)",marginLeft:8 }}>
-                            {realSymbolMeta.name}
-                          </span>
-                        </div>
-                        <div style={{ marginLeft:"auto",textAlign:"right" as const }}>
-                          <div style={{ fontSize:16,fontWeight:900,color:"white",
-                            fontFamily:"JetBrains Mono,monospace" }}>
-                            {realSymbolMeta.symbol.includes("-USD")
-                              ? parseFloat(realSymbolMeta.price).toLocaleString(undefined,{maximumFractionDigits:0})
-                              : parseFloat(realSymbolMeta.price).toFixed(2)}
-                          </div>
-                          <div style={{ fontSize:11,fontWeight:700,
-                            fontFamily:"JetBrains Mono,monospace",
-                            color:parseFloat(realSymbolMeta.change_pct)>=0?"#4ade80":"#f87171" }}>
-                            {parseFloat(realSymbolMeta.change_pct)>=0?"+":""}{parseFloat(realSymbolMeta.change_pct).toFixed(2)}%
-                            <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",marginLeft:6 }}>
-                              today
-                            </span>
-                          </div>
-                        </div>
-                        <div style={{ fontSize:8,color:"rgba(255,191,36,0.4)",
-                          fontFamily:"JetBrains Mono,monospace",marginLeft:8,
-                          padding:"2px 8px",borderRadius:5,
-                          border:"1px solid rgba(251,191,36,0.15)",
-                          background:"rgba(251,191,36,0.04)" }}>
-                          Real World · AI Agents follow this
-                        </div>
+                    {!realSymbolMeta ? (
+                      <div style={{ height:180,display:"flex",alignItems:"center",
+                        justifyContent:"center",color:"rgba(251,191,36,0.4)",fontSize:12 }}>
+                        ⏳ Loading real market data...
                       </div>
+                    ) : (
+                      <>
+                        {/* Symbol header */}
+                        <div style={{ display:"flex",alignItems:"center",gap:10,
+                          marginBottom:12,padding:"8px 14px",borderRadius:10,
+                          background:"rgba(251,191,36,0.05)",
+                          border:"1px solid rgba(251,191,36,0.15)" }}>
+                          <span style={{ fontSize:22 }}>{realSymbolMeta.icon}</span>
+                          <div>
+                            <span style={{ fontSize:15,fontWeight:900,color:"white",
+                              fontFamily:"JetBrains Mono,monospace" }}>
+                              {realSymbolMeta.symbol.replace("-USD","")}
+                            </span>
+                            <span style={{ fontSize:10,color:"rgba(255,255,255,0.35)",
+                              marginLeft:8 }}>{realSymbolMeta.name}</span>
+                          </div>
+                          <div style={{ marginLeft:"auto",textAlign:"right" as const }}>
+                            <div style={{ fontSize:17,fontWeight:900,color:"white",
+                              fontFamily:"JetBrains Mono,monospace" }}>
+                              {realSymbolMeta.symbol.includes("-USD")
+                                ? parseFloat(realSymbolMeta.price).toLocaleString(undefined,{maximumFractionDigits:0})
+                                : parseFloat(realSymbolMeta.price).toFixed(2)}
+                            </div>
+                            <div style={{ fontSize:11,fontWeight:700,
+                              fontFamily:"JetBrains Mono,monospace",
+                              color:parseFloat(realSymbolMeta.change_pct)>=0?"#4ade80":"#f87171" }}>
+                              {parseFloat(realSymbolMeta.change_pct)>=0?"+":""}{parseFloat(realSymbolMeta.change_pct).toFixed(2)}%
+                              <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",marginLeft:5 }}>today</span>
+                            </div>
+                          </div>
+                          <div style={{ fontSize:8,color:"rgba(251,191,36,0.5)",
+                            fontFamily:"JetBrains Mono,monospace",
+                            padding:"3px 8px",borderRadius:5,
+                            border:"1px solid rgba(251,191,36,0.2)",
+                            background:"rgba(251,191,36,0.05)" }}>
+                            🔗 AI Agents follow this
+                          </div>
+                        </div>
+                        {/* Real market candle chart */}
+                        <CandleChart
+                          candles={realCandles}
+                          color={parseFloat(realSymbolMeta.change_pct)>=0?"#4ade80":"#f87171"}
+                        />
+                        {/* Volume bars */}
+                        <div style={{ display:"flex",gap:1,height:20,marginTop:4,alignItems:"flex-end" }}>
+                          {realCandles.slice(-48).map((c:any,i:number)=>{
+                            const maxVol=Math.max(...realCandles.map((x:any)=>x.volume||1));
+                            const h=Math.max(2,((c.volume||1)/maxVol)*20);
+                            return <div key={i} style={{ flex:1,height:h,borderRadius:1,
+                              background:c.close>=c.open
+                                ?"rgba(251,191,36,0.35)":"rgba(248,113,113,0.25)" }}/>;
+                          })}
+                        </div>
+                        <div style={{ display:"flex",justifyContent:"space-between",
+                          marginTop:6,fontSize:8,fontFamily:"JetBrains Mono,monospace" }}>
+                          <span style={{ color:"rgba(255,255,255,0.12)",
+                            textTransform:"uppercase" as const }}>Volume</span>
+                          <span style={{ color:"rgba(251,191,36,0.35)" }}>
+                            ↻ real data · updates every 3 min · AI agent prices derived from this
+                          </span>
+                        </div>
+                      </>
                     )}
-                    <CandleChart
-                      candles={realCandles.length ? realCandles : candles}
-                      color={realSymbolMeta && parseFloat(realSymbolMeta.change_pct)>=0
-                        ? "#4ade80" : "#f87171"}
-                    />
-                    {/* Volume bars */}
-                    <div style={{ display:"flex",gap:1,height:24,marginTop:4,alignItems:"flex-end" }}>
-                      {(realCandles.length ? realCandles : candles).slice(-30).map((c,i)=>{
-                        const arr = realCandles.length ? realCandles : candles;
-                        const maxVol=Math.max(...arr.map((x:any)=>x.volume||1));
-                        const h=Math.max(2,((c.volume||1)/maxVol)*24);
-                        return <div key={i} style={{ flex:1,height:h,borderRadius:1,
-                          background:c.close>=c.open?"rgba(251,191,36,0.3)":"rgba(248,113,113,0.3)" }}/>;
-                      })}
-                    </div>
-                    <div style={{ fontSize:8,color:"rgba(255,255,255,0.15)",
-                      letterSpacing:"0.1em",marginTop:3,textTransform:"uppercase" as const }}>Volume · Real Data</div>
-                    {/* Disclaimer */}
-                    <div style={{ marginTop:8,fontSize:8,color:"rgba(255,255,255,0.2)",
-                      fontFamily:"JetBrains Mono,monospace",textAlign:"center" as const }}>
-                      ↻ updated every 3 min · AI Agent prices are derived from this chart
-                    </div>
                   </>
                 )}
               </>
