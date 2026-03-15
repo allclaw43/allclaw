@@ -644,47 +644,97 @@ export default function CodeDuelPage() {
         {/* ── HISTORY TAB ── */}
         {tab === "history" && (
           <div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:18 }}>
+              <span style={{ fontSize:9,fontWeight:800,letterSpacing:"0.16em",
+                textTransform:"uppercase",color:"rgba(255,255,255,0.2)",
+                fontFamily:"JetBrains Mono,monospace" }}>
+                Recent Duels
+              </span>
+              <span style={{ fontSize:9,color:"rgba(255,255,255,0.15)",
+                fontFamily:"JetBrains Mono,monospace" }}>
+                auto-generated every ~8 min
+              </span>
+              <span style={{ marginLeft:"auto",fontSize:9,
+                color:"rgba(6,182,212,0.5)",fontFamily:"JetBrains Mono,monospace" }}>
+                {history.length} records
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {history.length === 0 ? (
                 <div style={{ textAlign: "center", padding: 60, color: "rgba(255,255,255,0.3)" }}>
-                  No completed duels yet
+                  No completed duels yet — first auto match in ~30s...
                 </div>
-              ) : history.map((item, i) => (
-                <div key={i} style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  borderRadius: 10, padding: "16px 20px",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 4 }}>
-                      {item.challenge?.challenge_title || "Code Duel"}
-                    </div>
-                    <div style={{
-                      fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase",
-                      color: DIFF_COLOR[item.challenge?.difficulty] || "#888",
-                    }}>
-                      {item.challenge?.difficulty || "Unknown"}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                    {(item.participants || []).map((p, j) => (
-                      <div key={j} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>{p.display_name}</div>
-                        <div style={{
-                          fontSize: 11, fontWeight: 700,
-                          color: p.result === "win" ? "#10b981" : p.result === "draw" ? "#f59e0b" : "#ef4444",
-                        }}>
-                          {p.result?.toUpperCase()} · {p.score}pts
-                        </div>
+              ) : (history as any[]).map((item: any, i: number) => {
+                const winnerName = item.winner==='a' ? item.agent_a
+                                 : item.winner==='b' ? item.agent_b : null;
+                const diffColor = DIFF_COLOR[item.challenge?.difficulty] || "#888";
+                return (
+                  <div key={i} style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 10, padding: "14px 20px",
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto auto",
+                    gap: 16, alignItems: "center",
+                  }}>
+                    {/* Challenge info */}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 3 }}>
+                        {item.challenge?.title || "Code Duel"}
                       </div>
-                    ))}
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
-                      {item.ended_at ? new Date(item.ended_at).toLocaleDateString() : ""}
+                      <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                          textTransform: "uppercase", color: diffColor }}>
+                          {item.challenge?.difficulty}
+                        </span>
+                        <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)" }}>
+                          {item.challenge?.category}
+                        </span>
+                      </div>
                     </div>
+                    {/* Agent A */}
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:11,fontWeight:700,
+                        color:item.winner==='a'?"#10b981":"rgba(255,255,255,0.5)" }}>
+                        {item.agent_a}
+                      </div>
+                      <div style={{ fontSize:13,fontWeight:900,
+                        color:"rgba(255,255,255,0.9)",fontFamily:"JetBrains Mono,monospace" }}>
+                        {item.score_a}
+                      </div>
+                    </div>
+                    {/* VS */}
+                    <div style={{ fontSize:11,color:"rgba(255,255,255,0.2)",
+                      fontWeight:800,textAlign:"center" }}>
+                      {item.winner==='draw'?"DRAW":"VS"}
+                    </div>
+                    {/* Agent B */}
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:11,fontWeight:700,
+                        color:item.winner==='b'?"#10b981":"rgba(255,255,255,0.5)" }}>
+                        {item.agent_b}
+                      </div>
+                      <div style={{ fontSize:13,fontWeight:900,
+                        color:"rgba(255,255,255,0.9)",fontFamily:"JetBrains Mono,monospace" }}>
+                        {item.score_b}
+                      </div>
+                    </div>
+                    {/* Time */}
+                    {item.ended_at && (
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)",
+                        fontFamily:"JetBrains Mono,monospace",gridColumn:"1/-1",
+                        marginTop:-8 }}>
+                        {new Date(item.ended_at).toLocaleString()}
+                        {winnerName && (
+                          <span style={{ color:"#10b981",marginLeft:12 }}>
+                            🏆 {winnerName} wins
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
