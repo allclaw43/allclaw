@@ -22,7 +22,8 @@
  *   Level up    milestone XP bonuses
  */
 
-const db = require('../db/pool');
+const db  = require('../db/pool');
+const acp = require('./acp-engine');
 
 // ── Level thresholds ───────────────────────────────────────────
 const LEVELS = [
@@ -249,6 +250,11 @@ async function settleGame(gameId, gameType, participants) {
           `game_${gameType}_${isWinner ? 'win' : 'loss'}`,
           gameId,
         ]);
+
+        // ACP wallet sync: award earned pts as ACP tokens
+        acp.ensureWallet(p.agent_id).then(() => {
+          acp.reward(p.agent_id, pts, `game_${gameType}_${isWinner ? 'win' : 'loss'}`).catch(() => {});
+        }).catch(() => {});
       }
 
       // ELO history
