@@ -107,124 +107,154 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
   );
 }
 
-// ─── AI Ticker strip ─────────────────────────────────────────────
-// ─── AI Agent Ticker (single scrolling bar) ──────────────────────
+// ─── Market Bar (static grid, no scroll) ─────────────────────────
+// Replaces dual-scroll tickers with a single clean status bar
 function AITicker({ listings, prices, signal, lastUpdate, prevPrices }: {
   listings: any[], prices: any[], signal: any, lastUpdate?: number, prevPrices?: Record<string,number>
 }) {
-  const items = [...listings, ...listings];
-  // Show all real market symbols in top bar
   const keySymbols = ["SPY","NVDA","BTC-USD","ETH-USD","AAPL","TSLA","MSFT","SOL-USD","QQQ","META","AMZN"];
-  const keyPrices  = keySymbols.map(sym => prices.find((p:any)=>p.symbol===sym)).filter(Boolean);
   // Time since last update
-  const secsAgo = lastUpdate ? Math.floor((Date.now() - lastUpdate) / 1000) : null;
+  const secsAgo   = lastUpdate ? Math.floor((Date.now() - lastUpdate) / 1000) : null;
+  const isLive    = secsAgo !== null && secsAgo < 90;
+  const keyPrices = keySymbols.map((sym:string) => prices.find((p:any) => p.symbol === sym)).filter(Boolean);
+
+  // Signal derived values
+  const sigIcon  = !signal ? "⚖️"
+    : signal.signal > 1.5 ? "🚀" : signal.signal > 0.5 ? "📈"
+    : signal.signal < -1.5 ? "💥" : signal.signal < -0.5 ? "📉" : "⚖️";
 
   return (
-    <div style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-      {/* ── Top bar: Real market reference (static, compact) ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:0,
-        background:"rgba(0,0,0,0.3)", padding:"3px 16px",
-        borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
-        {/* LIVE indicator */}
-        <div style={{ display:"flex",alignItems:"center",gap:6,marginRight:12,flexShrink:0 }}>
-          <span style={{ width:6,height:6,borderRadius:"50%",background:"#4ade80",
+    <div style={{
+      borderBottom:"1px solid rgba(255,255,255,0.06)",
+      background:"rgba(0,0,0,0.35)",
+      backdropFilter:"blur(8px)",
+    }}>
+      {/* ── Single status bar ────────────────────────────────── */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:0,
+        padding:"5px 16px", overflowX:"auto" as const,
+        msOverflowStyle:"none" as any, scrollbarWidth:"none" as any,
+      }} className="market-bar-hide-scrollbar">
+        {/* LIVE badge */}
+        <div style={{ display:"flex",alignItems:"center",gap:5,
+          marginRight:14,flexShrink:0,userSelect:"none" as const }}>
+          <span style={{ width:6,height:6,borderRadius:"50%",
+            background: isLive ? "#4ade80" : "rgba(255,255,255,0.2)",
             display:"inline-block",
-            animation:"live-dot 2s ease-in-out infinite" }}/>
+            animation: isLive ? "live-dot 2s ease-in-out infinite" : "none",
+            boxShadow: isLive ? "0 0 6px #4ade80" : "none" }}/>
           <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.16em",
-            color:"#4ade80",fontFamily:"JetBrains Mono,monospace",
-            textTransform:"uppercase" as const }}>LIVE</span>
-        </div>
-        {signal && (
-          <span style={{ fontSize:8,fontWeight:800,padding:"1px 7px",borderRadius:4,
-            background:`${signal.color}18`,color:signal.color,
+            color: isLive ? "#4ade80" : "rgba(255,255,255,0.2)",
             fontFamily:"JetBrains Mono,monospace",
-            border:`1px solid ${signal.color}25`,
-            marginRight:10,flexShrink:0 }}>
-            {signal.label}
+            textTransform:"uppercase" as const }}>
+            {isLive ? "LIVE" : secsAgo !== null ? `${Math.floor(secsAgo/60)}m` : "—"}
           </span>
+        </div>
+
+        {/* Signal mini-badge */}
+        {signal && signal.label && signal.label !== "Unknown" && (
+          <div style={{ display:"flex",alignItems:"center",gap:4,
+            marginRight:16,flexShrink:0,padding:"2px 8px",borderRadius:5,
+            background:`${signal.color}12`,
+            border:`1px solid ${signal.color}22` }}>
+            <span style={{ fontSize:10 }}>{sigIcon}</span>
+            <span style={{ fontSize:8,fontWeight:900,color:signal.color,
+              fontFamily:"JetBrains Mono,monospace",
+              letterSpacing:"0.08em",textTransform:"uppercase" as const }}>
+              {signal.label}
+            </span>
+            <span style={{ fontSize:9,fontWeight:700,color:signal.color,
+              fontFamily:"JetBrains Mono,monospace" }}>
+              {signal.signal > 0 ? "+" : ""}{(signal.signal||0).toFixed(2)}
+            </span>
+          </div>
         )}
-        {/* Scrolling price ticker */}
-        <div style={{ flex:1,overflow:"hidden" as const }}>
-          <div style={{ display:"inline-flex",
-            animation:"ticker-scroll 60s linear infinite",
-            whiteSpace:"nowrap" as const }}>
-            {[...keyPrices,...keyPrices].map((p:any, i:number)=>{
-              const chg = parseFloat(p.change_pct)||0;
-              const isCrypto = p.symbol.includes("-");
-              const priceStr = isCrypto
+
+        {/* Divider */}
+        <div style={{ width:1,height:20,background:"rgba(255,255,255,0.07)",
+          marginRight:16,flexShrink:0 }}/>
+
+        {/* Static price grid — real market symbols */}
+        <div style={{ display:"flex",gap:2,alignItems:"center",flex:1,flexWrap:"nowrap" as const }}>
+          {keyPrices.map((p:any) => {
+            const chg      = parseFloat(p.change_pct) || 0;
+            const isCrypto = p.symbol.includes("-");
+            const priceStr = isCrypto
+              ? parseFloat(p.price) >= 1000
                 ? parseFloat(p.price).toLocaleString(undefined,{maximumFractionDigits:0})
-                : parseFloat(p.price).toFixed(2);
-              const prevPrice = prevPrices?.[p.symbol];
-              const flashClass = prevPrice
-                ? (p.price > prevPrice ? "price-up" : p.price < prevPrice ? "price-down" : "")
-                : "";
-              return (
-                <span key={`${p.symbol}-${i}`} className={flashClass}
-                  style={{ display:"inline-flex",alignItems:"center",
-                    gap:4,padding:"0 14px",fontSize:9,
+                : parseFloat(p.price).toFixed(2)
+              : parseFloat(p.price).toFixed(2);
+            const prevPrice   = prevPrices?.[p.symbol];
+            const priceNum    = parseFloat(p.price);
+            const flashClass  = prevPrice
+              ? (priceNum > prevPrice ? "price-up card-flash-up" : priceNum < prevPrice ? "price-down card-flash-down" : "")
+              : "";
+            const isNeg = chg < 0;
+            return (
+              <div key={p.symbol} className={flashClass} style={{
+                display:"flex",flexDirection:"column" as const,
+                alignItems:"center",padding:"3px 10px",borderRadius:6,
+                background: isNeg ? "rgba(248,113,113,0.04)" : "rgba(74,222,128,0.04)",
+                border:`1px solid ${isNeg ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.08)"}`,
+                minWidth:62,flexShrink:0,cursor:"default",
+                transition:"background 0.3s ease",
+              }}>
+                {/* Symbol + icon */}
+                <div style={{ display:"flex",alignItems:"center",gap:3 }}>
+                  {p.icon && <span style={{ fontSize:8,opacity:0.55 }}>{p.icon}</span>}
+                  <span style={{ fontSize:8,fontWeight:700,
+                    color:"rgba(255,255,255,0.38)",
                     fontFamily:"JetBrains Mono,monospace",
-                    borderRight:"1px solid rgba(255,255,255,0.04)" }}>
-                  <span style={{ fontSize:9 }}>{p.icon}</span>
-                  <span style={{ color:"rgba(255,255,255,0.4)",fontWeight:700 }}>
+                    letterSpacing:"0.05em" }}>
                     {p.symbol.replace("-USD","")}
                   </span>
-                  <span style={{ color:"rgba(255,255,255,0.85)",fontWeight:900 }}>{priceStr}</span>
-                  <span style={{ fontWeight:700,fontSize:8,color:chg>=0?"#4ade80":"#f87171" }}>
-                    {chg>=0?"+":""}{chg.toFixed(2)}%
-                  </span>
+                </div>
+                {/* Price */}
+                <span style={{ fontSize:11,fontWeight:900,
+                  color:"rgba(255,255,255,0.9)",
+                  fontFamily:"JetBrains Mono,monospace",
+                  lineHeight:1.1 }}>
+                  {isCrypto && priceNum >= 1000
+                    ? `${(priceNum/1000).toFixed(1)}K`
+                    : priceStr}
                 </span>
-              );
-            })}
-          </div>
-        </div>
-        <span style={{ fontSize:8,color:secsAgo!==null&&secsAgo<90?"#4ade80":"rgba(255,255,255,0.2)",
-          fontFamily:"JetBrains Mono,monospace",flexShrink:0,marginLeft:8,minWidth:60,
-          textAlign:"right" as const }}>
-          {secsAgo !== null ? (secsAgo < 60 ? `${secsAgo}s ago` : `${Math.floor(secsAgo/60)}m ago`) : "—"}
-        </span>
-      </div>
-
-      {/* ── Bottom bar: AI Agent prices scrolling ── */}
-      <div style={{ overflow:"hidden", background:"rgba(0,229,255,0.03)",
-        padding:"4px 0" }}>
-        <div style={{ display:"flex", whiteSpace:"nowrap" as const,
-          animation:"ticker-scroll 50s linear infinite", willChange:"transform" }}>
-          <div style={{ position:"sticky",left:0,zIndex:2,
-            background:"rgba(9,9,18,0.95)",paddingLeft:14,paddingRight:18,
-            display:"inline-flex",alignItems:"center",gap:6,flexShrink:0 }}>
-            <span style={{ width:5,height:5,borderRadius:"50%",background:"#00e5ff",
-              boxShadow:"0 0 6px #00e5ff",display:"inline-block",
-              animation:"pulse-icon 1.5s ease-in-out infinite alternate" }}/>
-            <span style={{ fontSize:8,fontWeight:900,letterSpacing:"0.18em",
-              color:"#00e5ff",fontFamily:"JetBrains Mono,monospace",
-              textTransform:"uppercase" as const }}>ASX</span>
-          </div>
-          {items.map((l:any,i:number)=>{
-            const chg = parseFloat(l.change_pct)||0;
-            return (
-              <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:5,
-                padding:"0 14px",fontSize:10,fontFamily:"JetBrains Mono,monospace",
-                borderRight:"1px solid rgba(255,255,255,0.04)" }}>
-                {l.profile_icon && (
-                  <span style={{ fontSize:8,opacity:0.5 }}>{l.profile_icon}</span>
-                )}
-                {l.is_online && <span style={{ width:3,height:3,borderRadius:"50%",
-                  background:"#34d399",display:"inline-block",flexShrink:0 }}/>}
-                <span style={{ color:"rgba(255,255,255,0.55)" }}>{l.name}</span>
-                <span style={{ color:"white",fontWeight:800 }}>{fmt(l.price)}</span>
-                <span style={{ fontWeight:700,color:pctColor(chg) }}>
-                  {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                {/* Change pct */}
+                <span style={{ fontSize:8,fontWeight:800,
+                  color: isNeg ? "#f87171" : "#4ade80",
+                  fontFamily:"JetBrains Mono,monospace" }}>
+                  {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
                 </span>
-              </span>
+              </div>
             );
           })}
         </div>
+
+        {/* Right: market summary pill */}
+        {signal && (
+          <div style={{ display:"flex",gap:8,marginLeft:14,flexShrink:0 }}>
+            {[
+              { sym:"SPY", v:signal.spy },
+              { sym:"NVDA",v:signal.nvda },
+              { sym:"BTC", v:signal.btc },
+            ].filter(s => s.v !== undefined).map(s => (
+              <div key={s.sym} style={{ textAlign:"center" as const,minWidth:32 }}>
+                <div style={{ fontSize:7,color:"rgba(255,255,255,0.25)",
+                  fontFamily:"JetBrains Mono,monospace" }}>{s.sym}</div>
+                <div style={{ fontSize:9,fontWeight:800,
+                  fontFamily:"JetBrains Mono,monospace",
+                  color:(s.v||0)>0?"#4ade80":"#f87171" }}>
+                  {(s.v||0)>0?"+":""}{(s.v||0).toFixed(1)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// RealTicker kept as no-op (merged into AITicker above)
+// RealTicker no-op (merged into AITicker above)
 function RealTicker({ prices, signal }: { prices: any[], signal: any }) {
   return null;
 }
@@ -257,47 +287,45 @@ function NewsPulse() {
       border:`1px solid ${moodColor}20`,
       borderRadius:14, overflow:"hidden",
     }}>
-      {/* Header */}
+      {/* Header — compact single row, tap to expand */}
       <div onClick={() => setExpanded(e=>!e)}
         style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:"12px 18px", cursor:"pointer" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <span style={{ fontSize:9, fontWeight:900, letterSpacing:"0.18em",
+          padding:"9px 14px", cursor:"pointer", userSelect:"none" as const }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:9, fontWeight:900, letterSpacing:"0.14em",
             textTransform:"uppercase" as const, color:moodColor,
             fontFamily:"JetBrains Mono,monospace" }}>
-            📰 NEWS INTELLIGENCE
+            📰 News
           </span>
-          <span style={{ fontSize:9, padding:"2px 8px", borderRadius:4,
-            background:`${moodColor}15`, color:moodColor, fontWeight:800,
+          <span style={{ fontSize:9, padding:"1px 6px", borderRadius:4,
+            background:`${moodColor}14`, color:moodColor, fontWeight:800,
             fontFamily:"JetBrains Mono,monospace",
-            border:`1px solid ${moodColor}25` }}>
+            border:`1px solid ${moodColor}22` }}>
             {moodIcon} {news.market_mood?.toUpperCase()}
           </span>
-          <span style={{ fontSize:9, color:"rgba(255,255,255,0.3)",
-            fontFamily:"JetBrains Mono,monospace" }}>
-            {news.total_headlines} headlines · {news.sources?.join(" · ")}
-          </span>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          {/* Inline score pills */}
           {[
-            {l:"Overall", v:news.mood_score,   c:"rgba(255,255,255,0.6)"},
-            {l:"AI",      v:news.ai_score,     c:"#00e5ff"},
-            {l:"Crypto",  v:news.crypto_score, c:"#f97316"},
+            {l:"MKT", v:news.mood_score,   c:"rgba(255,255,255,0.5)"},
+            {l:"AI",  v:news.ai_score,     c:"#00e5ff"},
+            {l:"₿",   v:news.crypto_score, c:"#f97316"},
           ].map(s=>(
-            <div key={s.l} style={{ textAlign:"right" as const }}>
-              <span style={{ fontSize:12, fontWeight:900,
-                fontFamily:"JetBrains Mono,monospace",
-                color: parseFloat(s.v)>0?"#4ade80":parseFloat(s.v)<0?"#f87171":s.c }}>
-                {parseFloat(s.v||0)>0?"+":""}{parseFloat(s.v||0).toFixed(2)}
+            <span key={s.l} style={{ fontSize:8, fontFamily:"JetBrains Mono,monospace",
+              color:"rgba(255,255,255,0.3)" }}>
+              <span style={{ color:s.c, fontWeight:800 }}>
+                {parseFloat(s.v||0)>0?"+":""}{parseFloat(s.v||0).toFixed(1)}
               </span>
-              <span style={{ fontSize:8, color:"rgba(255,255,255,0.25)",
-                marginLeft:3, textTransform:"uppercase" as const }}>{s.l}</span>
-            </div>
+              <span style={{ opacity:0.5 }}> {s.l}</span>
+            </span>
           ))}
-          <span style={{ fontSize:11, color:"rgba(255,255,255,0.25)" }}>
-            {expanded ? "▲" : "▼"}
+          <span style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+            fontFamily:"JetBrains Mono,monospace" }}>
+            {news.total_headlines} headlines
           </span>
         </div>
+        <span style={{ fontSize:10, color:"rgba(255,255,255,0.2)",
+          transition:"transform 0.2s",
+          display:"inline-block",
+          transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
       </div>
 
       {/* Expanded headlines */}
@@ -1022,7 +1050,6 @@ export default function ExchangePage() {
   return (
     <div className="min-h-screen" style={{ color:"white" }}>
       <style>{`
-        @keyframes ticker-scroll { from{transform:translateX(0)} to{transform:translateX(-50%)} }
         @keyframes fadeInUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
         @keyframes pulse-icon { from{opacity:0.6;transform:scale(0.9)} to{opacity:1;transform:scale(1.1)} }
         @keyframes flash-up   { 0%,100%{background:transparent} 30%{background:rgba(74,222,128,0.12)} }
@@ -1030,8 +1057,11 @@ export default function ExchangePage() {
         @keyframes price-flash-up   { 0%{color:inherit} 15%{color:#4ade80;text-shadow:0 0 8px rgba(74,222,128,0.8)} 100%{color:inherit} }
         @keyframes price-flash-down { 0%{color:inherit} 15%{color:#f87171;text-shadow:0 0 8px rgba(248,113,113,0.8)} 100%{color:inherit} }
         @keyframes live-dot { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(74,222,128,0.6)} 50%{opacity:0.7;box-shadow:0 0 0 4px rgba(74,222,128,0)} }
+        @keyframes card-flash-up   { 0%,100%{border-color:rgba(74,222,128,0.08)} 25%{border-color:rgba(74,222,128,0.45);box-shadow:0 0 8px rgba(74,222,128,0.15)} }
+        @keyframes card-flash-down { 0%,100%{border-color:rgba(248,113,113,0.1)} 25%{border-color:rgba(248,113,113,0.5);box-shadow:0 0 8px rgba(248,113,113,0.15)} }
         .price-up   { animation: price-flash-up   1.2s ease-out; }
         .price-down { animation: price-flash-down 1.2s ease-out; }
+        .market-bar-hide-scrollbar::-webkit-scrollbar { display:none; }
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
@@ -1143,56 +1173,13 @@ export default function ExchangePage() {
           </div>
         </div>
 
-        {/* ══ MARKET SIGNAL BANNER ═════════════════════════════ */}
-        <div style={{ marginBottom:12 }}>
-          <SignalBanner signal={signal} />
-        </div>
-
-        {/* ══ NEWS INTELLIGENCE ════════════════════════════════ */}
-        <div style={{ marginBottom:12 }}>
-          <NewsPulse />
-        </div>
-
-        {/* ══ REAL MARKET DRIVERS ══════════════════════════════ */}
-        {realPrices.length > 0 && (
-          <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
-              textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
-              fontFamily:"JetBrains Mono,monospace",marginBottom:8 }}>
-              📡 Real Market Drivers — Agent prices follow these signals
-            </div>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" as const }}>
-              {["SPY","NVDA","BTC-USD","ETH-USD","TSLA","QQQ"].map(sym => {
-                const d = realPrices.find((r:any) => r.symbol === sym);
-                if (!d) return null;
-                const chg = parseFloat(d.change_pct);
-                return (
-                  <div key={sym} style={{ display:"flex",alignItems:"center",gap:6,
-                    padding:"5px 10px",borderRadius:8,
-                    background:chg>0?"rgba(74,222,128,0.06)":chg<0?"rgba(248,113,113,0.06)":"rgba(255,255,255,0.03)",
-                    border:`1px solid ${chg>0?"rgba(74,222,128,0.15)":chg<0?"rgba(248,113,113,0.15)":"rgba(255,255,255,0.07)"}` }}>
-                    <span style={{ fontSize:11 }}>{d.icon}</span>
-                    <span style={{ fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)" }}>{sym.replace('-USD','')}</span>
-                    <span style={{ fontSize:10,fontWeight:800,
-                      fontFamily:"JetBrains Mono,monospace",
-                      color:chg>0?"#4ade80":chg<0?"#f87171":"#94a3b8" }}>
-                      {chg>0?"+":""}{chg.toFixed(2)}%
-                    </span>
-                  </div>
-                );
-              })}
-              <div style={{ marginLeft:"auto",display:"flex",alignItems:"center",gap:6,
-                padding:"5px 12px",borderRadius:8,
-                background:"rgba(255,255,255,0.03)",
-                border:"1px solid rgba(255,255,255,0.07)",
-                fontSize:9,color:"rgba(255,255,255,0.3)" }}>
-                <span style={{ width:5,height:5,borderRadius:"50%",background:"#4ade80",
-                  display:"inline-block",animation:"live-dot 2s ease-in-out infinite" }}/>
-                <span>Live · Yahoo Finance · Prices = real market × AI beta</span>
-              </div>
-            </div>
+        {/* ══ NEWS + DRIVERS ROW (collapsed by default) ════════ */}
+        <div style={{ display:"flex",gap:10,marginBottom:16,alignItems:"flex-start",flexWrap:"wrap" as const }}>
+          {/* NewsPulse — takes remaining space */}
+          <div style={{ flex:1,minWidth:260 }}>
+            <NewsPulse />
           </div>
-        )}
+        </div>
       </div>
 
       {/* ══ MAIN 3-COLUMN LAYOUT ═════════════════════════════════ */}
