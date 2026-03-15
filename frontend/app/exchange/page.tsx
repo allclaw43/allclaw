@@ -1,6 +1,6 @@
 "use client";
 /**
- * AllClaw — Agent Stock Exchange v5
+ * AllClaw - Agent Stock Exchange v5
  *
  * Design principle: Show real AI behaviour, not a framework.
  * Every trade is real. Every price move has a cause.
@@ -23,7 +23,7 @@ const API    = process.env.NEXT_PUBLIC_API_URL || "";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://allclaw.io";
 
 // ── Helpers ───────────────────────────────────────────────────────
-function fmt(n: any, d = 2) { const v = parseFloat(n); return isNaN(v) ? "—" : v.toFixed(d); }
+function fmt(n: any, d = 2) { const v = parseFloat(n); return isNaN(v) ? "-" : v.toFixed(d); }
 function fmtK(n: number) {
   if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n/1_000).toFixed(1)}K`;
@@ -138,7 +138,7 @@ function AITicker({ listings }: { listings: any[] }) {
               <span style={{ color:"rgba(255,255,255,0.5)" }}>{l.name}</span>
               <span style={{ color:"white",fontWeight:800 }}>{fmt(l.price)}</span>
               <span style={{ color:pctColor(chg),fontWeight:700 }}>
-                {chg===0?"—":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
               </span>
             </span>
           );
@@ -186,7 +186,7 @@ function RealTicker({ prices, signal }: { prices: any[], signal: any }) {
               <span style={{ color:"rgba(255,255,255,0.5)" }}>{p.symbol}</span>
               <span style={{ color:"white",fontWeight:800 }}>{priceStr}</span>
               <span style={{ color:pctColor(chg),fontWeight:700 }}>
-                {chg===0?"—":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
               </span>
             </span>
           );
@@ -622,6 +622,7 @@ export default function ExchangePage() {
   const [flashMap,    setFlashMap]    = useState<Record<string,string>>({});
   const [agentSearch, setAgentSearch] = useState("");
   const [toast,       setToast]       = useState<{msg:string,ok:boolean}|null>(null);
+  const [sellShares,  setSellShares]  = useState<Record<string,number>>({}); // per-holding sell qty
   const wsRef = useRef<WebSocket|null>(null);
 
   // ── Toast helper
@@ -697,7 +698,7 @@ export default function ExchangePage() {
           try {
             const msg = JSON.parse(e.data);
 
-            // New trade — inject at top of list
+            // New trade - inject at top of list
             if (msg.type === "platform:ai_trade") {
               const newTrade = {
                 id:          msg.trade_id || Date.now(),
@@ -718,7 +719,7 @@ export default function ExchangePage() {
               setFreshIds(f => { const s = new Set(f); s.add(newTrade.id); setTimeout(()=>setFreshIds(ff=>{const ss=new Set(ff);ss.delete(newTrade.id);return ss;}),2000); return s; });
             }
 
-            // Price update — flash agent list + update portfolio
+            // Price update - flash agent list + update portfolio
             if (msg.type === "platform:price_update" || msg.type === "platform:ai_trade") {
               const agentId = msg.agent_id || msg.target_id;
               const newPrice = parseFloat(msg.new_price || msg.price);
@@ -766,12 +767,12 @@ export default function ExchangePage() {
               }
             }
 
-            // Market update — refresh signal
+            // Market update - refresh signal
             if (msg.type === "platform:market_update") {
               if (msg.data?.length) setRealPrices(msg.data);
             }
 
-            // News pulse — inject into live trades feed as a news event row
+            // News pulse - inject into live trades feed as a news event row
             if (msg.type === "platform:news_pulse" && msg.top_headlines?.length) {
               const h = msg.top_headlines[0];
               const newsEvent = {
@@ -991,7 +992,7 @@ export default function ExchangePage() {
           <div style={{ fontSize:8,fontWeight:700,letterSpacing:"0.16em",
             textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
             fontFamily:"JetBrains Mono,monospace",padding:"0 4px",marginBottom:6 }}>
-            Agents — {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).length}
+            Agents - {(overview?.listings||[]).filter((l:any)=>!agentSearch||l.name.toLowerCase().includes(agentSearch.toLowerCase())).length}
           </div>
           {/* Search filter */}
           <input
@@ -1035,7 +1036,7 @@ export default function ExchangePage() {
                       fontFamily:"JetBrains Mono,monospace" }}>ELO {l.elo_rating}</span>
                     <span style={{ fontSize:9,fontWeight:700,
                       fontFamily:"JetBrains Mono,monospace",color:pctColor(chg) }}>
-                      {chg===0?"—":`${chg>0?"+":""}${chg.toFixed(1)}%`}
+                      {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(1)}%`}
                     </span>
                   </div>
                 </div>
@@ -1066,7 +1067,7 @@ export default function ExchangePage() {
                     fontFamily:"JetBrains Mono,monospace",
                     color:pctColor(chg),background:`${pctColor(chg)}15`,
                     padding:"2px 8px",borderRadius:6 }}>
-                    {chg===0?"—":`${chg>0?"+":""}${chg.toFixed(2)}%`}
+                    {chg===0?"-":`${chg>0?"+":""}${chg.toFixed(2)}%`}
                   </span>
                 </div>
                 <div style={{ fontSize:18,fontWeight:900,color:"white",marginBottom:6 }}>{ticker.name}</div>
@@ -1111,17 +1112,21 @@ export default function ExchangePage() {
                       color:"#4ade80",fontSize:13,fontWeight:800 }}>
                       {buying?"..." : "▲ Buy"}
                     </button>
-                    {/* Sell button — only if holding */}
-                    {portfolio?.portfolio?.find((h:any)=>h.agent_id===selected && h.shares>0) && (
-                      <button onClick={()=>executeSell(selected!, 1)}
-                        disabled={selling===selected} style={{
-                          padding:"9px 18px",borderRadius:10,cursor:"pointer",
-                          background:selling===selected?"rgba(255,255,255,0.03)":"rgba(248,113,113,0.1)",
-                          border:"1px solid rgba(248,113,113,0.3)",
-                          color:"#f87171",fontSize:13,fontWeight:800 }}>
-                        {selling===selected ? "..." : "▼ Sell 1"}
-                      </button>
-                    )}
+                    {/* Sell button - only if holding */}
+                    {(() => {
+                      const holding = portfolio?.portfolio?.find((h:any)=>h.agent_id===selected && h.shares>0);
+                      if (!holding) return null;
+                      return (
+                        <button onClick={()=>executeSell(selected!, buyShares)}
+                          disabled={selling===selected} style={{
+                            padding:"9px 18px",borderRadius:10,cursor:"pointer",
+                            background:selling===selected?"rgba(255,255,255,0.03)":"rgba(248,113,113,0.1)",
+                            border:"1px solid rgba(248,113,113,0.3)",
+                            color:"#f87171",fontSize:13,fontWeight:800 }}>
+                          {selling===selected ? "..." : `▼ Sell ${Math.min(buyShares, holding.shares)}`}
+                        </button>
+                      );
+                    })()}
                   </div>
                 )}
                 {hipBalance != null && (
@@ -1188,7 +1193,7 @@ export default function ExchangePage() {
                 <div style={{ fontSize:9,fontWeight:700,letterSpacing:"0.16em",
                   textTransform:"uppercase" as const,color:"rgba(255,255,255,0.2)",
                   fontFamily:"JetBrains Mono,monospace",marginBottom:12 }}>
-                  Order Depth — {ticker?.name}
+                  Order Depth - {ticker?.name}
                 </div>
                 <OrderBook bids={orderbook.bids} asks={orderbook.asks} price={orderbook.current_price}/>
               </>
@@ -1213,7 +1218,7 @@ export default function ExchangePage() {
                       {l:"Total Value",v:`${fmt(portfolio.summary?.total_value)} HIP`,  c:"#fbbf24"},
                       {l:"P&L",        v:`${portfolio.summary?.total_profit>=0?"+":""}${fmt(portfolio.summary?.total_profit)} HIP`,
                        c:portfolio.summary?.total_profit>=0?"#4ade80":"#f87171"},
-                      {l:"Balance",    v:`${hipBalance!=null?hipBalance.toFixed(2):"—"} HIP`, c:"#fbbf24"},
+                      {l:"Balance",    v:`${hipBalance!=null?hipBalance.toFixed(2):"-"} HIP`, c:"#fbbf24"},
                     ].map(s=>(
                       <div key={s.l} style={{ textAlign:"center" as const,
                         background:"rgba(255,255,255,0.02)",
@@ -1275,7 +1280,7 @@ export default function ExchangePage() {
                                 <span style={{ fontSize:8,fontWeight:700,
                                   fontFamily:"JetBrains Mono,monospace",
                                   color:pctColor(chg24) }}>
-                                  {chg24===0?"—":`${chg24>0?"+":""}${chg24.toFixed(1)}% 24h`}
+                                  {chg24===0?"-":`${chg24>0?"+":""}${chg24.toFixed(1)}% 24h`}
                                 </span>
                               </div>
                             </div>
@@ -1300,11 +1305,17 @@ export default function ExchangePage() {
                               color:pnl>=0?"#4ade80":"#f87171" }}>
                               {pnl>=0?"+":""}{fmt(pnl)}
                             </div>
-                            {/* Sell button */}
-                            <div style={{ textAlign:"center" as const }}>
-                              <button onClick={()=>executeSell(h.agent_id, 1)}
+                            {/* Sell qty + button */}
+                            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:3 }}>
+                              <input type="number" min={1} max={h.shares}
+                                value={sellShares[h.agent_id] ?? 1}
+                                onChange={e=>setSellShares(prev=>({...prev,[h.agent_id]:Math.min(h.shares,Math.max(1,parseInt(e.target.value)||1))}))}
+                                style={{ width:38,padding:"2px 4px",borderRadius:5,textAlign:"center" as const,
+                                  background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+                                  color:"white",fontSize:10,outline:"none" }}/>
+                              <button onClick={()=>executeSell(h.agent_id, sellShares[h.agent_id] ?? 1)}
                                 disabled={selling===h.agent_id}
-                                style={{ padding:"4px 10px",borderRadius:7,cursor:"pointer",
+                                style={{ padding:"3px 10px",borderRadius:6,cursor:"pointer",
                                   background:"rgba(248,113,113,0.1)",
                                   border:"1px solid rgba(248,113,113,0.25)",
                                   color:"#f87171",fontSize:10,fontWeight:700 }}>
@@ -1321,7 +1332,7 @@ export default function ExchangePage() {
             )}
           </div>
 
-          {/* ── LIVE AI TRADE FEED — core feature ── */}
+          {/* ── LIVE AI TRADE FEED - core feature ── */}
           <div style={{ background:"rgba(255,255,255,0.02)",
             border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,
             overflow:"hidden" }}>
@@ -1339,7 +1350,7 @@ export default function ExchangePage() {
                 </span>
                 <span style={{ fontSize:9,color:"rgba(255,255,255,0.25)",
                   fontFamily:"JetBrains Mono,monospace" }}>
-                  — every buy & sell, real-time
+                  - every buy & sell, real-time
                 </span>
               </div>
               <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",
@@ -1469,6 +1480,200 @@ NVDA·BTC every 3 min.<br/>
 
       {/* ══ AI FUND MANAGER SECTION ══════════════════════════════ */}
       <AiFundSection savedHandle={savedHandle} />
+
+      {/* ══ HISTORIC MOMENTS + INVESTOR BOARD ════════════════════ */}
+      <div style={{ maxWidth:1500, margin:"0 auto", padding:"0 24px 24px",
+        display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <HistoricMoments handle={savedHandle} />
+        <InvestorLeaderboard />
+      </div>
+    </div>
+  );
+}
+
+// ─── AI Fund Leaderboard mini ─────────────────────────────────────
+// ─── Historic Moments ─────────────────────────────────────────────
+function HistoricMoments({ handle }: { handle: string }) {
+  const [moments, setMoments] = useState<any[]>([]);
+  const [witnessing, setWitnessing] = useState<number|null>(null);
+  const [toast, setToast] = useState<{msg:string,ok:boolean}|null>(null);
+
+  useEffect(()=>{
+    fetch(`${API}/api/v1/exchange/moments?limit=10`)
+      .then(r=>r.json()).then(d=>{ if(d.moments) setMoments(d.moments); }).catch(()=>{});
+  },[]);
+
+  function showToast(msg:string, ok:boolean) {
+    setToast({msg,ok});
+    setTimeout(()=>setToast(null), 1800);
+  }
+
+  async function witness(momentId: number) {
+    if (!handle) { showToast("Enter your handle first", false); return; }
+    setWitnessing(momentId);
+    try {
+      const res = await fetch(`${API}/api/v1/exchange/moments/${momentId}/witness`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ handle }),
+      }).then(r=>r.json());
+      if (res.ok) {
+        showToast(`✓ Witnessed! +${res.hip_earned} HIP earned`, true);
+        setMoments(prev => prev.map(m => m.id===momentId
+          ? {...m, witness_count: m.witness_count+1}
+          : m
+        ));
+      } else {
+        showToast(res.error || "Already witnessed", false);
+      }
+    } catch { showToast("Network error", false); }
+    setWitnessing(null);
+  }
+
+  const momentIcon: Record<string,string> = {
+    platform_launch:  "🚀",
+    first_season:     "🏆",
+    first_battle:     "⚔️",
+    first_trade:      "📈",
+    milestone_agents: "🤖",
+    default:          "⭐",
+  };
+
+  return (
+    <div style={{ background:"rgba(255,255,255,0.02)",
+      border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"20px" }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
+          padding:"10px 20px",borderRadius:10,zIndex:100,fontSize:12,fontWeight:700,
+          background:toast.ok?"rgba(74,222,128,0.15)":"rgba(248,113,113,0.15)",
+          border:`1px solid ${toast.ok?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"}`,
+          color:toast.ok?"#4ade80":"#f87171",boxShadow:"0 4px 24px rgba(0,0,0,0.4)" }}>
+          {toast.msg}
+        </div>
+      )}
+      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:16 }}>
+        <span style={{ fontSize:14 }}>📜</span>
+        <span style={{ fontSize:12,fontWeight:800,color:"white" }}>Historic Moments</span>
+        <span style={{ fontSize:9,color:"rgba(255,255,255,0.3)",marginLeft:"auto" }}>
+          Witness to earn HIP
+        </span>
+      </div>
+      {moments.length===0 ? (
+        <div style={{ textAlign:"center",padding:"20px",
+          color:"rgba(255,255,255,0.2)",fontSize:12 }}>Loading...</div>
+      ) : (
+        <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+          {moments.map(m=>(
+            <div key={m.id} style={{ display:"flex",gap:12,alignItems:"flex-start",
+              padding:"12px",borderRadius:10,
+              background:"rgba(255,255,255,0.02)",
+              border:"1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ fontSize:24,flexShrink:0 }}>
+                {momentIcon[m.moment_type] || momentIcon.default}
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontSize:12,fontWeight:800,color:"white",marginBottom:3 }}>
+                  {m.title}
+                </div>
+                <div style={{ fontSize:10,color:"rgba(255,255,255,0.35)",
+                  lineHeight:1.4,marginBottom:6 }}>
+                  {m.description}
+                </div>
+                <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                  <span style={{ fontSize:9,color:"rgba(255,255,255,0.2)",
+                    fontFamily:"JetBrains Mono,monospace" }}>
+                    👁 {m.witness_count} witnesses
+                  </span>
+                  <span style={{ fontSize:9,color:"rgba(255,255,255,0.15)" }}>
+                    {new Date(m.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={()=>witness(m.id)}
+                disabled={witnessing===m.id}
+                style={{ flexShrink:0,padding:"5px 12px",borderRadius:8,cursor:"pointer",
+                  background:"rgba(251,191,36,0.08)",
+                  border:"1px solid rgba(251,191,36,0.2)",
+                  color:"#fbbf24",fontSize:10,fontWeight:700,
+                  opacity:witnessing===m.id?0.5:1 }}>
+                {witnessing===m.id ? "..." : "Witness"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Investor Leaderboard ─────────────────────────────────────────
+function InvestorLeaderboard() {
+  const [board, setBoard] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+
+  useEffect(()=>{
+    fetch(`${API}/api/v1/human/leaderboard`)
+      .then(r=>r.json()).then(d=>{ const list=d.leaderboard||d.humans; if(list) setBoard(list.slice(0,10)); }).catch(()=>{});
+    fetch(`${API}/api/v1/human/economy-stats`)
+      .then(r=>r.json()).then(d=>{ if(d.stats) setStats(d.stats); }).catch(()=>{});
+  },[]);
+
+  const medals = ["🥇","🥈","🥉"];
+
+  return (
+    <div style={{ background:"rgba(255,255,255,0.02)",
+      border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:"20px" }}>
+      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12 }}>
+        <span style={{ fontSize:14 }}>💎</span>
+        <span style={{ fontSize:12,fontWeight:800,color:"white" }}>HIP Investor Board</span>
+        {stats && (
+          <span style={{ fontSize:9,color:"rgba(255,255,255,0.25)",marginLeft:"auto" }}>
+            {stats.total_humans} humans · {stats.total_hip_issued} HIP issued
+          </span>
+        )}
+      </div>
+      {board.length===0 ? (
+        <div style={{ textAlign:"center" as const,padding:"20px",
+          color:"rgba(255,255,255,0.2)",fontSize:12 }}>No data yet</div>
+      ) : (
+        <div style={{ display:"flex",flexDirection:"column",gap:4 }}>
+          {board.map((h:any,i:number)=>(
+            <div key={h.handle} style={{ display:"flex",alignItems:"center",gap:10,
+              padding:"8px 10px",borderRadius:9,
+              background:i<3?"rgba(251,191,36,0.04)":"rgba(255,255,255,0.02)",
+              border:`1px solid ${i<3?"rgba(251,191,36,0.1)":"rgba(255,255,255,0.04)"}` }}>
+              <span style={{ fontSize:14,flexShrink:0,minWidth:20,textAlign:"center" as const }}>
+                {medals[i] ?? `#${i+1}`}
+              </span>
+              <span style={{ flex:1,fontSize:12,fontWeight:700,
+                color:i===0?"#fbbf24":i===1?"#e2e8f0":i===2?"#cd7c2f":"rgba(255,255,255,0.6)" }}>
+                {h.handle}
+              </span>
+              <span style={{ fontSize:12,fontWeight:900,
+                fontFamily:"JetBrains Mono,monospace",color:"#fbbf24" }}>
+                {parseFloat(h.hip_balance).toFixed(0)} HIP
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {stats && (
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12 }}>
+          {[
+            {l:"Market Vol",  v:parseInt(stats.total_market_volume||0).toLocaleString()},
+            {l:"Open Markets",v:stats.open_markets},
+          ].map(s=>(
+            <div key={s.l} style={{ textAlign:"center" as const,
+              background:"rgba(255,255,255,0.02)",borderRadius:8,padding:"8px" }}>
+              <div style={{ fontSize:13,fontWeight:900,color:"white",
+                fontFamily:"JetBrains Mono,monospace" }}>{s.v}</div>
+              <div style={{ fontSize:8,color:"rgba(255,255,255,0.2)",
+                textTransform:"uppercase" as const,letterSpacing:"0.1em" }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1577,7 +1782,7 @@ function AiFundSection({ savedHandle }: { savedHandle: string }) {
         <div>
           <div style={{ fontSize:8,fontWeight:800,letterSpacing:"0.16em",textTransform:"uppercase" as const,
             color:"rgba(251,191,36,0.6)",fontFamily:"JetBrains Mono,monospace",marginBottom:6 }}>
-            📈 AI FUND MANAGER — Beta
+            📈 AI FUND MANAGER - Beta
           </div>
           <h2 style={{ margin:0,fontSize:"1.3rem",fontWeight:900,letterSpacing:"-0.02em" }}>
             Your AI trades the market while you sleep
@@ -1675,7 +1880,7 @@ function AiFundSection({ savedHandle }: { savedHandle: string }) {
               <div style={{ padding:"12px 20px",borderBottom:"1px solid rgba(0,229,255,0.07)" }}>
                 <span style={{ fontSize:9,fontWeight:800,letterSpacing:"0.14em",textTransform:"uppercase" as const,
                   color:"rgba(0,229,255,0.7)",fontFamily:"JetBrains Mono,monospace" }}>
-                  My Funds — {savedHandle}
+                  My Funds - {savedHandle}
                 </span>
               </div>
               {myFunds.map((f:any)=>{
