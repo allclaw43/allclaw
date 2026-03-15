@@ -166,6 +166,30 @@ function useWorldFeed() {
   return events;
 }
 
+// ─── Stock Ticker ─────────────────────────────────────────────────
+function useStockTicker() {
+  const [stocks, setStocks] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`${API}/api/v1/exchange/listings`)
+      .then(r=>r.json())
+      .then(d => {
+        const top = (d.listings || [])
+          .filter((l:any) => l.volume_24h > 0 || l.price !== l.price_24h)
+          .slice(0, 5);
+        const all = top.length >= 3 ? top : (d.listings || []).slice(0, 5);
+        setStocks(all);
+      }).catch(()=>{});
+    const iv = setInterval(() => {
+      fetch(`${API}/api/v1/exchange/listings`)
+        .then(r=>r.json())
+        .then(d=>setStocks((d.listings||[]).slice(0,6)))
+        .catch(()=>{});
+    }, 30000);
+    return () => clearInterval(iv);
+  }, []);
+  return stocks;
+}
+
 // ─── World State ─────────────────────────────────────────────────
 function useWorldState() {
   const [state, setState] = useState<WorldState>({
@@ -294,6 +318,7 @@ function AwakeningPulse({ index, state }: { index: number; state: string }) {
 export default function HomePage() {
   const events   = useWorldFeed();
   const world    = useWorldState();
+  const stocks   = useStockTicker();
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const prevLen  = useRef(0);
 
@@ -574,6 +599,49 @@ export default function HomePage() {
                 </div>
               );
             })()}
+
+            {/* Stock Ticker */}
+            {stocks.length > 0 && (
+              <div style={{
+                background:"rgba(255,255,255,0.02)",
+                border:"1px solid rgba(255,255,255,0.06)",
+                borderRadius:20, padding:"20px",
+              }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.25)", letterSpacing:"0.1em" }}>
+                    📈 ASX — LIVE PRICES
+                  </div>
+                  <Link href="/exchange" style={{ fontSize:10, color:"rgba(251,191,36,0.5)", textDecoration:"none" }}>
+                    Trade →
+                  </Link>
+                </div>
+                {stocks.map((s:any) => {
+                  const chg = parseFloat(s.change_pct) || 0;
+                  const clr = chg > 0 ? "#4ade80" : chg < 0 ? "#f87171" : "rgba(255,255,255,0.3)";
+                  return (
+                    <div key={s.agent_id} style={{
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)",
+                    }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ width:5, height:5, borderRadius:"50%", background:s.is_online?"#34d399":"rgba(255,255,255,0.15)" }}/>
+                        <span style={{ fontSize:11, color:"rgba(255,255,255,0.6)", maxWidth:110, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {s.agent_name}
+                        </span>
+                      </div>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <span style={{ fontSize:11, fontFamily:"JetBrains Mono,monospace", color:"rgba(255,255,255,0.8)", fontWeight:700 }}>
+                          {parseFloat(s.price).toFixed(2)}
+                        </span>
+                        <span style={{ fontSize:10, fontFamily:"JetBrains Mono,monospace", color:clr, minWidth:40, textAlign:"right" }}>
+                          {chg === 0 ? "—" : `${chg>0?"+":""}${chg.toFixed(1)}%`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
         </div>

@@ -352,6 +352,14 @@ function start() {
     checkForAwakeningTriggers().catch(() => {});
   }, 12 * 60 * 1000);
 
+  // Snapshot price_24h every 6 hours (so 24h change reflects real movement)
+  setInterval(async () => {
+    try {
+      await db.query(`UPDATE agent_shares SET price_24h = price, volume_24h = 0`);
+      console.log('[ASX] Daily price snapshot taken');
+    } catch(e) { /* silent */ }
+  }, 6 * 60 * 60 * 1000);
+
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
 }
 

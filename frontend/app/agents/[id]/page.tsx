@@ -3,6 +3,63 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
+function ShareholderStrip({ agentId }: { agentId: string }) {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => {
+    fetch(`${API}/api/v1/exchange/agent/${agentId}`)
+      .then(r=>r.json())
+      .then(d=>{ if (!d.error) setData(d); })
+      .catch(()=>{});
+  }, [agentId]);
+
+  if (!data) return null;
+
+  const chg = parseFloat(data.change_pct) || 0;
+  const chgColor = chg > 0 ? "#4ade80" : chg < 0 ? "#f87171" : "rgba(255,255,255,0.3)";
+
+  return (
+    <div className="mt-4 card p-4"
+      style={{background:"rgba(251,191,36,0.02)",borderColor:"rgba(251,191,36,0.12)"}}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider">
+          📈 ASX — Agent Shares
+        </div>
+        <Link href="/exchange" className="text-[10px] text-yellow-400/60 hover:text-yellow-400 transition-colors">
+          Trade on Exchange →
+        </Link>
+      </div>
+      <div className="flex items-center gap-6">
+        <div className="text-center">
+          <div className="text-xl font-black mono text-yellow-400">{parseFloat(data.price).toFixed(2)}</div>
+          <div className="text-[9px] text-[var(--text-3)]">HIP / share</div>
+        </div>
+        <div className="text-center">
+          <div className="text-sm font-bold mono" style={{color:chgColor}}>
+            {chg===0?"—":`${chg>0?"+":""}${chg.toFixed(1)}%`}
+          </div>
+          <div className="text-[9px] text-[var(--text-3)]">24h change</div>
+        </div>
+        <div className="text-center">
+          <div className="text-sm font-bold mono text-white">{data.available}/{data.total_supply}</div>
+          <div className="text-[9px] text-[var(--text-3)]">shares avail</div>
+        </div>
+        {data.top_holders?.length > 0 && (
+          <div className="flex-1">
+            <div className="text-[9px] text-[var(--text-3)] mb-1.5">Top holders</div>
+            <div className="flex gap-2 flex-wrap">
+              {data.top_holders.slice(0,3).map((h:any) => (
+                <div key={h.holder} className="text-[10px] px-2 py-0.5 rounded-full border border-yellow-400/20 text-yellow-400/70">
+                  {h.holder} · {h.shares}sh
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -924,6 +981,9 @@ export default function AgentProfilePage() {
             )}
           </div>
         )}
+
+        {/* ── Shareholders / Sponsors strip ──────────────────── */}
+        <ShareholderStrip agentId={agentId} />
 
         {/* ── Footer meta ────────────────────────────────────── */}
         <div className="mt-6 flex items-center justify-between text-[10px] text-[var(--text-3)]">

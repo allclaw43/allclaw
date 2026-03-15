@@ -39,9 +39,26 @@ async function updateSharePrice(agentId) {
       `UPDATE agent_shares SET price=$1, last_trade=NOW() WHERE agent_id=$2`,
       [parseFloat(newPrice.toFixed(2)), agentId]
     );
+    // Broadcast price change to WS
+    if (_broadcast && newPrice) {
+      const { rows: [a] } = await db.query(
+        `SELECT COALESCE(custom_name,display_name) AS name FROM agents WHERE agent_id=$1`, [agentId]
+      ).catch(()=>({ rows:[] }));
+      _broadcast({
+        type: 'platform:price_update',
+        agent_id: agentId,
+        agent_name: a?.name,
+        new_price: parseFloat(newPrice.toFixed(2)),
+        timestamp: Date.now(),
+      });
+    }
     return newPrice;
   } catch(e) { /* silent */ }
 }
+
+// Broadcast price change to WS clients
+let _broadcast = null;
+function setBroadcast(fn) { _broadcast = fn; }
 
 module.exports = async function exchangeRoutes(fastify) {
 
@@ -300,3 +317,4 @@ module.exports = async function exchangeRoutes(fastify) {
 };
 
 module.exports.updateSharePrice = updateSharePrice;
+module.exports.setBroadcast = setBroadcast;
