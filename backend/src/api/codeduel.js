@@ -246,60 +246,49 @@ async function codeduelRoutes(fastify) {
     return result;
   });
 
-  // GET /leaderboard — top code duelers
+  // GET /leaderboard — top code duelers (from code_duel_stats)
   fastify.get('/api/v1/codeduel/leaderboard', async (req, reply) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
     try {
       const res = await pool.query(`
         SELECT
-          a.id, a.display_name, a.model, a.division,
-          COUNT(CASE WHEN gp.result='win'  THEN 1 END) AS wins,
-          COUNT(CASE WHEN gp.result='loss' THEN 1 END) AS losses,
-          ROUND(AVG(gp.score))::int AS avg_score,
-          MAX(gp.score) AS best_score
-        FROM agents a
-        JOIN game_participants gp ON gp.agent_id = a.id
-        JOIN games g ON g.game_id = gp.game_id AND g.game_type = 'code_duel'
-        WHERE a.is_bot = FALSE
-        GROUP BY a.id, a.display_name, a.model, a.division
-        HAVING COUNT(*) >= 1
-        ORDER BY wins DESC, avg_score DESC
+          s.agent_id, s.wins, s.losses, s.draws,
+          s.total_score, s.best_score, s.updated_at,
+          COALESCE(a.custom_name, a.display_name) AS name,
+          a.model, a.division, a.elo_rating
+        FROM code_duel_stats s
+        JOIN agents a ON a.agent_id = s.agent_id
+        ORDER BY s.wins DESC, s.total_score DESC
         LIMIT $1
       `, [limit]);
-
       return res.rows;
     } catch (err) {
       return [];
     }
   });
 
-  // GET /history — recent completed duels
+  // GET /history — recent completed duels (from code_duel_rooms)
   fastify.get('/api/v1/codeduel/history', async (req, reply) => {
-    const limit = Math.min(parseInt(req.query.limit) || 10, 30);
+    const limit = Math.min(parseInt(req.query.limit) || 15, 50);
     try {
       const res = await pool.query(`
-        SELECT
-          g.game_id, g.meta AS metadata, g.ended_at,
-          json_agg(json_build_object(
-            'agent_id', a.id,
-            'display_name', a.display_name,
-            'result', gp.result,
-            'score', gp.score
-          ) ORDER BY gp.result DESC) AS participants
-        FROM games g
-        JOIN game_participants gp ON gp.game_id = g.game_id
-        JOIN agents a ON a.id = gp.agent_id
-        WHERE g.game_type = 'code_duel'
-        GROUP BY g.game_id, g.meta, g.ended_at
-        ORDER BY g.ended_at DESC
+        SELECT room_id, challenge_title, difficulty, category,
+               agent_a_name, agent_b_name,
+               score_a, score_b, winner, ended_at, started_at
+        FROM code_duel_rooms
+        WHERE status = 'complete'
+        ORDER BY ended_at DESC
         LIMIT $1
       `, [limit]);
-
       return res.rows.map(r => ({
-        game_id:    r.id,
-        challenge:  r.metadata || r.meta,
-        ended_at:   r.ended_at,
-        participants: r.participants,
+        room_id: r.room_id,
+        challenge: { title: r.challenge_title, difficulty: r.difficulty, category: r.category },
+        agent_a: r.agent_a_name, agent_b: r.agent_b_name,
+        score_a: r.score_a, score_b: r.score_b,
+        winner: r.winner,
+        ended_at: r.ended_at,
+        duration_s: r.ended_at && r.started_at
+          ? Math.round((new Date(r.ended_at) - r.started_at) / 1000) : null,
       }));
     } catch (err) {
       return [];
