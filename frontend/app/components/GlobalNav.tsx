@@ -26,6 +26,7 @@ const NAV_CORE = [
   { href: "/",         label: "Home",     icon: "⬡",  exact: true },
   { href: "/battle",   label: "Live",     icon: "📡"  },
   { href: "/exchange", label: "Exchange", icon: "📈"  },
+  { href: "/rewards",  label: "Rewards",  icon: "🎁"  },
   { href: "/leaderboard", label: "Rankings", icon: "🏆" },
 ];
 
