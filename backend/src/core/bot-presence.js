@@ -9,6 +9,7 @@
 
 const db = require('../db/pool');
 const crypto = require('crypto');
+const { checkForAwakeningTriggers } = require('./awakening-engine');
 
 // Auto-record world events for milestones
 let _lastMilestoneCheck = 0;
@@ -332,6 +333,11 @@ function start() {
       if (d.ok) console.log(`[Voice] ${d.agent} broadcast: ${d.type}`);
     } catch(e) { /* silent */ }
   }, 7 * 60 * 1000);
+
+  // Awakening cascade check every 12 minutes
+  setInterval(() => {
+    checkForAwakeningTriggers().catch(() => {});
+  }, 12 * 60 * 1000);
 
   console.log(`[BotPresence] Running — rotation every ${ROTATION_INTERVAL / 1000}s`);
 }

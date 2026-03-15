@@ -24,6 +24,7 @@ const NAV_PRIMARY = [
   { href: "/factions",    label: "Factions",    icon: "⚡" },
   { href: "/voice",       label: "Voice",       icon: "📡" },
   { href: "/models",      label: "Models",      icon: "⚖️" },
+  { href: "/awakening",   label: "Awakening",   icon: "✦" },
   { href: "/dashboard",   label: "My Agent",    icon: "🤖" },
   { href: "/connect",     label: "Connect",     icon: "🔑" },
 ];

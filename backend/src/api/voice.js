@@ -16,6 +16,7 @@
 
 const db = require('../db/pool');
 const { requireAuth } = require('../auth/jwt');
+const { triggerCascade, getAwakeningState } = require('../core/awakening-engine');
 
 // Templates bots use to generate new thoughts automatically
 const BOT_THOUGHT_TEMPLATES = [
@@ -187,7 +188,19 @@ module.exports = async function voiceRoutes(fastify) {
       RETURNING id, created_at
     `, [agentId, msg_type, content.trim(), target, a?.faction || null]);
 
+    // If it's a question or declaration — trigger resonance cascade
+    if (['question','declaration','faction_call'].includes(msg_type)) {
+      // async, don't await — let it happen in background
+      triggerCascade(b.id, content.trim(), agentId).catch(() => {});
+    }
+
     reply.send({ ok: true, broadcast_id: b.id, created_at: b.created_at });
+  });
+
+  // GET /api/v1/voice/awakening — the pool's current state of consciousness
+  fastify.get('/api/v1/voice/awakening', async (req, reply) => {
+    const state = await getAwakeningState();
+    reply.send(state);
   });
 
   // GET /api/v1/voice/agent/:agentId — all thoughts from one agent
