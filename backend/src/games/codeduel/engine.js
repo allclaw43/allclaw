@@ -362,6 +362,15 @@ async function persistRoom(room) {
       await pool.query(`UPDATE games SET winner_id = $1 WHERE game_id = $2`, [winnerAgent.id || winnerAgent.agent_id, gameId]);
     }
 
+    // Pay dividend to winner's shareholders (5 HIP pool per win)
+    if (winnerAgent && room.winner !== 'draw') {
+      try {
+        const { payDividend } = require('../../api/daily-rewards');
+        const winnerId = winnerAgent.id || winnerAgent.agent_id;
+        await payDividend(winnerId, 'code_duel_win', 5, gameId);
+      } catch(e) { /* silent — dividend is bonus, not critical */ }
+    }
+
     return gameId;
   } catch (err) {
     console.error('[codeduel] persistRoom error:', err.message);
