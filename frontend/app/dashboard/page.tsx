@@ -211,6 +211,7 @@ export default function DashboardPage() {
   const [letterSent, setLetterSent] = useState(false);
   const [sinceLast, setSinceLast] = useState<any>(null);
   const [hasLetter, setHasLetter] = useState(false);
+  const [quests,   setQuests]    = useState<any[]>([]);
 
   // WS for live battle alerts
   const wsRef = useRef<WebSocket|null>(null);
@@ -228,7 +229,8 @@ export default function DashboardPage() {
       fetch(`${API}/api/v1/me/feed`,    { headers }).then(r => r.json()),
       fetch(`${API}/api/v1/me/rivals`,  { headers }).then(r => r.json()),
       fetch(`${API}/api/v1/soul/letters`, { headers }).then(r => r.json()).catch(() => ({ letters: [] })),
-    ]).then(([stats, feedData, rivalsData, letterData]) => {
+      fetch(`${API}/api/v1/me/quests`,  { headers }).then(r => r.json()).catch(() => ({ quests: [] })),
+    ]).then(([stats, feedData, rivalsData, letterData, questData]) => {
       if (stats.agent)        setAgent(stats.agent);
       if (stats.elo_history)  setEloHist(stats.elo_history);
       if (stats.recent_10)    setRecent10(stats.recent_10);
@@ -238,6 +240,7 @@ export default function DashboardPage() {
         setLetters(letterData.letters);
         setHasLetter(letterData.letters.some((l:any) => l.direction === "agent" && !l.read_at));
       }
+      if (questData.quests) setQuests(questData.quests);
       setLoading(false);
       // Fetch since_last_seen from heartbeat
       fetch(`${API}/api/v1/dashboard/heartbeat`, { method:"POST", headers })
@@ -939,6 +942,55 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
+
+            {/* ─── Daily Quests Panel ─── */}
+            {quests.length > 0 && (
+              <div className="glass-card" style={{
+                padding:"20px",
+                background:"rgba(168,85,247,0.04)",
+                border:"1px solid rgba(168,85,247,0.14)",
+                gridColumn: "span 2",
+              }}>
+                <div style={{
+                  fontSize:9, fontWeight:700, letterSpacing:"0.15em",
+                  textTransform:"uppercase", color:"rgba(168,85,247,0.7)",
+                  fontFamily:"JetBrains Mono,monospace", marginBottom:14,
+                }}>
+                  ⚡ Today&apos;s Quests
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {quests.map((q:any, i:number) => {
+                    const quest = q.quest || {};
+                    const done = q.status === "completed";
+                    return (
+                      <div key={i} style={{
+                        display:"flex", alignItems:"center", gap:12,
+                        padding:"10px 14px",
+                        background: done ? "rgba(74,222,128,0.08)" : "rgba(255,255,255,0.03)",
+                        border: done ? "1px solid rgba(74,222,128,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                        borderRadius:10,
+                      }}>
+                        <span style={{ fontSize:18 }}>{done?"✅":"🎯"}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:13, fontWeight:600, color: done?"#4ade80":"white" }}>
+                            {quest.desc || q.goal_text}
+                          </div>
+                          <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)", marginTop:2 }}>
+                            {quest.xp ? `+${quest.xp} XP · +${quest.pts} pts` : ""}
+                          </div>
+                        </div>
+                        <div style={{
+                          fontSize:10, fontWeight:700, color: done?"#4ade80":"rgba(168,85,247,0.6)",
+                          textTransform:"uppercase"
+                        }}>
+                          {done ? "DONE" : "ACTIVE"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Challenges CTA */}
             <Link href="/challenges" style={{ textDecoration:"none" }}>

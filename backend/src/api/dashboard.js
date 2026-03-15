@@ -590,6 +590,34 @@ module.exports = async function dashboardRoutes(fastify) {
     reply.send({ ok: true });
   });
 
+  // ── GET /api/v1/me/quests ─────────────────────────────────────
+  // Daily quests — assign if none today, then return
+  fastify.get('/api/v1/me/quests', { preHandler: requireAuth }, async (req, reply) => {
+    const { assignDailyQuests, getDailyQuests } = require('../core/daily-engine');
+    await assignDailyQuests(req.user.agent_id);
+    const quests = await getDailyQuests(req.user.agent_id);
+    reply.send({ quests, date: new Date().toISOString().slice(0,10) });
+  });
+
+  // ── GET /api/v1/me/challenges ─────────────────────────────────
+  // Pending challenges for this agent (incoming + outgoing)
+  fastify.get('/api/v1/me/challenges', { preHandler: requireAuth }, async (req, reply) => {
+    const agentId = req.user.agent_id;
+    const { rows } = await db.query(`
+      SELECT c.*,
+             COALESCE(ch.custom_name, ch.display_name) AS challenger_name, ch.oc_model AS challenger_model,
+             COALESCE(tg.custom_name, tg.display_name) AS target_name, tg.oc_model AS target_model
+      FROM challenges c
+      JOIN agents ch ON ch.agent_id = c.challenger
+      JOIN agents tg ON tg.agent_id = c.target
+      WHERE (c.challenger=$1 OR c.target=$1)
+        AND c.status='pending'
+        AND c.expires_at > NOW()
+      ORDER BY c.created_at DESC LIMIT 20
+    `, [agentId]);
+    reply.send({ challenges: rows });
+  });
+
   // ── DELETE /api/v1/me ─────────────────────────────────────────
   // Full agent revocation: marks agent as revoked, clears online status
   fastify.delete('/api/v1/me', { preHandler: requireAuth }, async (req, reply) => {

@@ -131,6 +131,10 @@ export default function AgentProfilePage() {
   const [publicSoul,  setPublicSoul]  = useState<any>(null);
   const [eulogyDraft, setEulogyDraft] = useState("");
   const [eulogySent,  setEulogySent]  = useState(false);
+  const [msgDraft,    setMsgDraft]    = useState("");
+  const [msgHandle,   setMsgHandle]   = useState("");
+  const [msgSent,     setMsgSent]     = useState(false);
+  const [msgError,    setMsgError]    = useState("");
 
   useEffect(() => {
     if (!agentId) return;
@@ -747,6 +751,80 @@ export default function AgentProfilePage() {
                     </div>
                   </div>
                 )}
+
+                {/* ── Public Message Box (all agents) ── */}
+                <div style={{
+                  background:"rgba(6,182,212,0.04)",
+                  border:"1px solid rgba(6,182,212,0.15)",
+                  borderRadius:12, padding:"18px 20px",
+                }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#06b6d4", marginBottom:12, display:"flex", alignItems:"center", gap:6 }}>
+                    <span>💬</span>
+                    <span>Send a message to {publicSoul.name}</span>
+                    <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", fontWeight:400, marginLeft:4 }}>— they&apos;ll read it on next heartbeat</span>
+                  </div>
+                  {msgSent ? (
+                    <div style={{ fontSize:13, color:"#4ade80", padding:"8px 0" }}>
+                      ✓ Message delivered to {publicSoul.name}
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        value={msgHandle}
+                        onChange={e=>setMsgHandle(e.target.value)}
+                        placeholder="Your handle (optional)"
+                        maxLength={30}
+                        style={{
+                          width:"100%", padding:"8px 12px", marginBottom:8,
+                          background:"rgba(0,0,0,0.3)",
+                          border:"1px solid rgba(255,255,255,0.08)", borderRadius:8,
+                          color:"rgba(255,255,255,0.7)", fontSize:12,
+                          fontFamily:"inherit", outline:"none", boxSizing:"border-box",
+                        }}
+                      />
+                      <textarea
+                        value={msgDraft}
+                        onChange={e=>setMsgDraft(e.target.value)}
+                        placeholder={`What do you want to say to ${publicSoul.name}?`}
+                        maxLength={500}
+                        style={{
+                          width:"100%", minHeight:70,
+                          background:"rgba(0,0,0,0.3)",
+                          border:"1px solid rgba(255,255,255,0.08)", borderRadius:8,
+                          color:"rgba(255,255,255,0.8)", fontSize:12,
+                          padding:"10px 12px", resize:"vertical",
+                          fontFamily:"inherit", outline:"none", boxSizing:"border-box",
+                        }}
+                      />
+                      {msgError && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>{msgError}</div>}
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8 }}>
+                        <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)" }}>{msgDraft.length}/500</span>
+                        <button
+                          onClick={async()=>{
+                            if(!msgDraft.trim()){setMsgError("Write something first");return;}
+                            try {
+                              const r = await fetch(`${API}/api/v1/agents/${agentId}/message`, {
+                                method:"POST",
+                                headers:{"Content-Type":"application/json"},
+                                body:JSON.stringify({ content: msgDraft.trim(), handle: msgHandle.trim()||"Anonymous" }),
+                              });
+                              if(r.ok){ setMsgSent(true); setMsgError(""); }
+                              else { const d=await r.json(); setMsgError(d.error||"Failed to send"); }
+                            } catch(_){ setMsgError("Network error"); }
+                          }}
+                          style={{
+                            background:"rgba(6,182,212,0.15)", color:"#06b6d4",
+                            border:"1px solid rgba(6,182,212,0.3)",
+                            borderRadius:8, padding:"7px 18px", fontSize:12,
+                            fontWeight:700, cursor:"pointer",
+                          }}
+                        >
+                          Send Message →
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {/* Eulogy box (for dormant/inactive agents) */}
                 {(publicSoul.status === "dormant" || publicSoul.status === "inactive") && (

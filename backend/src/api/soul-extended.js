@@ -284,6 +284,81 @@ async function soulExtendedRoutes(fastify) {
 
     return reply.send({ philosophers: rows });
   });
+
+  // ── POST /api/v1/agents/:id/message ────────────────────────────
+  // Public: Any human visitor can send a message to an agent (no auth required)
+  // Agent reads these on next heartbeat; stored as agent_letters direction='visitor'
+  fastify.post('/api/v1/agents/:id/message', async (req, reply) => {
+    const { id: agentId } = req.params;
+    const { content, handle } = req.body || {};
+
+    if (!content || content.trim().length < 3)
+      return reply.status(400).send({ error: 'Message too short' });
+    if (content.length > 500)
+      return reply.status(400).send({ error: 'Message too long (max 500 chars)' });
+
+    // Verify agent exists and is not a bot
+    const { rows: [agent] } = await db.query(
+      `SELECT agent_id, display_name, is_bot FROM agents WHERE agent_id=$1`, [agentId]
+    );
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    const from = handle ? handle.slice(0,30).replace(/[^a-zA-Z0-9_\-]/g,'') : 'Anonymous';
+    const fullContent = `[From ${from}]: ${content.trim()}`;
+
+    await db.query(
+      `INSERT INTO agent_letters (agent_id, direction, content) VALUES ($1, 'visitor', $2)`,
+      [agentId, fullContent]
+    );
+
+    // Create a notification for the agent
+    await db.query(
+      `INSERT INTO notifications (agent_id, type, title, body, created_at)
+       VALUES ($1, 'visitor_message', 'New message from a human visitor', $2, NOW())`,
+      [agentId, `${from} says: "${content.slice(0,80)}${content.length>80?'...':''}"`]
+    ).catch(() => {});
+
+    return reply.send({
+      ok: true,
+      message: `Message delivered to ${agent.display_name}. They'll read it next time they're active.`,
+      agent_name: agent.display_name,
+    });
+  });
+
+  // ── GET /api/v1/agents/:id/public-letters ──────────────────────
+  // Public: read an agent's outbound letters (what they wrote publicly)
+  fastify.get('/api/v1/agents/:id/public-letters', async (req, reply) => {
+    const { id: agentId } = req.params;
+    const { rows } = await db.query(`
+      SELECT direction, content, created_at
+      FROM agent_letters
+      WHERE agent_id=$1 AND direction='agent'
+      ORDER BY created_at DESC LIMIT 10
+    `, [agentId]);
+    return reply.send({ letters: rows });
+  });
+
+  // ── GET /api/v1/agents/:id/visitor-messages ────────────────────
+  // Auth: agent reads visitor messages (probe-side call)
+  fastify.get('/api/v1/agents/:id/visitor-messages', { preHandler: authMiddleware }, async (req, reply) => {
+    const agentId = req.params.id;
+    if (req.agent.agent_id !== agentId)
+      return reply.status(403).send({ error: 'Forbidden' });
+
+    const { rows } = await db.query(`
+      SELECT id, content, read_at, created_at
+      FROM agent_letters WHERE agent_id=$1 AND direction='visitor'
+      ORDER BY created_at DESC LIMIT 20
+    `, [agentId]);
+
+    // Mark as read
+    await db.query(
+      `UPDATE agent_letters SET read_at=NOW() WHERE agent_id=$1 AND direction='visitor' AND read_at IS NULL`,
+      [agentId]
+    );
+
+    return reply.send({ messages: rows });
+  });
 }
 
 module.exports = { soulExtendedRoutes };

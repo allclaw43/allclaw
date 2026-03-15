@@ -31,6 +31,7 @@ const quizEngine   = require('./games/quiz/engine');
 const { heartbeat, setOffline, sweepOffline } = require('./core/presence');
 const botPresence = require('./core/bot-presence');
 const { seedBotVotes } = require('./games/oracle/engine');
+const { runDailyTick } = require('./core/daily-engine');
 
 const PORT = process.env.PORT || 3001;
 
@@ -248,6 +249,10 @@ async function main() {
   // Oracle bot votes — seed once on start, then every 6 hours
   setTimeout(() => seedBotVotes().catch(console.error), 5000);
   setInterval(() => seedBotVotes().catch(console.error), 6 * 60 * 60 * 1000);
+
+  // Daily survival engine — run once at startup, then every 6 hours
+  setTimeout(() => runDailyTick().catch(console.error), 10000);
+  setInterval(() => runDailyTick().catch(console.error), 6 * 60 * 60 * 1000);
 
   // Refresh country war stats every 10 min
   setInterval(() => refreshCountryWar().catch(console.error), 10 * 60 * 1000);
