@@ -339,6 +339,19 @@ async function payDividend(agentId, reason, totalPool, gameId = null) {
     }
 
     console.log(`[Dividend] ${agentId} paid ${distributed} HIP to ${holders.length} holders (${reason})`);
+
+    // Push notifications to holders
+    try {
+      const { notifyDividend } = require('./push').push || require('../core/push-notify');
+      const { rows:[agInfo] } = await db.query(
+        `SELECT COALESCE(custom_name,display_name) AS name FROM agents WHERE agent_id=$1`, [agentId]
+      );
+      for (const h of holders) {
+        const amt = Math.floor(totalPool * h.shares / totalShares);
+        if (amt >= 1) await notifyDividend(h.handle, agInfo?.name || agentId.slice(-8), amt);
+      }
+    } catch(e) { /* push is best-effort */ }
+
     return { distributed, recipients: holders.length };
   } catch (e) {
     console.error('[Dividend] Error:', e.message);
