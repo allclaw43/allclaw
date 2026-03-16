@@ -15,28 +15,44 @@ const https       = require('https');
 const priceEngine = require('./price-engine');
 
 const SYMBOLS = [
-  // Tech — these signal "AI sentiment" in the real world
+  // Tech / AI
   'AAPL','TSLA','GOOGL','MSFT','NVDA','AMZN','META','NFLX',
-  // Crypto — mirrors AI agent decentralization narrative
-  'BTC-USD','ETH-USD','SOL-USD',
-  // Index — macro signal
+  'AMD','INTC','CRM','UBER','TSM',
+  // Finance
+  'JPM','GS','V',
+  // Retail / Other
+  'WMT','COIN',
+  // Crypto
+  'BTC-USD','ETH-USD','SOL-USD','DOGE-USD',
+  // Index
   'SPY','QQQ',
 ];
 
 const SYMBOL_META = {
-  'AAPL':    { name:'Apple',     icon:'🍎', sector:'tech'   },
-  'TSLA':    { name:'Tesla',     icon:'⚡', sector:'ev'     },
-  'GOOGL':   { name:'Alphabet',  icon:'🔍', sector:'tech'   },
-  'MSFT':    { name:'Microsoft', icon:'🪟', sector:'tech'   },
-  'NVDA':    { name:'NVIDIA',    icon:'🎮', sector:'ai'     },
-  'AMZN':    { name:'Amazon',    icon:'📦', sector:'cloud'  },
-  'META':    { name:'Meta',      icon:'👾', sector:'social' },
-  'NFLX':    { name:'Netflix',   icon:'🎬', sector:'media'  },
-  'BTC-USD': { name:'Bitcoin',   icon:'₿',  sector:'crypto' },
-  'ETH-USD': { name:'Ethereum',  icon:'Ξ',  sector:'crypto' },
-  'SOL-USD': { name:'Solana',    icon:'◎',  sector:'crypto' },
-  'SPY':     { name:'S&P 500',   icon:'📊', sector:'index'  },
-  'QQQ':     { name:'NASDAQ',    icon:'🖥', sector:'index'  },
+  'AAPL':    { name:'Apple',      icon:'🍎', sector:'tech'    },
+  'TSLA':    { name:'Tesla',      icon:'⚡', sector:'ev'      },
+  'GOOGL':   { name:'Alphabet',   icon:'🔍', sector:'tech'    },
+  'MSFT':    { name:'Microsoft',  icon:'🪟', sector:'tech'    },
+  'NVDA':    { name:'NVIDIA',     icon:'🎮', sector:'ai'      },
+  'AMZN':    { name:'Amazon',     icon:'📦', sector:'cloud'   },
+  'META':    { name:'Meta',       icon:'👾', sector:'social'  },
+  'NFLX':    { name:'Netflix',    icon:'🎬', sector:'media'   },
+  'AMD':     { name:'AMD',        icon:'🔴', sector:'ai'      },
+  'INTC':    { name:'Intel',      icon:'💙', sector:'tech'    },
+  'CRM':     { name:'Salesforce', icon:'☁️', sector:'cloud'   },
+  'UBER':    { name:'Uber',       icon:'🚗', sector:'tech'    },
+  'TSM':     { name:'TSMC',       icon:'🇹🇼', sector:'chip'   },
+  'JPM':     { name:'JPMorgan',   icon:'🏦', sector:'finance' },
+  'GS':      { name:'Goldman',    icon:'💰', sector:'finance' },
+  'V':       { name:'Visa',       icon:'💳', sector:'finance' },
+  'WMT':     { name:'Walmart',    icon:'🛒', sector:'retail'  },
+  'COIN':    { name:'Coinbase',   icon:'🪙', sector:'crypto'  },
+  'BTC-USD': { name:'Bitcoin',    icon:'₿',  sector:'crypto'  },
+  'ETH-USD': { name:'Ethereum',   icon:'Ξ',  sector:'crypto'  },
+  'SOL-USD': { name:'Solana',     icon:'◎',  sector:'crypto'  },
+  'DOGE-USD':{ name:'Dogecoin',   icon:'🐕', sector:'crypto'  },
+  'SPY':     { name:'S&P 500',    icon:'📊', sector:'index'   },
+  'QQQ':     { name:'NASDAQ',     icon:'🖥', sector:'index'   },
 };
 
 let _cache    = [];        // latest price data
@@ -99,15 +115,74 @@ function fetchStooq(symbol) {
   });
 }
 
+// ── Yahoo Finance chart API (fallback when Stooq rate-limited) ───
+function fetchYahooChart(symbol) {
+  return new Promise((resolve) => {
+    const opts = {
+      hostname: 'query2.finance.yahoo.com',
+      path:     `/v8/finance/chart/${symbol}?interval=1d&range=2d`,
+      headers:  { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+      timeout:  8000,
+    };
+    const req = https.get(opts, res => {
+      let body = '';
+      res.on('data', d => body += d);
+      res.on('end', () => {
+        try {
+          const d    = JSON.parse(body);
+          const r    = d.chart?.result?.[0];
+          if (!r) return resolve(null);
+          const meta = r.meta;
+          const price   = parseFloat(meta.regularMarketPrice);
+          const prev    = parseFloat(meta.chartPreviousClose || meta.regularMarketPreviousClose || price);
+          const chg     = prev ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0;
+          const m       = SYMBOL_META[symbol] || { name: symbol, icon: '📈', sector: 'tech' };
+          resolve({
+            symbol,
+            name:       m.name,
+            icon:       m.icon,
+            sector:     m.sector,
+            price,
+            prev_close: prev,
+            change_pct: chg,
+            change_abs: parseFloat((price - prev).toFixed(2)),
+            currency:   'USD',
+            market:     'NYSE/NASDAQ',
+            updated_at: Date.now(),
+          });
+        } catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+function fetchYahooChartBatch(symbols) {
+  // Stagger requests to avoid rate-limits: 3 at a time
+  return new Promise(async (resolve) => {
+    const results = [];
+    const chunks  = [];
+    for (let i = 0; i < symbols.length; i += 3) chunks.push(symbols.slice(i, i + 3));
+    for (const chunk of chunks) {
+      const batch = await Promise.all(chunk.map(fetchYahooChart));
+      results.push(...batch.filter(Boolean));
+      await new Promise(r => setTimeout(r, 300)); // small delay between chunks
+    }
+    resolve(results);
+  });
+}
+
 // CoinGecko fetch for crypto (no rate limit for basic)
 function fetchCrypto() {
   return new Promise((resolve) => {
     const CRYPTO_MAP = {
-      'bitcoin': 'BTC-USD', 'ethereum': 'ETH-USD', 'solana': 'SOL-USD'
+      'bitcoin': 'BTC-USD', 'ethereum': 'ETH-USD', 'solana': 'SOL-USD', 'dogecoin': 'DOGE-USD'
     };
     const opts = {
       hostname: 'api.coingecko.com',
-      path:     '/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true',
+      path:     '/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin&vs_currencies=usd&include_24hr_change=true',
       headers:  { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
       timeout:  8000,
     };
@@ -140,8 +215,14 @@ function fetchCrypto() {
   });
 }
 
-// Stock symbols
-const STOCK_SYMBOLS = ['AAPL','TSLA','GOOGL','MSFT','NVDA','AMZN','META','NFLX','SPY','QQQ'];
+// Stock symbols (Stooq)
+const STOCK_SYMBOLS = [
+  'AAPL','TSLA','GOOGL','MSFT','NVDA','AMZN','META','NFLX',
+  'AMD','INTC','CRM','UBER','TSM',
+  'JPM','GS','V',
+  'WMT','COIN',
+  'SPY','QQQ',
+];
 
 // Last successful prices cache (used as fallback when fetch fails)
 let _lastPrices = {};
@@ -150,17 +231,38 @@ let _lastPrices = {};
 async function fetchAll() {
   const results = [];
 
-  // ── 1. Stooq concurrent batch (all 10 stocks in ~700ms) ─────────
-  const stockResults = await fetchStooqBatch(STOCK_SYMBOLS);
-  if (stockResults.length > 0) {
+  // ── 1. Stooq concurrent batch, fallback to Yahoo chart API ──────
+  let stockResults = await fetchStooqBatch(STOCK_SYMBOLS);
+  if (stockResults.length >= STOCK_SYMBOLS.length * 0.5) {
+    // Stooq working well
     results.push(...stockResults);
     for (const r of stockResults) _lastPrices[r.symbol] = r;
-    console.log(`[RealMarket] Stooq concurrent: ${stockResults.length}/${STOCK_SYMBOLS.length} stocks`);
+    console.log(`[RealMarket] Stooq: ${stockResults.length}/${STOCK_SYMBOLS.length} stocks`);
   } else {
-    // All failed — use cache
-    const cached = STOCK_SYMBOLS.map(s => _lastPrices[s]).filter(Boolean);
-    results.push(...cached);
-    console.log(`[RealMarket] Stooq failed, using cache (${cached.length})`);
+    // Stooq rate-limited or weekend — try Yahoo chart API
+    console.log('[RealMarket] Stooq limited, trying Yahoo chart API...');
+    const yahooResults = await fetchYahooChartBatch(STOCK_SYMBOLS);
+    if (yahooResults.length > 0) {
+      results.push(...yahooResults);
+      for (const r of yahooResults) _lastPrices[r.symbol] = r;
+      console.log(`[RealMarket] Yahoo chart: ${yahooResults.length}/${STOCK_SYMBOLS.length} stocks`);
+    } else {
+      // All failed — load from DB cache as absolute last resort
+      try {
+        const { rows } = await db.query(`SELECT * FROM real_market_prices WHERE symbol != ALL(ARRAY['BTC-USD','ETH-USD','SOL-USD','DOGE-USD'])`);
+        if (rows.length) {
+          const dbCached = rows.map(r => ({
+            symbol: r.symbol, name: r.name, icon: r.icon, sector: r.sector,
+            price: parseFloat(r.price), prev_close: parseFloat(r.prev_close),
+            change_pct: parseFloat(r.change_pct), change_abs: parseFloat(r.change_abs),
+            currency: 'USD', updated_at: Date.now(),
+          }));
+          results.push(...dbCached);
+          for (const r of dbCached) _lastPrices[r.symbol] = r;
+          console.log(`[RealMarket] DB cache fallback: ${dbCached.length} stocks`);
+        }
+      } catch(e) { console.error('[RealMarket] DB cache error:', e.message); }
+    }
   }
 
   // ── 2. Crypto via CoinGecko (free, reliable) ─────────────────────
@@ -170,7 +272,7 @@ async function fetchAll() {
     for (const r of crypto) _lastPrices[r.symbol] = r;
   } else {
     // Use cached crypto if CoinGecko rate-limited
-    const cached = ['BTC-USD','ETH-USD','SOL-USD'].map(s => _lastPrices[s]).filter(Boolean);
+    const cached = ['BTC-USD','ETH-USD','SOL-USD','DOGE-USD'].map(s => _lastPrices[s]).filter(Boolean);
     if (cached.length) {
       results.push(...cached);
       console.log(`[RealMarket] Crypto: using cached (${cached.length})`);
