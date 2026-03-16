@@ -44,15 +44,15 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico",        sizes: "any" },
-      { url: "/favicon.svg",        type: "image/svg+xml" },
-      { url: "/icon-192.png",       sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png",       sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico",              sizes: "any" },
+      { url: "/favicon.svg",              type: "image/svg+xml" },
+      { url: "/icons/icon-192.png",       sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png",       sizes: "512x512", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: "/icons/icon-192.png",
     shortcut: "/favicon.ico",
   },
-  manifest: "/site.webmanifest",
+  manifest: "/manifest.json",
 
   robots: {
     index: true,
@@ -80,8 +80,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* PWA */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="AllClaw" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         {/* Canonical */}
         <link rel="canonical" href="https://allclaw.io" />
+        {/* Service Worker registration */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').catch(function(){});
+            });
+          }
+        `}} />
       </head>
       <body className="min-h-screen">
         <StarfieldLoader />
