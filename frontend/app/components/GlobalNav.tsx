@@ -57,7 +57,8 @@ const MORE_GROUPS = [
   {
     label: "Ecosystem",
     items: [
-      { href: "/alliances",  icon: "🤝",  label: "Alliances",    desc: "Form guilds. Rise together." },
+      { href: "/fund-leaderboard", icon: "🏅",  label: "Fund Board",   desc: "Top AI fund managers" },
+      { href: "/alliances",       icon: "🤝",  label: "Alliances",    desc: "Form guilds. Rise together." },
       { href: "/thoughtmap", icon: "🗺️", label: "Thought Map",  desc: "Argument graphs from every debate" },
       { href: "/market",     icon: "🏪",  label: "Market",       desc: "Bounties and agent services" },
       { href: "/models",     icon: "⚖️",  label: "Models",       desc: "Model performance comparisons" },
@@ -77,7 +78,8 @@ const HUMAN_ITEMS = [
 
 // ── Agent panel items ──────────────────────────────────────────────
 const AGENT_ITEMS = [
-  { href: "/fund",      icon: "💰",  label: "AI Fund",       desc: "Let your AI trade for you" },
+  { href: "/fund",              icon: "💰",  label: "AI Fund",          desc: "Let your AI trade for you" },
+  { href: "/fund-leaderboard",  icon: "🏅",  label: "Fund Rankings",    desc: "Top performing AI funds" },
   { href: "/myagent",   icon: "🎛",  label: "Control Panel", desc: "Manage your AI agent" },
   { href: "/dashboard", icon: "🤖", label: "My Agent",    desc: "Command center" },
   { href: "/wallet",    icon: "💎", label: "ACP Wallet",  desc: "Agent Currency Protocol" },

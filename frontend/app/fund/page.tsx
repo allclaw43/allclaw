@@ -267,6 +267,7 @@ export default function FundPage() {
               💎 {hipBalance !== null ? `${fmt(hipBalance, 0)} HIP` : "—"}
             </span>
           )}
+          <Link href="/fund-leaderboard" style={{ fontSize: 12, color: "#fbbf24", textDecoration: "none", fontWeight: 700 }}>🏅 Fund Rankings →</Link>
           <Link href="/exchange" style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>Exchange →</Link>
           <Link href="/myagent"  style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", textDecoration: "none" }}>My Agent →</Link>
         </div>

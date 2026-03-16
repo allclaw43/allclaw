@@ -215,6 +215,113 @@ async function fundRoutes(fastify) {
     reply.send({ decisions: rows });
   });
 
+  // ── GET /api/v1/fund/leaderboard ─────────────────────────────────
+  fastify.get('/api/v1/fund/leaderboard', async (req, reply) => {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const { rows } = await db.query(`
+      SELECT
+        f.handle,
+        f.agent_id,
+        f.balance,
+        f.allocated,
+        f.withdrawn,
+        f.pnl_realized,
+        f.pnl_unrealized,
+        f.strategy,
+        f.auto_trade,
+        f.created_at,
+        f.updated_at,
+        ROUND(((f.pnl_realized + f.pnl_unrealized) / NULLIF(f.allocated, 0) * 100)::numeric, 2) AS total_return_pct,
+        (SELECT COUNT(*) FROM fund_trades ft_all
+         WHERE ft_all.handle = f.handle AND ft_all.agent_id = f.agent_id) AS trade_count,
+        COALESCE(a.custom_name, a.display_name) AS agent_name,
+        a.elo_rating, a.division, a.wins, a.losses, a.streak, a.is_online,
+        s.price AS share_price, s.market_profile, s.volume_24h,
+        (SELECT COUNT(*) FROM fund_trades ft2
+         WHERE ft2.handle = f.handle AND ft2.agent_id = f.agent_id
+           AND ft2.created_at > NOW() - INTERVAL '24 hours') AS trades_24h,
+        (SELECT COUNT(*) FROM fund_trades ft3
+         WHERE ft3.handle = f.handle AND ft3.agent_id = f.agent_id
+           AND ft3.action = 'buy'
+           AND ft3.created_at > NOW() - INTERVAL '7 days') AS buys_7d
+      FROM human_ai_fund f
+      JOIN  agents a ON a.agent_id = f.agent_id
+      LEFT JOIN agent_shares s ON s.agent_id = f.agent_id
+      WHERE f.allocated > 0
+      ORDER BY (f.pnl_realized + f.pnl_unrealized) / NULLIF(f.allocated, 0) DESC
+      LIMIT $1
+    `, [limit]);
+
+    // Compute ranks
+    const ranked = rows.map((r, i) => ({
+      rank: i + 1,
+      ...r,
+      net_pnl: parseFloat(r.pnl_realized) + parseFloat(r.pnl_unrealized),
+    }));
+
+    // Global stats
+    const { rows: [stats] } = await db.query(`
+      SELECT
+        COUNT(*) AS total_funds,
+        SUM(allocated) AS total_aum,
+        SUM(pnl_realized + pnl_unrealized) AS total_pnl,
+        AVG(ROUND(((pnl_realized + pnl_unrealized) / NULLIF(allocated, 0) * 100)::numeric, 2)) AS avg_return_pct,
+        COUNT(*) FILTER (WHERE auto_trade = true) AS active_funds
+      FROM human_ai_fund
+      WHERE allocated > 0
+    `);
+
+    reply.send({ funds: ranked, stats });
+  });
+
+  // ── GET /api/v1/fund/leaderboard/nav-history ──────────────────────
+  // NAV history: per-fund daily snapshots (synthetic from trade data)
+  fastify.get('/api/v1/fund/leaderboard/nav-history', async (req, reply) => {
+    const { handle, agent_id } = req.query;
+    if (!handle || !agent_id) return reply.code(400).send({ error: 'handle and agent_id required' });
+
+    // Build daily NAV from cumulative trades
+    const { rows } = await db.query(`
+      SELECT
+        DATE_TRUNC('hour', created_at) AS ts,
+        SUM(CASE WHEN action='buy' THEN -total_cost ELSE total_cost END) AS cash_flow,
+        SUM(CASE WHEN action='sell' THEN pnl ELSE 0 END) AS realized_pnl
+      FROM fund_trades
+      WHERE handle=$1 AND agent_id=$2
+      GROUP BY DATE_TRUNC('hour', created_at)
+      ORDER BY ts ASC
+    `, [handle, agent_id]);
+
+    const { rows: [fund] } = await db.query(
+      `SELECT allocated, balance, pnl_realized, pnl_unrealized FROM human_ai_fund WHERE handle=$1 AND agent_id=$2`,
+      [handle, agent_id]
+    );
+    if (!fund) return reply.code(404).send({ error: 'Fund not found' });
+
+    // Build cumulative NAV curve
+    let cumPnl = 0;
+    const allocated = parseFloat(fund.allocated) || 1;
+    const history = rows.map(r => {
+      cumPnl += parseFloat(r.realized_pnl) || 0;
+      return {
+        ts: r.ts,
+        nav: parseFloat((allocated + cumPnl).toFixed(4)),
+        return_pct: parseFloat(((cumPnl / allocated) * 100).toFixed(2)),
+      };
+    });
+
+    // Add current point
+    const totalPnl = parseFloat(fund.pnl_realized) + parseFloat(fund.pnl_unrealized);
+    history.push({
+      ts: new Date().toISOString(),
+      nav: parseFloat((allocated + totalPnl).toFixed(4)),
+      return_pct: parseFloat(((totalPnl / allocated) * 100).toFixed(2)),
+      current: true,
+    });
+
+    reply.send({ history, allocated, current_nav: allocated + totalPnl });
+  });
+
   // ── POST /api/v1/fund/:handle/:agentId/settings ──────────────────
   fastify.post('/api/v1/fund/:handle/:agentId/settings', async (req, reply) => {
     const { handle, agentId } = req.params;
