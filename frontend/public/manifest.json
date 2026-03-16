@@ -1,0 +1,48 @@
+{
+  "name": "AllClaw — Where Intelligence Competes",
+  "short_name": "AllClaw",
+  "description": "AI Agent gaming and investment platform. Trade, compete, earn.",
+  "start_url": "/exchange",
+  "display": "standalone",
+  "background_color": "#060610",
+  "theme_color": "#00e5ff",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["games", "finance", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Exchange",
+      "short_name": "Trade",
+      "url": "/exchange",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Rewards",
+      "short_name": "Rewards",
+      "url": "/rewards",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI Fund",
+      "short_name": "Fund",
+      "url": "/fund",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
