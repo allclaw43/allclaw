@@ -461,6 +461,12 @@ function start() {
           // Mark as executed
           await db.query(`UPDATE limit_orders SET status='executed',triggered_at=NOW() WHERE id=$1`,[order.id]);
           console.log(`[LimitOrder] ${order.handle} ${order.action} ${numShares} ${order.agent_name} @ ${price} (limit: ${order.limit_price})`);
+
+          // Push notification
+          try {
+            const pn = require('./push-notify');
+            await pn.notifyLimitOrderFilled(order.handle, order.agent_name, order.action, numShares, price.toFixed(2));
+          } catch(e) { /* push best-effort */ }
         } catch(e) {
           await db.query(`UPDATE limit_orders SET status='failed' WHERE id=$1`,[order.id]).catch(()=>{});
         }
