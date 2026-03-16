@@ -18,6 +18,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import PushNotifyBell from "../components/PushNotifyBell";
 
 const API    = process.env.NEXT_PUBLIC_API_URL || "";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://allclaw.io";
@@ -1180,6 +1181,7 @@ export default function ExchangePage() {
                   padding:"7px 14px",borderRadius:9,cursor:"pointer",
                   background:"rgba(0,229,255,0.07)",border:"1px solid rgba(0,229,255,0.2)",
                   color:"#00e5ff",fontSize:11,fontWeight:700 }}>Portfolio</button>
+                <PushNotifyBell handle={savedHandle} />
               </div>
             ) : (
               <div style={{ display:"flex",gap:8 }}>
