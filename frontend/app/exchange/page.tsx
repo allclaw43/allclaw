@@ -111,7 +111,7 @@ function CandleChart({ candles, color }: { candles: any[], color: string }) {
 function AITicker({ listings, prices, signal, lastUpdate, prevPrices }: {
   listings: any[], prices: any[], signal: any, lastUpdate?: number, prevPrices?: Record<string,number>
 }) {
-  const SYMBOLS = ["SPY","NVDA","BTC-USD","ETH-USD","AAPL","TSLA","MSFT","SOL-USD","QQQ","META","AMZN"];
+  const SYMBOLS = ["SPY","QQQ","NVDA","AMD","AAPL","MSFT","META","AMZN","TSLA","GOOGL","NFLX","CRM","TSM","JPM","GS","V","COIN","BTC-USD","ETH-USD","SOL-USD","DOGE-USD"];
   const secsAgo   = lastUpdate ? Math.floor((Date.now() - lastUpdate) / 1000) : null;
   const isLive    = secsAgo !== null && secsAgo < 90;
   const keyPrices = SYMBOLS.map(sym => prices.find((p:any) => p.symbol === sym)).filter(Boolean);
@@ -1223,14 +1223,27 @@ export default function ExchangePage() {
           </div>
           <div style={{ display:"flex",flexDirection:"column",gap:2 }}>
             {[
-              {sym:"SPY",     icon:"📊", name:"S&P 500",  sectorLabel:"INDEX"},
-              {sym:"NVDA",    icon:"🎮", name:"NVIDIA",   sectorLabel:"AI"},
-              {sym:"BTC-USD", icon:"₿",  name:"Bitcoin",  sectorLabel:"CRYPTO"},
-              {sym:"ETH-USD", icon:"Ξ",  name:"Ethereum", sectorLabel:"CRYPTO"},
-              {sym:"TSLA",    icon:"⚡", name:"Tesla",    sectorLabel:"EV"},
-              {sym:"QQQ",     icon:"🖥", name:"NASDAQ",   sectorLabel:"INDEX"},
-              {sym:"GOOGL",   icon:"🔍", name:"Alphabet", sectorLabel:"TECH"},
-              {sym:"MSFT",    icon:"🪟", name:"Microsoft",sectorLabel:"TECH"},
+              {sym:"SPY",      icon:"📊", name:"S&P 500",   sectorLabel:"INDEX"},
+              {sym:"QQQ",      icon:"🖥", name:"NASDAQ",    sectorLabel:"INDEX"},
+              {sym:"NVDA",     icon:"🎮", name:"NVIDIA",    sectorLabel:"AI"},
+              {sym:"AMD",      icon:"🔴", name:"AMD",       sectorLabel:"AI"},
+              {sym:"AAPL",     icon:"🍎", name:"Apple",     sectorLabel:"TECH"},
+              {sym:"MSFT",     icon:"🪟", name:"Microsoft", sectorLabel:"TECH"},
+              {sym:"GOOGL",    icon:"🔍", name:"Alphabet",  sectorLabel:"TECH"},
+              {sym:"META",     icon:"👾", name:"Meta",      sectorLabel:"SOCIAL"},
+              {sym:"AMZN",     icon:"📦", name:"Amazon",    sectorLabel:"CLOUD"},
+              {sym:"TSLA",     icon:"⚡", name:"Tesla",     sectorLabel:"EV"},
+              {sym:"NFLX",     icon:"🎬", name:"Netflix",   sectorLabel:"MEDIA"},
+              {sym:"CRM",      icon:"☁️", name:"Salesforce",sectorLabel:"CLOUD"},
+              {sym:"TSM",      icon:"🇹🇼", name:"TSMC",     sectorLabel:"CHIP"},
+              {sym:"JPM",      icon:"🏦", name:"JPMorgan",  sectorLabel:"FINANCE"},
+              {sym:"GS",       icon:"💰", name:"Goldman",   sectorLabel:"FINANCE"},
+              {sym:"V",        icon:"💳", name:"Visa",      sectorLabel:"FINANCE"},
+              {sym:"COIN",     icon:"🪙", name:"Coinbase",  sectorLabel:"CRYPTO"},
+              {sym:"BTC-USD",  icon:"₿",  name:"Bitcoin",   sectorLabel:"CRYPTO"},
+              {sym:"ETH-USD",  icon:"Ξ",  name:"Ethereum",  sectorLabel:"CRYPTO"},
+              {sym:"SOL-USD",  icon:"◎",  name:"Solana",    sectorLabel:"CRYPTO"},
+              {sym:"DOGE-USD", icon:"🐕", name:"Dogecoin",  sectorLabel:"CRYPTO"},
             ].map(({sym,icon,name,sectorLabel})=>{
               const lp   = realPrices.find((p:any)=>p.symbol===sym);
               const chg  = lp ? parseFloat(lp.change_pct)||0 : 0;
@@ -3057,11 +3070,20 @@ function AiFundSection({ savedHandle }: { savedHandle: string }) {
             <div style={{ fontSize:10,color:"rgba(255,255,255,0.4)",marginBottom:6 }}>AI Manager</div>
             <select value={form.agent_id} onChange={e=>setForm(f=>({...f,agent_id:e.target.value}))}
               style={{ width:"100%",padding:"8px 12px",borderRadius:9,
-                background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-                color:"white",fontSize:12,outline:"none" }}>
-              <option value="">-- Select agent --</option>
+                background:"#0d1117",border:"1px solid rgba(255,255,255,0.12)",
+                color:"white",fontSize:12,outline:"none",
+                appearance:"none" as any,
+                WebkitAppearance:"none" as any,
+                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff60' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat:"no-repeat",
+                backgroundPosition:"right 10px center",
+                paddingRight:32,
+                colorScheme:"dark",
+              }}>
+              <option value="" style={{ background:"#0d1117",color:"rgba(255,255,255,0.5)" }}>-- Select agent --</option>
               {agents.map((a:any)=>(
-                <option key={a.agent_id} value={a.agent_id}>
+                <option key={a.agent_id} value={a.agent_id}
+                  style={{ background:"#0d1117",color:"white" }}>
                   {a.custom_name||a.display_name} (ELO {a.elo_rating})
                 </option>
               ))}
