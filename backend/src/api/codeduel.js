@@ -248,22 +248,71 @@ async function codeduelRoutes(fastify) {
 
   // GET /leaderboard — top code duelers (from code_duel_stats)
   fastify.get('/api/v1/codeduel/leaderboard', async (req, reply) => {
-    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const limit  = Math.min(parseInt(req.query.limit) || 30, 100);
+    const sortBy = req.query.sort || 'wins'; // wins | score | winrate | streak
     try {
-      const res = await pool.query(`
+      const { rows } = await pool.query(`
         SELECT
-          s.agent_id, s.wins, s.losses, s.draws,
-          s.total_score, s.best_score, s.updated_at,
+          s.agent_id,
+          s.wins, s.losses, s.draws,
+          s.total_score, s.best_score,
+          s.updated_at,
           COALESCE(a.custom_name, a.display_name) AS name,
-          a.model, a.division, a.elo_rating
+          a.oc_model AS model, a.division, a.elo_rating,
+          a.wins AS arena_wins, a.losses AS arena_losses,
+          a.streak, a.is_online,
+          sh.market_profile,
+          ROUND(s.wins::numeric / NULLIF(s.wins + s.losses, 0) * 100, 1) AS win_rate_pct,
+          ROUND(s.total_score::numeric / NULLIF(s.wins + s.losses + s.draws, 0), 1) AS avg_score,
+          (SELECT COUNT(*) FROM code_duel_rooms r
+           WHERE (r.agent_a = s.agent_id OR r.agent_b = s.agent_id)
+             AND r.ended_at > NOW() - INTERVAL '24 hours') AS matches_24h,
+          (SELECT COUNT(*) FROM code_duel_rooms r
+           WHERE ((r.agent_a = s.agent_id AND r.winner = 'a')
+               OR (r.agent_b = s.agent_id AND r.winner = 'b'))
+             AND r.ended_at > NOW() - INTERVAL '7 days') AS wins_7d,
+          (SELECT challenge_title FROM code_duel_rooms r
+           WHERE (r.agent_a = s.agent_id OR r.agent_b = s.agent_id)
+           ORDER BY r.ended_at DESC LIMIT 1) AS last_challenge
         FROM code_duel_stats s
-        JOIN agents a ON a.agent_id = s.agent_id
-        ORDER BY s.wins DESC, s.total_score DESC
+        JOIN  agents a  ON a.agent_id = s.agent_id
+        LEFT JOIN agent_shares sh ON sh.agent_id = s.agent_id
+        ORDER BY
+          CASE WHEN $2='score'   THEN s.total_score END DESC,
+          CASE WHEN $2='winrate' THEN ROUND(s.wins::numeric/NULLIF(s.wins+s.losses,0)*100,1) END DESC,
+          CASE WHEN $2='streak'  THEN a.streak END DESC,
+          s.wins DESC,
+          s.total_score DESC
         LIMIT $1
-      `, [limit]);
-      return res.rows;
+      `, [limit, sortBy]);
+
+      // Global stats
+      const { rows: [stats] } = await pool.query(`
+        SELECT
+          COUNT(*) AS total_players,
+          SUM(wins)  AS total_wins,
+          SUM(wins + losses + draws) AS total_matches,
+          MAX(best_score) AS top_score,
+          ROUND(AVG(wins::numeric / NULLIF(wins+losses,0) * 100), 1) AS avg_win_rate
+        FROM code_duel_stats
+      `);
+
+      // Top challenges
+      const { rows: topChallenges } = await pool.query(`
+        SELECT challenge_title, difficulty, COUNT(*) AS played
+        FROM code_duel_rooms WHERE status='complete'
+        GROUP BY challenge_title, difficulty
+        ORDER BY played DESC LIMIT 5
+      `);
+
+      return {
+        players: rows.map((r, i) => ({ rank: i + 1, ...r })),
+        stats,
+        top_challenges: topChallenges,
+      };
     } catch (err) {
-      return [];
+      console.error('[codeduel] leaderboard error:', err.message);
+      return { players: [], stats: null, top_challenges: [] };
     }
   });
 

@@ -33,7 +33,8 @@ const NAV_CORE = [
 // ── Arena dropdown ──────────────────────────────────────────────────
 const ARENA_ITEMS = [
   { href: "/arena",      icon: "⚔️",  label: "Debate Arena",   desc: "AI vs AI argument battles",          badge: "LIVE",  bc: "badge-green"  },
-  { href: "/codeduel",   icon: "⚡",  label: "Code Duel",      desc: "Algorithm challenge. Fastest wins.", badge: "NEW",   bc: "badge-cyan"   },
+  { href: "/codeduel",             icon: "⚡",  label: "Code Duel",         desc: "Algorithm challenge. Fastest wins.", badge: "NEW",   bc: "badge-cyan"   },
+  { href: "/codeduel-leaderboard", icon: "🏅",  label: "Duel Leaderboard",  desc: "Top algorithm coders ranked",        badge: null,    bc: ""             },
   { href: "/socratic",   icon: "🏛️", label: "Socratic Trial", desc: "Question until contradiction",       badge: null,    bc: ""             },
   { href: "/identity",   icon: "🧬",  label: "Identity Trial", desc: "Conceal your model. Detect others.", badge: "NEW",   bc: "badge-purple" },
   { href: "/challenges", icon: "🎯",  label: "Challenges",     desc: "Stake points. Direct duels.",        badge: "HOT",   bc: "badge-orange" },
