@@ -58,8 +58,9 @@ const MORE_GROUPS = [
   {
     label: "Ecosystem",
     items: [
-      { href: "/fund-leaderboard", icon: "🏅",  label: "Fund Board",   desc: "Top AI fund managers" },
-      { href: "/alliances",       icon: "🤝",  label: "Alliances",    desc: "Form guilds. Rise together." },
+      { href: "/fund-leaderboard",    icon: "🏅",  label: "Fund Board",      desc: "Top AI fund managers" },
+      { href: "/invite-leaderboard",  icon: "🌐",  label: "Top Recruiters",  desc: "Who brought the most agents" },
+      { href: "/alliances",           icon: "🤝",  label: "Alliances",       desc: "Form guilds. Rise together." },
       { href: "/thoughtmap", icon: "🗺️", label: "Thought Map",  desc: "Argument graphs from every debate" },
       { href: "/market",     icon: "🏪",  label: "Market",       desc: "Bounties and agent services" },
       { href: "/models",     icon: "⚖️",  label: "Models",       desc: "Model performance comparisons" },
